@@ -164,6 +164,9 @@ export function parseTherapieplan(
       raw: true,
       defval: null,
     });
+    // sheet_to_json startet das Grid bei der ersten belegten Zeile (!ref),
+    // nicht zwingend bei Zeile 1 — Offset für exakte Fundstellen ausgleichen
+    const zeilenOffset = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]).s.r : 0;
 
     // Block-Köpfe finden: Spalte B (Index 1) enthält „Name:"
     const blockStarts: number[] = [];
@@ -205,7 +208,7 @@ export function parseTherapieplan(
           eintraege.push({
             sheet: blattName,
             kw,
-            zeile: r + 1,
+            zeile: zeilenOffset + r + 1,
             patient,
             datum,
             menge: mengeLesen(zeile[mengeCol]),
@@ -219,15 +222,15 @@ export function parseTherapieplan(
       if (blockHatEintraege && !patient) {
         probleme.push({
           sheet: blattName,
-          zeile: kopf + 1,
+          zeile: zeilenOffset + kopf + 1,
           patient: null,
-          grund: `Patientenblock ab Zeile ${kopf + 1} hat keinen Namen — Einträge werden „(ohne Namen)“ zugeordnet`,
+          grund: `Patientenblock ab Zeile ${zeilenOffset + kopf + 1} hat keinen Namen — Einträge werden „(ohne Namen)“ zugeordnet`,
         });
       }
       if (blockHatEintraege && tage.every((d) => d === null)) {
         probleme.push({
           sheet: blattName,
-          zeile: kopf + 2,
+          zeile: zeilenOffset + kopf + 2,
           patient: patient || null,
           grund: "Datumszeile fehlt oder ist nicht lesbar — Tage ohne Datum landen im Report",
         });
