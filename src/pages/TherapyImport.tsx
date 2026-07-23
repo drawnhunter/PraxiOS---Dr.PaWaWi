@@ -119,7 +119,7 @@ export default function TherapyImport() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold tracking-tight">Therapieplan-Import</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          IMTZ-Wochendokumentation (XLSX/CSV) hochladen — ReWaKi erstellt pro
+          IMTZ-Wochendokumentation (XLSX/CSV) hochladen — Dr.ReWaWi erstellt pro
           Patient eine Rechnung über alle gewählten Wochen. Unklarheiten landen
           im Report zum Zurückschicken an IMTZ.
         </p>

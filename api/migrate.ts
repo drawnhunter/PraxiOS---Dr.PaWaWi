@@ -14,7 +14,7 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "pdf_layout", ddl: "ALTER TABLE company_settings ADD COLUMN pdf_layout VARCHAR(30) NOT NULL DEFAULT 'klassisch'" },
   // EK/VK + Konditionen (Stufe 5)
   { tabelle: "products", spalte: "ek_preis_netto", ddl: "ALTER TABLE products ADD COLUMN ek_preis_netto DECIMAL(12,2) NULL AFTER preis_netto" },
-  // ReWaKi (Fork)
+  // Dr.ReWaWi (Fork)
   { tabelle: "products", spalte: "kategorie", ddl: "ALTER TABLE products ADD COLUMN kategorie ENUM('leistung','auslage') NOT NULL DEFAULT 'leistung' AFTER ek_preis_netto" },
   { tabelle: "products", spalte: "import_namen", ddl: "ALTER TABLE products ADD COLUMN import_namen TEXT NULL AFTER kategorie" },
   { tabelle: "customers", spalte: "geburtsdatum", ddl: "ALTER TABLE customers ADD COLUMN geburtsdatum DATE NULL AFTER telefon" },
@@ -35,7 +35,7 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       CONSTRAINT konditionen_product_fk FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
     )`,
   },
-  // ReWaKi (Fork)
+  // Dr.ReWaWi (Fork)
   {
     tabelle: "invoice_therapie_wochen",
     ddl: `CREATE TABLE IF NOT EXISTS invoice_therapie_wochen (

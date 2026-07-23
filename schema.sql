@@ -1,4 +1,4 @@
--- ReWaKi - Datenbankschema (ohne Daten)
+-- Dr.ReWaWi - Datenbankschema (ohne Daten)
 -- Fork von WAWIPROS, Stand:
 -- Stand: 2026-07-23
 SET FOREIGN_KEY_CHECKS=0;

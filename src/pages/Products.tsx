@@ -38,7 +38,7 @@ interface FormState {
   ustSatz: number;
 }
 
-// ReWaKi: Heilbehandlungen sind § 4 Nr. 14a UStG-befreit -> USt-Standard 0 %
+// Dr.ReWaWi: Heilbehandlungen sind § 4 Nr. 14a UStG-befreit -> USt-Standard 0 %
 const leeresFormular: FormState = {
   name: "",
   beschreibung: "",

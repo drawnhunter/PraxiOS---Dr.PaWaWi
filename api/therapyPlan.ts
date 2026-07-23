@@ -1,4 +1,4 @@
-// ── ReWaKi: Parser für die IMTZ-Therapieplan-Vorlage (XLSX oder CSV) ───────
+// ── Dr.ReWaWi: Parser für die IMTZ-Therapieplan-Vorlage (XLSX oder CSV) ───────
 //
 // Aufbau der Vorlage (siehe „Q3-Therapieplan Wochenplan 2026.xlsx"):
 // - Ein Tabellenblatt pro Kalenderwoche: „KW04", „KW05", … („Vorlage" = leer)
@@ -21,6 +21,36 @@ export interface PlanEintrag {
   menge: number;
   name: string; // bereinigte Leistungsbezeichnung
   unsicher: boolean; // „(?)" im Namen — IMTZ ist selbst unsicher
+  kwAbweichung: boolean; // Datum passt nicht zur Blatt-KW (Tippfehler?)
+}
+
+// ── Geteilte Namens-Normalisierung (Parser, Katalog-Matching, Tests) ───────
+export function normBasis(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").trim();
+}
+export function normKompakt(s: string): string {
+  return normBasis(s).replace(/ /g, "");
+}
+// Stuft Mengenangaben am Anfang ans Ende um und vereinheitlicht Komma/Punkt:
+// „600mg Clindamycin" -> „clindamycin600mg",
+// „250ml NaCl 0.9%"  -> „nacl0.9%250ml"  (matcht „NaCl 0,9 % 250 ml")
+const MENGE_VORNE = /^(\d+(?:[.,]\d+)?)\s*(ml|mg|g|mmol|µg|ug|ie)\s+(.+)$/i;
+export function normMenge(s: string): string {
+  let t = normBasis(s).replace(/,/g, ".");
+  const m = t.match(MENGE_VORNE);
+  if (m) t = `${m[3]} ${m[1]}${m[2]}`;
+  return t.replace(/ /g, "");
+}
+
+/** ISO-8601-Kalenderwoche eines ISO-Datums (JJJJ-MM-TT). */
+export function isoKalenderwoche(iso: string): number {
+  const [j, m, t] = iso.split("-").map(Number);
+  const d = new Date(Date.UTC(j, m - 1, t));
+  const tag = (d.getUTCDay() + 6) % 7; // Mo=0 … So=6
+  d.setUTCDate(d.getUTCDate() - tag + 3); // Donnerstag dieser Woche
+  const ersterDo = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  ersterDo.setUTCDate(ersterDo.getUTCDate() - ((ersterDo.getUTCDay() + 6) % 7) + 3);
+  return 1 + Math.round((d.getTime() - ersterDo.getTime()) / (7 * 86400000));
 }
 
 // Tagesspalten (0-basiert): je [Menge, Name, Erledigt]
@@ -171,15 +201,17 @@ export function parseTherapieplan(
           // Summenzeilen o. ä. enthalten in der Name-Spalte nichts — sie
           // werden hier automatisch übersprungen.
           blockHatEintraege = true;
+          const datum = tage[t];
           eintraege.push({
             sheet: blattName,
             kw,
             zeile: r + 1,
             patient,
-            datum: tage[t],
+            datum,
             menge: mengeLesen(zeile[mengeCol]),
             name,
             unsicher: /\(\s*\?\s*\)/.test(name),
+            kwAbweichung: datum !== null && isoKalenderwoche(datum) !== kw,
           });
         }
       }

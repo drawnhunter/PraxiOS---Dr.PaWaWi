@@ -73,7 +73,13 @@ function parseKundenZeilen(rows: Record<string, string>[]): KundeImport[] {
     let ort = "";
     let warnung: string | null = null;
 
-    if (adresseRoh) {
+    // Dr.ReWaWi: Einzelspalten (Patienten-Vorlage) haben Vorrang
+    const strasseEinzel = (row["Straße"] ?? row["Strasse"] ?? "").trim();
+    if (strasseEinzel) {
+      strasse = strasseEinzel;
+      plz = (row["PLZ"] ?? "").trim();
+      ort = (row["Ort"] ?? "").trim();
+    } else if (adresseRoh) {
       const zeilen = adresseRoh
         .split(/\r?\n/)
         .map((z) => z.trim())
@@ -101,7 +107,8 @@ function parseKundenZeilen(rows: Record<string, string>[]): KundeImport[] {
     const land = row["Land"] || LAENDER[code] || (code ? code : "Deutschland");
 
     let zahlungszielTage: number | null = null;
-    const zb = row["Zahlungsbedingungen"] ?? "";
+    const zb =
+      row["Zahlungsbedingungen"] ?? row["Zahlungsziel (Tage)"] ?? row["Zahlungsziel"] ?? "";
     const zm = zb.match(/(\d+)/);
     if (zm) zahlungszielTage = Number(zm[1]);
     else if (/sofort/i.test(zb)) zahlungszielTage = 0;
@@ -170,7 +177,7 @@ function parseProduktZeilen(rows: Record<string, string>[]): ProduktImport[] {
     const einheitRoh = (row["Unit"] ?? row["Einheit"] ?? "").toLowerCase();
     const einheit = EINHEIT_MAP[einheitRoh] ?? row["Einheit"]?.trim() ?? "Stück";
 
-    // ReWaKi: Kategorie + EK + Import-Aliase (deutsche Spaltenköpfe)
+    // Dr.ReWaWi: Kategorie + EK + Import-Aliase (deutsche Spaltenköpfe)
     const katRoh = (row["Kategorie"] ?? "").toLowerCase();
     const kategorie =
       katRoh.includes("auslage") || katRoh.includes("§ 10") || katRoh.includes("§10")

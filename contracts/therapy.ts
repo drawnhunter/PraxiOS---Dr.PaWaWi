@@ -1,4 +1,4 @@
-// ── ReWaKi: Geteilte Typen für den Therapieplan-Import ─────────────────────
+// ── Dr.ReWaWi: Geteilte Typen für den Therapieplan-Import ─────────────────────
 // Werden von Frontend (Vorschau) und Backend (Parser/Router) genutzt.
 
 /** Ein Punkt im Unklarheiten-Report — immer mit Fundstelle in der Vorlage. */

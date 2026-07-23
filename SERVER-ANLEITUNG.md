@@ -1,4 +1,4 @@
-# ReWaKi auf deinem Ubuntu-Server installieren
+# Dr.ReWaWi auf deinem Ubuntu-Server installieren
 ### Die Idioten-Anleitung 🙂 — Befehl für Befehl, ohne Vorwissen
 
 **Ausgangslage:** Du sitzt an deinem Windows-Laptop, der heruntergeladene
@@ -236,7 +236,7 @@ Handkorrekturen mehr nötig.**
    `.env` löschen.
 2. Hochladen — **Achtung, scp-Falle:** Erst *in* den Ordner wechseln und
    den **Inhalt** hochladen, nicht den Ordner selbst, sonst landet alles
-   verschachtelt in `~/rewaki/ReWaKi/`:
+   verschachtelt in `~/rewaki/Dr.ReWaWi/`:
 
    ```
    cd "C:\Users\DEINNAME\Downloads\app"

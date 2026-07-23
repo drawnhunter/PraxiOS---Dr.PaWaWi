@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ReWaKi aktualisieren: neuesten Stand von GitHub ziehen und neu bauen.
+# Dr.ReWaWi aktualisieren: neuesten Stand von GitHub ziehen und neu bauen.
 # Einrichtung (einmalig):  git clone https://github.com/DEIN-NAME/rewaki.git
 # Danach genuegt:          ./update.sh
 set -e

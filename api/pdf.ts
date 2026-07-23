@@ -388,7 +388,7 @@ export function renderBelegPdf(beleg: PdfBeleg, design?: PdfDesign): Promise<Buf
     y = zeichneTabellenkopf(y);
     doc.font(regular).fontSize(basisSchrift);
 
-    // ReWaKi: laufende Positionsnummer — Abschnitts-Zeilen zählen nicht mit
+    // Dr.ReWaWi: laufende Positionsnummer — Abschnitts-Zeilen zählen nicht mit
     let posNr = 0;
     beleg.items.forEach((it, idx) => {
       // Abschnitts-Zeile (Menge 0 / Preis 0): fette Zwischenüberschrift

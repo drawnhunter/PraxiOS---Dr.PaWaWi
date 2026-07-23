@@ -1,13 +1,13 @@
 name: rewaki
 
-# ReWaKi (Fork von WAWIPROS) - App + MySQL-Datenbank mit einem Befehl.
+# Dr.ReWaWi (Fork von WAWIPROS) - App + MySQL-Datenbank mit einem Befehl.
 # Start:         docker compose up --build
 # Stoppen:       Strg+C  (bzw. docker compose down)
 # Alles loeschen (inkl. Datenbank):  docker compose down -v
 #
 # Beim ersten Start wird eine LEERE Datenbank angelegt (schema.sql).
 # Danach im Browser die Ersteinrichtung durchlaufen (Admin + Firmendaten).
-# Standard-Port: 3100 (damit ReWaKi neben WAWIPROS auf demselben Server laufen kann)
+# Standard-Port: 3100 (damit Dr.ReWaWi neben WAWIPROS auf demselben Server laufen kann)
 services:
   db:
     image: mysql:8.0

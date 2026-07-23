@@ -312,7 +312,7 @@ export const invoiceRouter = createRouter({
       }
       await db.transaction(async (tx) => {
         await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, input.id));
-        // ReWaKi: berechnete Therapiewochen wieder freigeben
+        // Dr.ReWaWi: berechnete Therapiewochen wieder freigeben
         await tx
           .delete(invoiceTherapieWochen)
           .where(eq(invoiceTherapieWochen.invoiceId, input.id));

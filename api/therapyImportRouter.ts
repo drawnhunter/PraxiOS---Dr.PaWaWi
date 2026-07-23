@@ -1,4 +1,4 @@
-// ── ReWaKi: Therapieplan-Import ─────────────────────────────────────────────
+// ── Dr.ReWaWi: Therapieplan-Import ─────────────────────────────────────────────
 // Kern-Workflow: IMTZ-Wochendokumentation (XLSX/CSV) importieren ->
 // 1 Rechnung (Entwurf) pro Patient über alle gewählten Wochen.
 // Unklarheiten landen im Report (TXT/PDF) zum Zurückschicken an IMTZ.
@@ -13,6 +13,7 @@ import {
   therapyImports,
   customers,
   products,
+  konditionen,
   companySettings,
   bankAccounts,
 } from "@db/schema";
@@ -28,16 +29,15 @@ import {
   ABSCHNITT_LEISTUNGEN,
   ABSCHNITT_AUSLAGEN,
 } from "@contracts/therapy";
-import { parseTherapieplan, blaetterDesPlans, type PlanEintrag } from "./therapyPlan";
+import {
+  parseTherapieplan,
+  blaetterDesPlans,
+  normBasis as norm,
+  normKompakt as normKomprimiert,
+  normMenge,
+  type PlanEintrag,
+} from "./therapyPlan";
 import { baueReportText, renderReportPdf } from "./therapyReport";
-
-// ── Normalisierung für Namensabgleich ───────────────────────────────────────
-function norm(s: string): string {
-  return s.toLowerCase().replace(/\s+/g, " ").trim();
-}
-function normKomprimiert(s: string): string {
-  return norm(s).replace(/ /g, "");
-}
 
 const dateiInput = z.object({
   dateiname: z.string().min(1),
@@ -50,9 +50,10 @@ type Produkt = typeof products.$inferSelect;
 type Kunde = typeof customers.$inferSelect;
 
 interface AnalyseKontext {
-  katalog: Map<string, Produkt>; // norm + normKomprimiert + Aliasse -> Produkt
+  katalog: Map<string, Produkt>; // norm + normKomprimiert + normMenge + Aliasse -> Produkt
   kunden: Kunde[];
   belegteWochen: Map<string, { nummer: string | null; invoiceId: number; status: string }>;
+  konditionen: Map<string, string>; // "kundeId|produktId" -> Sonderpreis
 }
 
 function katalogIndex(produktListe: Produkt[]): Map<string, Produkt> {
@@ -60,14 +61,16 @@ function katalogIndex(produktListe: Produkt[]): Map<string, Produkt> {
   const setze = (schluessel: string, p: Produkt) => {
     if (schluessel && !map.has(schluessel)) map.set(schluessel, p);
   };
+  const indexiere = (bezeichnung: string, p: Produkt) => {
+    setze(norm(bezeichnung), p);
+    setze(normKomprimiert(bezeichnung), p);
+    setze(normMenge(bezeichnung), p);
+  };
   for (const p of produktListe) {
-    setze(norm(p.name), p);
-    setze(normKomprimiert(p.name), p);
+    indexiere(p.name, p);
     for (const alias of (p.importNamen ?? "").split(/[\n;]/)) {
       const a = alias.trim();
-      if (!a) continue;
-      setze(norm(a), p);
-      setze(normKomprimiert(a), p);
+      if (a) indexiere(a, p);
     }
   }
   return map;
@@ -79,6 +82,7 @@ function findeProdukt(katalog: Map<string, Produkt>, name: string): Produkt | nu
   return (
     katalog.get(norm(sauber)) ??
     katalog.get(normKomprimiert(sauber)) ??
+    katalog.get(normMenge(sauber)) ??
     null
   );
 }
@@ -122,7 +126,7 @@ async function analysiere(
     input.sheets,
   );
 
-  const [produktListe, kundenListe, wochenListe] = await Promise.all([
+  const [produktListe, kundenListe, wochenListe, konditionenListe] = await Promise.all([
     db.query.products.findMany({ where: eq(products.aktiv, true) }),
     db.query.customers.findMany({ where: eq(customers.archiviert, false) }),
     db
@@ -136,6 +140,14 @@ async function analysiere(
       })
       .from(invoiceTherapieWochen)
       .innerJoin(invoices, eq(invoices.id, invoiceTherapieWochen.invoiceId)),
+    // Patienten-Sonderpreise (Konditionen) — haben Vorrang vor Katalogpreis
+    db
+      .select({
+        partnerId: konditionen.partnerId,
+        productId: konditionen.productId,
+        preisNetto: konditionen.preisNetto,
+      })
+      .from(konditionen),
   ]);
 
   const kontext: AnalyseKontext = {
@@ -146,6 +158,9 @@ async function analysiere(
         `${w.customerId}|${w.jahr}|${w.kw}`,
         { nummer: w.nummer, invoiceId: w.invoiceId, status: w.status },
       ]),
+    ),
+    konditionen: new Map(
+      konditionenListe.map((k) => [`${k.partnerId}|${k.productId}`, k.preisNetto]),
     ),
   };
 
@@ -240,6 +255,14 @@ async function analysiere(
           grund: `Unsichere Angabe „${e.name}“ (mit „(?)“ markiert) — bitte bestätigen`,
         });
       }
+      if (e.kwAbweichung && e.datum) {
+        melde({
+          sheet: e.sheet,
+          zeile: e.zeile,
+          patient: patientName,
+          grund: `Datum ${e.datum.split("-").reverse().join(".")} passt nicht zur KW ${e.kw} (Tippfehler?) — bitte prüfen`,
+        });
+      }
       const produkt = findeProdukt(kontext.katalog, e.name);
       if (!produkt) {
         melde({
@@ -251,7 +274,11 @@ async function analysiere(
         continue;
       }
       const istAuslage = produkt.kategorie === "auslage";
-      const preis = istAuslage ? produkt.ekPreisNetto : produkt.preisNetto;
+      // Preis: Patienten-Kondition > EK (Auslage § 10) bzw. VK (GOÄ-Leistung)
+      const kondition = kunde
+        ? kontext.konditionen.get(`${kunde.id}|${produkt.id}`)
+        : undefined;
+      const preis = kondition ?? (istAuslage ? produkt.ekPreisNetto : produkt.preisNetto);
       if (!preis) {
         melde({
           sheet: e.sheet,

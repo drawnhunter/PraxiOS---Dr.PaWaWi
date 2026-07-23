@@ -71,7 +71,7 @@ export const customers = mysqlTable(
     land: varchar("land", { length: 100 }).notNull().default("Deutschland"),
     email: varchar("email", { length: 320 }),
     telefon: varchar("telefon", { length: 50 }),
-    // ReWaKi: Patienten-Felder (Kunden = Patienten)
+    // Dr.ReWaWi: Patienten-Felder (Kunden = Patienten)
     geburtsdatum: date("geburtsdatum", { mode: "string" }),
     patientenNr: varchar("patienten_nr", { length: 50 }),
     ustIdNr: varchar("ust_id_nr", { length: 50 }),
@@ -94,7 +94,7 @@ export const products = mysqlTable("products", {
   einheit: varchar("einheit", { length: 30 }).notNull().default("Stück"),
   preisNetto: decimal("preis_netto", { precision: 12, scale: 2 }).notNull(),
   ekPreisNetto: decimal("ek_preis_netto", { precision: 12, scale: 2 }),
-  // ReWaKi: "leistung" = ärztliche Leistung (GOÄ, VK-Preis) /
+  // Dr.ReWaWi: "leistung" = ärztliche Leistung (GOÄ, VK-Preis) /
   // "auslage" = Auslage § 10 GOÄ (wird zum EK-Preis durchgereicht)
   kategorie: mysqlEnum("kategorie", ["leistung", "auslage"]).notNull().default("leistung"),
   // Alternative Schreibweisen aus dem Therapieplan (eine pro Zeile),
@@ -500,7 +500,7 @@ export type Reminder = typeof reminders.$inferSelect;
 export type Offer = typeof offers.$inferSelect;
 export type OfferItem = typeof offerItems.$inferSelect;
 
-// ── ReWaKi: Abgerechnete Therapiewochen (Duplikatsschutz) ───────────────────
+// ── Dr.ReWaWi: Abgerechnete Therapiewochen (Duplikatsschutz) ───────────────────
 // Pro Patient (customerId) und Kalenderwoche max. eine Rechnung —
 // gilt auch für Entwürfe, damit ein erneuter Import nicht doppelt anlegt.
 export const invoiceTherapieWochen = mysqlTable(
@@ -519,7 +519,7 @@ export const invoiceTherapieWochen = mysqlTable(
   ],
 );
 
-// ── ReWaKi: Protokoll der Therapieplan-Importe (Audit + Report-Nachdownload) ─
+// ── Dr.ReWaWi: Protokoll der Therapieplan-Importe (Audit + Report-Nachdownload) ─
 export const therapyImports = mysqlTable("therapy_imports", {
   id: serial("id").primaryKey(),
   dateiname: varchar("dateiname", { length: 255 }).notNull(),

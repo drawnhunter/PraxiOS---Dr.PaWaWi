@@ -1,7 +1,13 @@
 // Tests für den Therapieplan-Parser (Block-Layout der IMTZ-Vorlage)
 import { describe, it, expect } from "vitest";
 import * as XLSX from "xlsx";
-import { parseTherapieplan, blaetterDesPlans } from "./therapyPlan";
+import {
+  parseTherapieplan,
+  blaetterDesPlans,
+  normMenge,
+  normKompakt,
+  isoKalenderwoche,
+} from "./therapyPlan";
 import { baueReportText } from "./therapyReport";
 import type { ImportErgebnis } from "@contracts/therapy";
 
@@ -87,6 +93,43 @@ describe("parseTherapieplan", () => {
     const { eintraege } = parseTherapieplan("KW28.csv", b64, 2026);
     expect(eintraege).toHaveLength(2);
     expect(eintraege[1]).toMatchObject({ datum: "2026-07-07", menge: 2 });
+  });
+});
+
+describe("normMenge / normKompakt (Katalog-Matching)", () => {
+  it("stellt Mengenangaben ans Ende um und matcht Katalogschreibweise", () => {
+    expect(normMenge("600mg Clindamycin")).toBe(normMenge("Clindamycin 600 mg"));
+    expect(normMenge("250ml NaCl 0.9%")).toBe(normMenge("NaCl 0,9 % 250 ml"));
+    expect(normMenge("500ml Ringer")).toBe(normMenge("Ringer 500 ml"));
+    expect(normKompakt("Neuro-Amino ½ Amp.")).toBe(normKompakt("neuro-amino ½ amp."));
+  });
+});
+
+describe("isoKalenderwoche", () => {
+  it("rechnet ISO-8601 korrekt, auch über Jahresgrenzen", () => {
+    expect(isoKalenderwoche("2026-01-01")).toBe(1); // Do in KW 1
+    expect(isoKalenderwoche("2025-12-29")).toBe(1); // Mo gehört zu KW 1/2026
+    expect(isoKalenderwoche("2026-10-01")).toBe(40); // der Tippfehler aus der Vorlage
+    expect(isoKalenderwoche("2026-07-06")).toBe(28);
+  });
+});
+
+describe("KW-Plausibilitätscheck", () => {
+  it("markiert Daten, die nicht zur Blatt-KW passen (Tippfehler)", () => {
+    const zeilen = BLOCK("Mustermann, Max");
+    // Datumszeile auf KW01 stellen, Tag 1 mit Tippfehler (Oktober statt Januar)
+    zeilen[1][2] = "01.10.2026";
+    zeilen[1][5] = "02.01.2026";
+    zeilen[1][8] = "03.01.2026";
+    zeilen[1][11] = "04.01.2026";
+    zeilen[1][14] = "05.01.2026";
+    zeilen.push([null, 1, "mGKHT", true, 1, "EECP", true]);
+    const { eintraege } = parseTherapieplan("p.xlsx", mappeBauen("KW01", zeilen), 2026);
+    const tag1 = eintraege.find((e) => e.name === "mGKHT")!;
+    const tag2 = eintraege.find((e) => e.name === "EECP")!;
+    expect(tag1.datum).toBe("2026-10-01");
+    expect(tag1.kwAbweichung).toBe(true);
+    expect(tag2.kwAbweichung).toBe(false);
   });
 });
 

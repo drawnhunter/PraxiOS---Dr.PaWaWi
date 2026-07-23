@@ -1,4 +1,4 @@
-# ReWaKi — lokal auf dem eigenen PC starten
+# Dr.ReWaWi — lokal auf dem eigenen PC starten
 
 So testest du das Programm auf deinem Rechner. Beim ersten Start erwartet dich
 die **Ersteinrichtung**: Admin-Konto anlegen → Firmendaten (und optional

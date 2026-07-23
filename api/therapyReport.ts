@@ -1,4 +1,4 @@
-// ── ReWaKi: Unklarheiten-Report (Text + PDF) ────────────────────────────────
+// ── Dr.ReWaWi: Unklarheiten-Report (Text + PDF) ────────────────────────────────
 // Geht zurück an IMTZ: enthält je Punkt die Fundstelle in der Vorlage
 // (Sheet + Excel-Zeile + Patient), damit die Rückfrage ohne Raten klappt.
 import PDFDocument from "pdfkit";
@@ -82,7 +82,7 @@ export function renderReportPdf(
       margins: { top: 50, bottom: 50, left: 50, right: 50 },
       bufferPages: true,
       font: fontPath("DejaVuSans.ttf"),
-      info: { Title: `Unklarheiten-Report ${dateiname}`, Author: "ReWaKi" },
+      info: { Title: `Unklarheiten-Report ${dateiname}`, Author: "Dr.ReWaWi" },
     });
     const chunks: Buffer[] = [];
     doc.on("data", (c) => chunks.push(c));

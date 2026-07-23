@@ -1,40 +1,80 @@
 ﻿Name;Beschreibung;Einheit;Kategorie;VK netto;EK netto;USt-Satz %;Import-Namen
-Auswertung Vorbefunde, Anamnese, Therapieplanung (GOÄ 34);Umfassende Auswertung der Vorbefunde, Anamnese, Therapieplanung und Aufklärung;Stück;GOÄ-Leistung;220,00;;0;
-HHH — Hypertherme, hyperoxygenierte Hämoperfusion;Inkl. ärztlicher Durchführung, Überwachung und Gerätetechnik (§ 2 GOÄ);Stück;GOÄ-Leistung;6700,00;;0;Hämoperfusion
-Kombinations-Apherese (Plasmafilter + Adsorber);Inkl. ärztlicher Durchführung, Überwachung und Gerätetechnik (§ 2 GOÄ);Stück;GOÄ-Leistung;6800,00;;0;"Kombipherese;Apherese"
+EECP (Enhanced External Counterpulsation);§ 2 GOÄ;Stück;GOÄ-Leistung;110,00;;0;EECP
+Wasserstoff-Inhalationstherapie;§ 2 GOÄ;Stück;GOÄ-Leistung;80,00;;0;"Wasserstoff Inh.;Wasserstoff-Inhalation;H2-Inhalation"
+mGKHT — moderate Ganzkörperhyperthermie;Entspr. GOÄ 532;Stück;GOÄ-Leistung;50,00;;0;mGKHT
+Ozon-Eigenbluttherapie, groß;Aderlass mit Reinfusion (entspr. GOÄ 285/286A);Stück;GOÄ-Leistung;350,00;;0;"Orzon;Ozon-Eigenblut;Ozon Eigenblut"
+HHH — Hypertherme, hyperoxygenierte Hämoperfusion;Inkl. ärztlicher Durchführung, Überwachung und Gerätetechnik (§ 2 GOÄ);Stück;GOÄ-Leistung;6700,00;;0;"HHH;Hämoperfusion"
+Kombinations-Apherese (Plasmafilter + Adsorber);Inkl. ärztlicher Durchführung, Überwachung und Gerätetechnik (§ 2 GOÄ);Stück;GOÄ-Leistung;6800,00;;0;"Kombipherese;Apherese;Kombinations-Apherese"
 Infusionstherapie je Behandlungstag;Anti-inflammatorisch / regenerativ (GOÄ 272);Stück;GOÄ-Leistung;250,00;;0;Infusionstherapie
-Ozon-Eigenbluttherapie, groß;Aderlass mit Reinfusion (entspr. GOÄ 285/286A);Stück;GOÄ-Leistung;350,00;;0;"Ozon-Eigenblut;Ozon Eigenblut"
-EECP (Enhanced External Counterpulsation);§ 2 GOÄ;Stück;GOÄ-Leistung;100,00;;0;EECP
-Wasserstoff-Inhalationstherapie;§ 2 GOÄ;Stück;GOÄ-Leistung;50,00;;0;"Wasserstoff-Inhalation;H2-Inhalation"
-mGKHT — moderate Ganzkörperhyperthermie;Entspr. GOÄ 532;Stück;GOÄ-Leistung;80,00;;0;mGKHT
+Auswertung Vorbefunde, Anamnese, Therapieplanung (GOÄ 34);Umfassende Auswertung der Vorbefunde, Anamnese, Therapieplanung und Aufklärung;Stück;GOÄ-Leistung;220,00;;0;
 Abschlussuntersuchung mit Arztbrief;Abschlussuntersuchung, Erstellung des Arztbriefes (GOÄ 75/85);Stück;GOÄ-Leistung;150,00;;0;Abschlussuntersuchung
-NaCl 0,9 % 500 ml;;Stück;Auslage § 10;6,50;6,50;0;"500 ml NaCl;500ml NaCl;NaCl 500 ml"
-NaCl 0,9 % 250 ml;;Stück;Auslage § 10;5,00;5,00;0;"250 ml NaCl;250ml NaCl;250 ml NaCl 0.9%;250ml NaCl 0.9%"
-NaCl 0,9 % 100 ml;;Stück;Auslage § 10;5,00;5,00;0;"100 ml NaCl;100ml NaCl"
-Natriumbicarbonat 100 ml;;Stück;Auslage § 10;5,41;5,41;0;"100 ml NaBic;100ml NaBic;NaBic"
-Artesunat 250 mg;;Stück;Auslage § 10;55,00;55,00;0;Artesunat
-Ringer-Lösung 250 ml;;Stück;Auslage § 10;5,00;5,00;0;"250 ml Ringer;Ringer 250 ml"
-Ringer-Laktat 250 ml;;Stück;Auslage § 10;5,00;5,00;0;"250 ml Ringer-Laktat;Ringer-Laktat"
-Ringer-Lösung 500 ml;;Stück;Auslage § 10;6,50;6,50;0;"500 ml Ringer;500ml Ringer"
-Vitamin C 7,5 g (Pascorbin);;Stück;Auslage § 10;8,98;8,98;0;"Vitamin C 7,5 g;Vitamin C 7.5 g;Vitamin C"
-Magnesium 4 mmol;;Stück;Auslage § 10;2,70;2,70;0;"Magnesium;Magnesium 4mmol"
-Hepa-Merz 1 Amp.;;Stück;Auslage § 10;20,18;20,18;0;"Hepa Merz 1 Amp.;Hepa Merz;Hepa-Merz"
-Cernevit 1 Amp.;;Stück;Auslage § 10;30,81;30,81;0;Cernevit
-Ceftriaxon 2 g;;Stück;Auslage § 10;15,28;15,28;0;Ceftriaxon
-Alpha-Liponsäure 600 mg;;Stück;Auslage § 10;8,99;8,99;0;"Alphaliponsäure 600 mg;Alpha-Liponsäure 600mg"
-Alpha-Lipon 50 ml;;Stück;Auslage § 10;11,00;11,00;0;Alpha-Lipon 50ml
-Alpha-Lipon 1 Amp.;;Stück;Auslage § 10;11,00;11,00;0;Alpha-Lipon 1 Amp
-Glucose 5 % 250 ml;;Stück;Auslage § 10;5,00;5,00;0;"250 ml G5;250ml G5;G5 250 ml"
-Glucose 5 % 500 ml;;Stück;Auslage § 10;7,00;7,00;0;"500 ml G5;500ml G5%;500 ml G5%;G5 500 ml"
-Vitalipid 1 Amp.;;Stück;Auslage § 10;12,77;12,77;0;"Vitalipid;Vitalipid 1 Amp"
-MediVitan 1 Amp.;;Stück;Auslage § 10;7,50;7,50;0;"MediVitan;MediVitan 1 Amp;Redivitan 1 Amp.;Redivitan"
-Neuro-Amino ½ Amp.;;Stück;Auslage § 10;24,50;24,50;0;"Neuro-Amino ½ Amp;Neuro-Amino 1/2 Amp."
+Energy Basis;;Stück;Auslage § 10;178,92;63,90;0;
+Vitamin B-Komplex;;Stück;Auslage § 10;15,37;5,49;0;"Vit. B Kompl;B Komplex"
+AOCT;;Stück;Auslage § 10;22,40;8,00;0;
+Elektrolyt;;Stück;Auslage § 10;12,32;4,40;0;
+Dimaval;;Stück;Auslage § 10;100,97;36,06;0;
+Eumetabol (Glutathion) 1200 mg;;Stück;Auslage § 10;78,12;27,90;0;"Eumetabol(Glutathion) 1200mg;Eumetabol;Glutathion 1200"
+Glutathion TAD600;;Stück;Auslage § 10;50,40;18,00;0;"TAD600;Glutathion TAD 600"
+Pascorbin 7,5 g;;Stück;Auslage § 10;41,94;14,98;0;"Pascorbin;Pascorbin 7,5"
+Vitamin C 7,5 g;;Stück;Auslage § 10;25,14;8,98;0;"Vitamin C 7,5;Vitamin C 7.5 g"
+Vitamin C 25 g;;Stück;Auslage § 10;56,00;20,00;0;"Vit. C 25g;Vitamin C 25g"
+Natriumbicarbonat 100 ml;;Stück;Auslage § 10;15,15;5,41;0;"100 ml NaBic;100ml NaBic;NaBi;NaBic;NaBi 100 ml"
+NabiC 250 ml;;Stück;Auslage § 10;22,40;8,00;0;"NabiC;NaBi 250 ml"
+NaBi 20 ml;;Stück;Auslage § 10;3,50;1,25;0;
+ATP-Konzentrat;;Stück;Auslage § 10;39,20;14,00;0;"ATP Konzentrat;ATP"
+L-Carnitin;;Stück;Auslage § 10;14,00;5,00;0;
+Kalium-Magnesium;;Stück;Auslage § 10;6,75;2,41;0;
+L-Lysin 1 Amp. (2 g);;Stück;Auslage § 10;19,60;7,00;0;"L-Lysin;Lysin;L-Lysin 2G"
 L-Lysin ½ Amp.;;Stück;Auslage § 10;3,50;3,50;0;"L-Lysin ½ Amp;L-Lysin 1/2 Amp."
-Selen 900 µg 1 Amp.;;Stück;Auslage § 10;13,90;13,90;0;"Selen 1 Amp.;Selen 900ug;Selen 900 µg;Selen"
-Doxycyclin 100 mg;;Stück;Auslage § 10;5,37;5,37;0;Doxycyclin
-Methylenblau 50 mg/10 ml;;Stück;Auslage § 10;67,57;67,57;0;"Methylenblau;Methylenblau Amp.;Methylenblau 1 Amp."
-DMSO 1 Amp.;;Stück;Auslage § 10;19,90;19,90;0;DMSO
-Curcumin 150 mg;;Stück;Auslage § 10;99,00;99,00;0;"150mg Curcumin;Curcumin;Curcumin 150mg"
-Procain 2 %;;Stück;Auslage § 10;0,90;0,90;0;"Procain 2 % Amp.;Procain 2%;Procain 1%"
-Clindamycin 600 mg;;Stück;Auslage § 10;7,92;7,92;0;Clindamycin
+L-Carnosin;;Stück;Auslage § 10;13,52;4,83;0;
+Artesunat 250 mg;;Stück;Auslage § 10;154,00;55,00;0;"Artesunat;Artesunat 250mg"
+Artesunat 150 mg;;Stück;Auslage § 10;126,00;45,00;0;Artesunat 150mg
+Artesunat 100 mg;;Stück;Auslage § 10;84,00;30,00;0;Artesunat 100mg
+Vitamin B6;;Stück;Auslage § 10;11,20;4,00;0;Vit B6
+Vitamin B12;;Stück;Auslage § 10;11,20;4,00;0;Vit B12
+5-MTHF;;Stück;Auslage § 10;12,60;4,50;0;
+Prolin-Lysin;;Stück;Auslage § 10;23,97;8,56;0;
+Magnesium Diasporal 2 mmol;;Stück;Auslage § 10;7,00;2,50;0;"Magnesium 2mmol;Magnesium 2 mmol;2mmol Mg"
+Magnesium Diasporal 4 mmol;;Stück;Auslage § 10;7,56;2,70;0;"Magnesium 4 mmol;Magnesium 4mmol;4mmol Mg;Magnesium Diasporal"
+NeuroBion;;Stück;Auslage § 10;10,25;3,66;0;
+Traumeel;;Stück;Auslage § 10;7,56;2,70;0;
+Curcumin 150 mg;;Stück;Auslage § 10;277,20;99,00;0;"Curcumin;Cucumin;150mg Curcumin;Curcumin 150mg"
+Zentramin;;Stück;Auslage § 10;9,77;3,49;0;
+CA-EDTA;;Stück;Auslage § 10;27,66;9,88;0;"CA EDTA;Ca-EDTA"
+DMSO 1 Amp.;;Stück;Auslage § 10;55,72;19,90;0;DMSO
+Alpha-Liponsäure 600 mg;;Stück;Auslage § 10;25,17;8,99;0;"Alpha-Liponsäure;Alphaliponsäure 600 mg;Alpha-Liponsäure 600mg"
+Resveratrol;;Stück;Auslage § 10;728,00;260,00;0;
+Protokoll N;;Stück;Auslage § 10;139,97;49,99;0;
+MediVitan 1 Amp.;;Stück;Auslage § 10;21,00;7,50;0;"MediVitan;Redivitan 1 Amp.;Redivitan"
+NaCl 0,9 % 100 ml;;Stück;Auslage § 10;5,00;5,00;0;"100 ml NaCl;100ml NaCl;NaCL 100"
+NaCl 0,9 % 250 ml;;Stück;Auslage § 10;5,00;5,00;0;"250 ml NaCl;250ml NaCl;250 ml NaCl 0.9%;250ml NaCl 0.9%;NaCL 250"
+NaCl 0,9 % 500 ml;;Stück;Auslage § 10;6,50;6,50;0;"500 ml NaCl;500ml NaCl;NaCL 500"
+Ringer-Lösung 1000 ml;;Stück;Auslage § 10;7,00;7,00;0;"1000 ml Ringer;Ringer 1000"
+Ringer-Lösung 500 ml;;Stück;Auslage § 10;6,50;6,50;0;"500 ml Ringer;500ml Ringer;Ringer 500"
+Ringer-Lösung 250 ml;;Stück;Auslage § 10;5,00;5,00;0;"250 ml Ringer;250ml Ringer;Ringer-Laktat 250 ml;250 ml Ringer-Laktat"
+Mannit;;Stück;Auslage § 10;21,00;21,00;0;
+Clindamycin 600 mg;;Stück;Auslage § 10;22,18;7,92;0;"Clindamycin;600mg Clindamycin;Clindamycin 600mg"
+Phosphatidylcholin;;Stück;Auslage § 10;36,40;13,00;0;Phosphordycholin
+Methylenblau 50 mg/10 ml;;Stück;Auslage § 10;189,20;67,57;0;"Methylen Blau 50mg/10ml;Methylenblau;Methylenblau Amp.;Methylenblau 1 Amp."
+Vaso Aktiv;;Stück;Auslage § 10;111,72;39,90;0;
+Cernevit 1 Amp.;;Stück;Auslage § 10;86,27;30,81;0;Cernevit
+Azithromycin 500 mg;;Stück;Auslage § 10;88,40;31,57;0;"Azithromycin;Azithromycin 500mg"
+Ceftriaxon 2 g;;Stück;Auslage § 10;42,78;15,28;0;"CefTriaxon;Ceftriaxon;CefTriaxon 2000"
+Metronidazol 500 mg;;Stück;Auslage § 10;14,50;5,18;0;Metronidazol
+Vitalipid 1 Amp.;;Stück;Auslage § 10;35,76;12,77;0;Vitalipid
+Doxycyclin 100 mg;;Stück;Auslage § 10;15,04;5,37;0;"Doxycyclin;Doxycyclin 100mg"
+Selen 900 µg 1 Amp.;;Stück;Auslage § 10;38,92;13,90;0;"Selen 900ug;Selen 1 Amp.;Selen"
+Bosvene 5 mg;;Stück;Auslage § 10;417,20;149,00;0;Bosvene 5mg
+Bosvene 10 mg;;Stück;Auslage § 10;770,00;275,00;0;"Bosvene;Bosvene 10mg"
+Hepa-Merz 1 Amp.;;Stück;Auslage § 10;56,50;20,18;0;"Hepa Merz;Hepa Merz 1 Amp."
+Alpha-Lipon 50 ml;;Stück;Auslage § 10;30,80;11,00;0;"Alphalipogamma 50ml Amp.;Alpha-Lipon 50ml"
+Neuro-Amino 1 Amp.;;Stück;Auslage § 10;137,20;49,00;0;"Neuro Amino;Neuro-Amino"
+Neuro-Amino ½ Amp.;;Stück;Auslage § 10;24,50;24,50;0;"Neuro-Amino ½ Amp;Neuro-Amino 1/2 Amp."
+Procain 2 %;;Stück;Auslage § 10;2,52;0,90;0;"Procain 2 % Amp.;Procain 2%;Procain 1%"
+Phospholipid;;Stück;Auslage § 10;28,00;10,00;0;
+Eumetabol Immune;;Stück;Auslage § 10;235,20;84,00;0;
+Soluvit;;Stück;Auslage § 10;57,29;20,46;0;SoluVit
+Glucose 5 % 250 ml;;Stück;Auslage § 10;5,00;5,00;0;"250 ml G5;250ml G5"
+Glucose 5 % 500 ml;;Stück;Auslage § 10;7,00;7,00;0;"500 ml G5;500ml G5%;500 ml G5%"
+Vitalipid ½ Amp.;;Stück;Auslage § 10;6,39;6,39;0;"Vitalipid ½ Amp;Vitalipid 1/2 Amp."
 Adsorber Jafron HA380;;Stück;Auslage § 10;773,50;773,50;0;"Jafron HA380;Adsorber"

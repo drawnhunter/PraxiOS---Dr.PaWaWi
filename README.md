@@ -1,4 +1,4 @@
-# ReWaKi — Rechnungswesen Kühnel
+# Dr.ReWaWi — Rechnungswesen Kühnel
 
 **Fork von [WAWIPROS](https://example.invalid) — zugeschnitten auf genau einen
 Workflow: die wöchentliche Abrechnung der IMTZ-Therapiepläne durch Dr. Kühnel.**
@@ -10,7 +10,7 @@ Workflow: die wöchentliche Abrechnung der IMTZ-Therapiepläne durch Dr. Kühnel
    bis zu 5 Behandlungstage mit Menge/Leistung je Tag).
 2. **Dr. Kühnel** lädt die Datei auf der Startseite hoch, wählt die
    abzurechnenden Wochen und prüft die Vorschau.
-3. ReWaKi erstellt **pro Patient eine Rechnung (Entwurf)** über alle gewählten
+3. Dr.ReWaWi erstellt **pro Patient eine Rechnung (Entwurf)** über alle gewählten
    Wochen — Positionen gruppiert in
    **1. Ärztliche Leistungen (GOÄ, VK)** und **2. Auslagen § 10 GOÄ (EK)**.
 4. **Unklarheiten** (unbekannte Leistung, fehlende Adresse, unsichere

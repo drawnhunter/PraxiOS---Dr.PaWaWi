@@ -37,7 +37,7 @@ export async function nextNumber(
   return naechste;
 }
 
-// ReWaKi: Dr. Kühnel's Nummernschema, z. B. „RK 06 2026"
+// Dr.ReWaWi: Dr. Kühnel's Nummernschema, z. B. „RK 06 2026"
 export function formatInvoiceNumber(jahr: number, n: number): string {
   return `RK ${String(n).padStart(2, "0")} ${jahr}`;
 }

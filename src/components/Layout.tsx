@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 
-// ReWaKi: Navigation auf den Abrechnungs-Workflow zugeschnitten.
+// Dr.ReWaWi: Navigation auf den Abrechnungs-Workflow zugeschnitten.
 // (Angebote/Lieferscheine/Bestellungen/Lieferanten/Statistik sind weiterhin
 // über ihre URLs erreichbar, stehen aber nicht im Menü.)
 const NAV = [
@@ -52,7 +52,7 @@ export default function Layout() {
     <>
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-5">
         <div>
-          <div className="text-sm font-semibold tracking-tight">ReWaKi</div>
+          <div className="text-sm font-semibold tracking-tight">Dr.ReWaWi</div>
           <div className="text-xs text-neutral-500">Rechnungswesen Kühnel</div>
         </div>
         <button
@@ -97,7 +97,7 @@ export default function Layout() {
             <LogOut className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="text-[11px] text-neutral-400">ReWaKi · Fork von WAWIPROS</div>
+        <div className="text-[11px] text-neutral-400">Dr.ReWaWi · Fork von WAWIPROS</div>
       </div>
     </>
   );
@@ -114,7 +114,7 @@ export default function Layout() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="text-sm font-semibold tracking-tight">ReWaKi</span>
+          <span className="text-sm font-semibold tracking-tight">Dr.ReWaWi</span>
         </div>
         <button
           onClick={logout}
