@@ -380,6 +380,16 @@ function PatientKarte({ p }: { p: PatientVorschau }) {
           ) : p.kundeName && p.kundeName !== p.patientName ? (
             <Badge variant="outline">Stamm: {p.kundeName}</Badge>
           ) : null}
+          {p.patientInfo && (
+            <Badge variant="outline" className="border-sky-400 text-sky-700">
+              Daten aus Vorlage ✓
+            </Badge>
+          )}
+          {p.patientInfo?.empfaengerAbweichend && (
+            <Badge variant="outline" className="border-amber-400 text-amber-700">
+              abw. Empfänger
+            </Badge>
+          )}
         </div>
         <div className="text-sm text-neutral-500">
           {p.zeitraum &&
@@ -391,6 +401,20 @@ function PatientKarte({ p }: { p: PatientVorschau }) {
           <span className="font-medium text-neutral-900">{geld(p.summeCent / 100)}</span>
         </div>
       </div>
+      {p.patientInfo && (
+        <div className="border-b border-neutral-100 px-4 py-2 text-xs text-neutral-500">
+          {[
+            p.patientInfo.geburtsdatum && `geb. ${fmtDatumDe(p.patientInfo.geburtsdatum)}`,
+            p.patientInfo.strasse,
+            [p.patientInfo.plz, p.patientInfo.ort].filter(Boolean).join(" "),
+            p.patientInfo.patientenNr && `Pat.-Nr. ${p.patientInfo.patientenNr}`,
+            p.patientInfo.email,
+            p.patientInfo.telefon,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </div>
+      )}
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-neutral-100 text-left text-xs text-neutral-500">

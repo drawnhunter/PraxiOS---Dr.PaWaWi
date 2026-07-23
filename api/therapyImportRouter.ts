@@ -119,7 +119,7 @@ async function analysiere(
   input: z.infer<typeof dateiInput>,
 ): Promise<AnalyseErgebnis & { kontext: AnalyseKontext }> {
   const db = getDb();
-  const { eintraege, probleme } = parseTherapieplan(
+  const { eintraege, probleme, patientenInfos } = parseTherapieplan(
     input.dateiname,
     input.base64,
     input.jahr,
@@ -185,17 +185,38 @@ async function analysiere(
       unklarheiten.push(u);
     };
 
+    // Patientendaten aus der Vorlage (v2); null, wenn der Block keine enthält
+    const infoRoh = patientenInfos[norm(patientName) || "(ohne namen)"] ?? null;
+    const info =
+      infoRoh &&
+      (infoRoh.strasse ||
+        infoRoh.plz ||
+        infoRoh.ort ||
+        infoRoh.geburtsdatum ||
+        infoRoh.patientenNr ||
+        infoRoh.email ||
+        infoRoh.telefon ||
+        infoRoh.empfaengerAbweichend)
+        ? infoRoh
+        : null;
+
     // Patientenstamm-Matching
     const treffer = patientName === "(ohne Namen)" ? null : findeKunde(kundenListe, patientName);
     let kundeNeu = false;
     if (!treffer) {
       kundeNeu = true;
-      melde({
-        sheet: null,
-        zeile: null,
-        patient: patientName,
-        grund: `Patient „${patientName}“ nicht im Stamm — wird neu angelegt; Adresse und Geburtsdatum fehlen`,
-      });
+      // Neuanlage: mit den Daten aus der Vorlage — nur fehlende Felder melden
+      const fehlend: string[] = [];
+      if (!info?.strasse || !info?.plz || !info?.ort) fehlend.push("Adresse");
+      if (!info?.geburtsdatum) fehlend.push("Geburtsdatum");
+      if (fehlend.length > 0) {
+        melde({
+          sheet: null,
+          zeile: null,
+          patient: patientName,
+          grund: `Patient „${patientName}“ nicht im Stamm — wird neu angelegt; aus der Vorlage fehlen: ${fehlend.join(", ")}`,
+        });
+      }
     } else if (treffer.abweichung) {
       melde({
         sheet: null,
@@ -205,12 +226,28 @@ async function analysiere(
       });
     }
     const kunde = treffer?.kunde ?? null;
-    if (kunde && (!kunde.strasse || !kunde.plz || !kunde.ort)) {
+    // Stamm-Adresse unvollständig UND die Vorlage liefert es auch nicht -> melden
+    if (kunde) {
+      const fehlendStamm: string[] = [];
+      if (!kunde.strasse && !info?.strasse) fehlendStamm.push("Straße");
+      if (!kunde.plz && !info?.plz) fehlendStamm.push("PLZ");
+      if (!kunde.ort && !info?.ort) fehlendStamm.push("Ort");
+      if (fehlendStamm.length > 0) {
+        melde({
+          sheet: null,
+          zeile: null,
+          patient: patientName,
+          grund: `Adresse von „${kunde.name}“ unvollständig (${fehlendStamm.join(", ")} fehlt) — bitte ergänzen`,
+        });
+      }
+    }
+    // Abweichender Rechnungsempfänger -> immer Rückfrage
+    if (info?.empfaengerAbweichend) {
       melde({
         sheet: null,
         zeile: null,
         patient: patientName,
-        grund: `Adresse von „${kunde.name}“ im Stamm unvollständig — bitte ergänzen`,
+        grund: `Rechnungsempfänger abweichend${info.empfaengerText ? `: ${info.empfaengerText}` : " (kein Empfänger angegeben)"} — bitte prüfen und der Rechnung zuordnen`,
       });
     }
 
@@ -322,6 +359,7 @@ async function analysiere(
       kundeId: kunde?.id ?? null,
       kundeName: kunde?.name ?? null,
       kundeNeu,
+      patientInfo: info,
       wochen,
       zeitraum: daten.length > 0 ? { von: daten[0], bis: daten[daten.length - 1] } : null,
       positionen,
@@ -405,19 +443,41 @@ export const therapyImportRouter = createRouter({
         ? analyse.kontext.kunden.find((k) => k.id === kundeId)
         : null;
       if (!kundeId) {
+        // Neuanlage mit allen Daten aus der Vorlage (v2)
+        const info = p.patientInfo;
         const [res] = await db
           .insert(customers)
           .values({
             name: p.patientName,
-            strasse: "",
-            plz: "",
-            ort: "",
+            strasse: info?.strasse ?? "",
+            plz: info?.plz ?? "",
+            ort: info?.ort ?? "",
             land: "Deutschland",
+            email: info?.email ?? null,
+            telefon: info?.telefon ?? null,
+            geburtsdatum: info?.geburtsdatum ?? null,
+            patientenNr: info?.patientenNr ?? null,
             notizen: `Automatisch angelegt durch Therapieplan-Import (${input.dateiname})`,
           })
           .$returningId();
         kundeId = res.id;
         stamm = await db.query.customers.findFirst({ where: eq(customers.id, kundeId) });
+      } else if (p.patientInfo && stamm) {
+        // Bekannter Patient: fehlende Stamm-Felder aus der Vorlage ergänzen
+        // (keine Überschreibung vorhandener Daten)
+        const info = p.patientInfo;
+        const patch: Partial<typeof customers.$inferInsert> = {};
+        if (!stamm.strasse && info.strasse) patch.strasse = info.strasse;
+        if (!stamm.plz && info.plz) patch.plz = info.plz;
+        if (!stamm.ort && info.ort) patch.ort = info.ort;
+        if (!stamm.geburtsdatum && info.geburtsdatum) patch.geburtsdatum = info.geburtsdatum;
+        if (!stamm.patientenNr && info.patientenNr) patch.patientenNr = info.patientenNr;
+        if (!stamm.email && info.email) patch.email = info.email;
+        if (!stamm.telefon && info.telefon) patch.telefon = info.telefon;
+        if (Object.keys(patch).length > 0) {
+          await db.update(customers).set(patch).where(eq(customers.id, stamm.id));
+          stamm = { ...stamm, ...patch };
+        }
       }
       if (!stamm) continue;
 

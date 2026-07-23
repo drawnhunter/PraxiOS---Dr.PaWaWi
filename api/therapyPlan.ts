@@ -24,6 +24,19 @@ export interface PlanEintrag {
   kwAbweichung: boolean; // Datum passt nicht zur Blatt-KW (Tippfehler?)
 }
 
+/** Patientendaten aus dem Block-Kopf (Vorlage v2; in alten Dateien leer). */
+export interface PatientInfo {
+  geburtsdatum: string | null;
+  strasse: string | null;
+  plz: string | null;
+  ort: string | null;
+  email: string | null;
+  telefon: string | null;
+  patientenNr: string | null;
+  empfaengerAbweichend: boolean;
+  empfaengerText: string | null; // Freitext „Name, Straße, PLZ Ort"
+}
+
 // ── Geteilte Namens-Normalisierung (Parser, Katalog-Matching, Tests) ───────
 export function normBasis(s: string): string {
   return s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -65,6 +78,18 @@ const TAG_SPALTEN: [number, number, number][] = [
 const DATUM_SPALTEN = [2, 5, 8, 11, 14];
 
 const KW_BLATT = /^kw\s*0*(\d{1,2})$/i;
+
+const LEERES_PATIENTINFO: PatientInfo = {
+  geburtsdatum: null,
+  strasse: null,
+  plz: null,
+  ort: null,
+  email: null,
+  telefon: null,
+  patientenNr: null,
+  empfaengerAbweichend: false,
+  empfaengerText: null,
+};
 
 type Zelle = string | number | boolean | Date | null | undefined;
 
@@ -148,14 +173,71 @@ export function parseTherapieplan(
   base64: string,
   jahr: number,
   auswahl?: string[],
-): { eintraege: PlanEintrag[]; probleme: Unklarheit[] } {
+): {
+  eintraege: PlanEintrag[];
+  probleme: Unklarheit[];
+  patientenInfos: Record<string, PatientInfo>;
+} {
   const wb = ladeArbeitsmappe(dateiname, base64);
   const eintraege: PlanEintrag[] = [];
   const probleme: Unklarheit[] = [];
+  const patientenInfos: Record<string, PatientInfo> = {};
 
   const blattInfos = interneBlattInfos(wb, dateiname).filter(
     (s) => !auswahl || auswahl.includes(s.name),
   );
+
+  const WAHR = ["ja", "x", "1", "true", "wahr", "yes"];
+
+  /** Patientenfelder aus den Zeilen zwischen Block-Kopf und Datumszeile. */
+  function lesePatientenFelder(zeilen: Zelle[][], info: PatientInfo) {
+    for (const zeile of zeilen) {
+      // Label/Wert-Paare an den Spalten B/C, E/F, H/I, K/L (Indizes 1/4/7/10)
+      for (const lc of [1, 4, 7, 10]) {
+        const label = normBasis(alsText(zeile[lc])).replace(/:$/, "");
+        const wert = zeile[lc + 1];
+        const text = bereinigeName(alsText(wert));
+        if (!label) continue;
+        if (label.startsWith("rechnungsempfänger")) {
+          info.empfaengerAbweichend =
+            wert === true || WAHR.includes(normBasis(text));
+        } else if (label.includes("empfänger")) {
+          if (text) info.empfaengerText = text;
+        } else if (label === "geburtsdatum") {
+          info.geburtsdatum = datumLesen(wert, jahr) ?? (text || null);
+        } else if (label === "patienten-nr." || label === "patienten-nr" || label === "patientennummer") {
+          if (text) info.patientenNr = text;
+        } else if (label === "straße" || label === "strasse") {
+          if (text) info.strasse = text;
+        } else if (label === "plz") {
+          if (typeof wert === "number") info.plz = String(Math.trunc(wert));
+          else if (text) info.plz = text;
+        } else if (label === "ort") {
+          if (text) info.ort = text;
+        } else if (label === "e-mail" || label === "email") {
+          if (text) info.email = text;
+        } else if (label === "telefon" || label === "tel.") {
+          if (text) info.telefon = text;
+        }
+      }
+    }
+  }
+
+  function infoMergen(ziel: PatientInfo, quelle: PatientInfo) {
+    for (const k of [
+      "geburtsdatum",
+      "strasse",
+      "plz",
+      "ort",
+      "email",
+      "telefon",
+      "patientenNr",
+      "empfaengerText",
+    ] as const) {
+      if (!ziel[k] && quelle[k]) ziel[k] = quelle[k];
+    }
+    ziel.empfaengerAbweichend = ziel.empfaengerAbweichend || quelle.empfaengerAbweichend;
+  }
 
   for (const { name: blattName, kw } of blattInfos) {
     const ws = wb.Sheets[blattName];
@@ -190,12 +272,34 @@ export function parseTherapieplan(
       const ende = b + 1 < blockStarts.length ? blockStarts[b + 1] : grid.length;
       const patient = bereinigeName(alsText(grid[kopf]?.[2]));
 
-      // Datumszeile = Kopf + 1, Leistungszeilen ab Kopf + 3
-      const datumsZeile = grid[kopf + 1] ?? [];
+      // Datumszeile dynamisch finden (alte Vorlage: Kopf+1, Vorlage v2: später,
+      // weil davor die Patientendaten-Zeilen liegen). Erkannt an >= 2 „Datum:"-Labels.
+      let dzIdx = -1;
+      for (let r = kopf + 1; r < Math.min(kopf + 12, ende); r++) {
+        const labels = [1, 4, 7, 10, 13].filter(
+          (c) => normBasis(alsText(grid[r]?.[c])).replace(/:$/, "") === "datum",
+        ).length;
+        if (labels >= 2) {
+          dzIdx = r;
+          break;
+        }
+      }
+
+      // Patientendaten (Vorlage v2) zwischen Kopf und Datumszeile lesen
+      const info: PatientInfo = { ...LEERES_PATIENTINFO };
+      if (dzIdx > kopf + 1) {
+        lesePatientenFelder(grid.slice(kopf + 1, dzIdx), info);
+      }
+      const infoKey = normBasis(patient) || "(ohne namen)";
+      if (patientenInfos[infoKey]) infoMergen(patientenInfos[infoKey], info);
+      else patientenInfos[infoKey] = info;
+
+      const datumsZeile = dzIdx >= 0 ? (grid[dzIdx] ?? []) : (grid[kopf + 1] ?? []);
       const tage = DATUM_SPALTEN.map((c) => datumLesen(datumsZeile[c], jahr));
+      const itemStart = dzIdx >= 0 ? dzIdx + 2 : kopf + 3;
 
       let blockHatEintraege = false;
-      for (let r = kopf + 3; r < ende; r++) {
+      for (let r = itemStart; r < ende; r++) {
         const zeile = grid[r] ?? [];
         for (let t = 0; t < TAG_SPALTEN.length; t++) {
           const [mengeCol, nameCol] = TAG_SPALTEN[t];
@@ -238,5 +342,5 @@ export function parseTherapieplan(
     }
   }
 
-  return { eintraege, probleme };
+  return { eintraege, probleme, patientenInfos };
 }

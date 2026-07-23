@@ -133,6 +133,51 @@ describe("KW-Plausibilitätscheck", () => {
   });
 });
 
+describe("Vorlage v2: Patientendaten im Block-Kopf", () => {
+  const BLOCK_V2 = [
+    [1, "Name:", "Mustermann, Max", "Von, Bis:", null, "28.09.–02.10.2026"],
+    [null, "Geburtsdatum:", "10.05.1992", null, "Patienten-Nr.:", "IMTZ26001"],
+    [null, "Straße:", "Am Käppele 15", null, "PLZ:", "88487", null, "Ort:", "Walpertshofen"],
+    [null, "E-Mail:", "max@example.de", null, "Telefon:", "0151 2345678"],
+    [null, "Rechnungsempfänger abweichend:", "ja", null, "abweichender Empfänger:", "Mustermann, Erika, Am Käppele 15, 88487 Walpertshofen"],
+    [null, "Datum:", "28.09.2026", null, "Datum:", "29.09.2026", null, "Datum:", "30.09.2026", null, "Datum:", "01.10.2026", null, "Datum:", "02.10.2026"],
+    [null, "Menge", "Name", "Erledigt", "Menge", "Name", "Erledigt", "Menge", "Name", "Erledigt", "Menge", "Name", "Erledigt", "Menge", "Name", "Erledigt"],
+  ];
+
+  it("liest Patientendaten und Leistungen aus dem v2-Layout", () => {
+    const zeilen = [...BLOCK_V2, [null, 1, "mGKHT", true, 2, "EECP", true]];
+    const { eintraege, probleme, patientenInfos } = parseTherapieplan(
+      "p.xlsx", mappeBauen("KW40", zeilen), 2026,
+    );
+    expect(probleme).toHaveLength(0);
+    expect(eintraege).toHaveLength(2);
+    // Datumszeile korrekt gefunden (trotz Patientendaten-Zeilen davor)
+    expect(eintraege[0]).toMatchObject({ datum: "2026-09-28", kwAbweichung: false });
+    expect(eintraege[1]).toMatchObject({ datum: "2026-09-29", menge: 2 });
+
+    const info = patientenInfos["mustermann, max"];
+    expect(info).toMatchObject({
+      geburtsdatum: "1992-05-10",
+      strasse: "Am Käppele 15",
+      plz: "88487",
+      ort: "Walpertshofen",
+      email: "max@example.de",
+      telefon: "0151 2345678",
+      patientenNr: "IMTZ26001",
+      empfaengerAbweichend: true,
+    });
+    expect(info.empfaengerText).toContain("Erika");
+  });
+
+  it("alte Vorlage (ohne Patientendaten) liefert leeres Info-Objekt", () => {
+    const zeilen = [...BLOCK("Esser, Christian"), [null, 1, "EECP", true]];
+    const { patientenInfos } = parseTherapieplan("p.xlsx", mappeBauen("KW28", zeilen), 2026);
+    const info = patientenInfos["esser, christian"];
+    expect(info.empfaengerAbweichend).toBe(false);
+    expect(info.strasse).toBeNull();
+  });
+});
+
 describe("baueReportText", () => {
   it("enthält Fundstellen und Zusammenfassung", () => {
     const erg: ImportErgebnis = {

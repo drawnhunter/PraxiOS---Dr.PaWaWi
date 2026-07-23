@@ -9,6 +9,19 @@ export interface Unklarheit {
   grund: string;
 }
 
+/** Patientendaten aus dem Block-Kopf der Vorlage (v2). */
+export interface PatientInfo {
+  geburtsdatum: string | null;
+  strasse: string | null;
+  plz: string | null;
+  ort: string | null;
+  email: string | null;
+  telefon: string | null;
+  patientenNr: string | null;
+  empfaengerAbweichend: boolean;
+  empfaengerText: string | null;
+}
+
 /** Eine Rechnungsposition aus dem Import (nach Katalog-Matching). */
 export interface ImportPosition {
   datum: string | null; // ISO JJJJ-MM-TT
@@ -26,6 +39,7 @@ export interface PatientVorschau {
   kundeId: number | null; // gematchter Patientenstamm-Eintrag
   kundeName: string | null; // Name im Stamm (bei Abweichung)
   kundeNeu: boolean;
+  patientInfo: PatientInfo | null; // Daten aus der Vorlage (v2), sonst null
   wochen: { jahr: number; kw: number }[];
   zeitraum: { von: string; bis: string } | null; // ISO
   positionen: ImportPosition[];
