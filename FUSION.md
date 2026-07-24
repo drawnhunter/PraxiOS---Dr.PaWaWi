@@ -90,6 +90,22 @@ CREATE TABLE IF NOT EXISTS therapy_imports (
 - **KW-Plausicheck:** Datum außerhalb der Blatt-KW (Tippfehler, z. B. 01.10 statt 01.01) → Unklarheit.
 - **Unklarheiten-Report:** enthält je Punkt Sheet + Excel-Zeile + Patient; als PDF/TXT; jederzeit über `therapyImport.report` erneut ladbar (Protokoll in `therapy_imports`).
 
+## 4a. PraxisAkte-Anbindung (seit v2)
+
+Dr.ReWaWi importiert zusätzlich zum IMTZ-Block-Layout den **PraxisAkte-CSV-Export**
+(flaches Format, 17 Spalten, Semikolon, UTF-8 mit BOM, Datum TT.MM.JJJJ, Menge
+Punkt-Dezimal — Spiegel von `DR_REWAWI_CSV_SPALTEN` in PraxisAkte
+`contracts/constants.ts`; bei Änderungen beidseitig abstimmen).
+
+- Erkennung automatisch am CSV-Kopf (`Nachname;Vorname;…;Leistung;Menge`);
+  erscheint im Import-Dialog als Pseudo-Blatt „PraxisAkte-Export".
+- KW je Eintrag aus dem Datum (ISO-8601) → Duplikatsschutz (Patient+KW) greift
+  wie gehabt; Patienten-Matching primär über **Patienten-Nr.** (Fallback Name).
+- `Therapeut`/`Bemerkung` landen als Hinweis in der Positions-Beschreibung;
+  `Abrechnungsabschnitt` wird gelesen, Preis/Kategorie bleiben Hoheit des
+  Dr.ReWaWi-Katalogs. Patientendaten-Spalten füllen Neuanlagen/Stamm-Lücken.
+- Konstante gespiegelt als `PRAXISAKTE_CSV_SPALTEN` in `contracts/therapy.ts`.
+
 ## 5. Build & Betrieb
 
 - Build: `npm install && npm run build` (Vite + esbuild-Bundle `api/boot.ts` → `dist/boot.js`); Tests: `npm run test`; Typcheck: `npm run check`.

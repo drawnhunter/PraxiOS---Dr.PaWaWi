@@ -200,8 +200,18 @@ async function analysiere(
         ? infoRoh
         : null;
 
-    // Patientenstamm-Matching
-    const treffer = patientName === "(ohne Namen)" ? null : findeKunde(kundenListe, patientName);
+    // Patientenstamm-Matching: 1) Patienten-Nr. (stärkster Schlüssel, PraxisAkte)
+    // 2) exakter Name 3) eindeutiger Nachname
+    let treffer: { kunde: Kunde; abweichung: boolean } | null = null;
+    if (info?.patientenNr) {
+      const perNr = kundenListe.find(
+        (k) => k.patientenNr && norm(k.patientenNr) === norm(info.patientenNr!),
+      );
+      if (perNr) treffer = { kunde: perNr, abweichung: false };
+    }
+    if (!treffer) {
+      treffer = patientName === "(ohne Namen)" ? null : findeKunde(kundenListe, patientName);
+    }
     let kundeNeu = false;
     if (!treffer) {
       kundeNeu = true;
@@ -330,6 +340,11 @@ async function analysiere(
       if (vorhanden) {
         vorhanden.mengeZahl += e.menge;
         vorhanden.menge = String(Math.round(vorhanden.mengeZahl * 1000) / 1000);
+        if (e.hinweis && !(vorhanden.hinweis ?? "").includes(e.hinweis)) {
+          vorhanden.hinweis = vorhanden.hinweis
+            ? `${vorhanden.hinweis} · ${e.hinweis}`
+            : e.hinweis;
+        }
       } else {
         posMap.set(key, {
           datum: e.datum,
@@ -340,6 +355,7 @@ async function analysiere(
           ustSatz: produkt.ustSatz,
           kategorie: produkt.kategorie,
           quelle: e.name,
+          hinweis: e.hinweis,
           mengeZahl: e.menge,
         });
       }
@@ -508,7 +524,9 @@ export const therapyImportRouter = createRouter({
         }
         items.push({
           bezeichnung: pos.bezeichnung,
-          beschreibung: pos.datum ? tagKurz(pos.datum) : null,
+          beschreibung: pos.datum
+            ? tagKurz(pos.datum) + (pos.hinweis ? ` · ${pos.hinweis}` : "")
+            : null,
           menge: pos.menge,
           einheit: pos.einheit,
           einzelpreis: pos.einzelpreis,

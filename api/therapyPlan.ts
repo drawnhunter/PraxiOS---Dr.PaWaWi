@@ -10,7 +10,9 @@
 // - „Erledigt"-Häkchen werden ignoriert (Festlegung mit Dr. Kühnel:
 //   jede Zeile mit Menge + Name zählt als erbrachte Leistung)
 import * as XLSX from "xlsx";
+import Papa from "papaparse";
 import type { SheetInfo, Unklarheit } from "@contracts/therapy";
+import { PRAXISAKTE_BLATTNAME } from "@contracts/therapy";
 
 export interface PlanEintrag {
   sheet: string;
@@ -22,6 +24,7 @@ export interface PlanEintrag {
   name: string; // bereinigte Leistungsbezeichnung
   unsicher: boolean; // „(?)" im Namen — IMTZ ist selbst unsicher
   kwAbweichung: boolean; // Datum passt nicht zur Blatt-KW (Tippfehler?)
+  hinweis: string | null; // Therapeut/Bemerkung (PraxisAkte-Export), sonst null
 }
 
 /** Patientendaten aus dem Block-Kopf (Vorlage v2; in alten Dateien leer). */
@@ -123,6 +126,10 @@ function interneBlattInfos(wb: XLSX.WorkBook, dateiname: string): SheetInfo[] {
 }
 
 export function blaetterDesPlans(dateiname: string, base64: string): SheetInfo[] {
+  if (/\.csv$/i.test(dateiname)) {
+    const text = Buffer.from(base64, "base64").toString("utf-8");
+    if (istPraxisAkteCsv(text)) return [{ name: PRAXISAKTE_BLATTNAME, kw: 0 }];
+  }
   const wb = ladeArbeitsmappe(dateiname, base64);
   return interneBlattInfos(wb, dateiname);
 }
@@ -168,6 +175,130 @@ function mengeLesen(z: Zelle): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
+// ── PraxisAkte-CSV-Export (flaches 17-Spalten-Format) ─────────────────────
+// Abgestimmt mit PraxisAkte contracts/constants.ts (DR_REWAWI_CSV_SPALTEN):
+// Semikolon, UTF-8 mit BOM, Datum TT.MM.JJJJ, Menge Punkt-Dezimal,
+// nur Einträge mit status=stattgefunden.
+function istPraxisAkteCsv(text: string): boolean {
+  const erste = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] ?? "";
+  const felder = erste.split(";").map((f) => f.trim().replace(/^"|"$/g, ""));
+  return ["Nachname", "Vorname", "Datum", "Leistung", "Menge"].every((f) =>
+    felder.includes(f),
+  );
+}
+
+function parsePraxisAkteCsv(
+  dateiname: string,
+  text: string,
+  jahr: number,
+): {
+  eintraege: PlanEintrag[];
+  probleme: Unklarheit[];
+  patientenInfos: Record<string, PatientInfo>;
+} {
+  const res = Papa.parse<Record<string, string>>(text.replace(/^\uFEFF/, ""), {
+    header: true,
+    delimiter: ";",
+    skipEmptyLines: true,
+    transformHeader: (h) => h.trim(),
+    transform: (v) => (typeof v === "string" ? v.trim() : v),
+  });
+  const eintraege: PlanEintrag[] = [];
+  const probleme: Unklarheit[] = [];
+  const patientenInfos: Record<string, PatientInfo> = {};
+  const WAHR = ["ja", "x", "1", "true", "wahr", "yes"];
+  const INFO_FELDER = [
+    "geburtsdatum",
+    "strasse",
+    "plz",
+    "ort",
+    "email",
+    "telefon",
+    "patientenNr",
+    "empfaengerText",
+  ] as const;
+
+  res.data.forEach((row, i) => {
+    const zeile = i + 2; // Kopfzeile = Zeile 1
+    const patient = bereinigeName(
+      [row["Nachname"], row["Vorname"]].filter((s) => (s ?? "").trim() !== "").join(", "),
+    );
+    const leistung = bereinigeName(row["Leistung"] ?? "");
+    if (!leistung) return; // Leerzeile
+    if (!patient) {
+      probleme.push({
+        sheet: PRAXISAKTE_BLATTNAME,
+        zeile,
+        patient: null,
+        grund: "Nachname/Vorname fehlt — Zeile übersprungen",
+      });
+      return;
+    }
+    const datum = datumLesen(row["Datum"] ?? "", jahr);
+    if (!datum) {
+      probleme.push({
+        sheet: PRAXISAKTE_BLATTNAME,
+        zeile,
+        patient,
+        grund: `Datum fehlt/nicht lesbar für „${leistung}“ — Zeile übersprungen`,
+      });
+      return;
+    }
+    const mengeN = Number((row["Menge"] ?? "").replace(",", "."));
+    eintraege.push({
+      sheet: PRAXISAKTE_BLATTNAME,
+      kw: isoKalenderwoche(datum),
+      zeile,
+      patient,
+      datum,
+      menge: Number.isFinite(mengeN) && mengeN > 0 ? mengeN : 1,
+      name: leistung,
+      unsicher: /\(\s*\?\s*\)/.test(leistung),
+      kwAbweichung: false,
+      hinweis:
+        [row["Therapeut"], row["Bemerkung"]]
+          .map((s) => (s ?? "").trim())
+          .filter(Boolean)
+          .join(" · ") || null,
+    });
+
+    // Patientendaten (identisch in allen Zeilen; erst nicht-leerer Wert gewinnt)
+    const key = normBasis(patient);
+    const info: PatientInfo = {
+      geburtsdatum: datumLesen(row["Geburtsdatum"] ?? "", jahr),
+      strasse: (row["Straße"] ?? "").trim() || null,
+      plz: (row["PLZ"] ?? "").trim() || null,
+      ort: (row["Ort"] ?? "").trim() || null,
+      email: (row["E-Mail"] ?? "").trim() || null,
+      telefon: (row["Telefon"] ?? "").trim() || null,
+      patientenNr: (row["Patienten-Nr."] ?? "").trim() || null,
+      empfaengerAbweichend: WAHR.includes(
+        normBasis(row["Rechnungsempfänger abweichend"] ?? ""),
+      ),
+      empfaengerText: (row["Abweichender Empfänger"] ?? "").trim() || null,
+    };
+    if (!patientenInfos[key]) {
+      patientenInfos[key] = info;
+    } else {
+      const ziel = patientenInfos[key];
+      for (const k of INFO_FELDER) {
+        if (!ziel[k] && info[k]) ziel[k] = info[k];
+      }
+      ziel.empfaengerAbweichend = ziel.empfaengerAbweichend || info.empfaengerAbweichend;
+    }
+  });
+
+  if (eintraege.length === 0 && probleme.length === 0) {
+    probleme.push({
+      sheet: PRAXISAKTE_BLATTNAME,
+      zeile: null,
+      patient: null,
+      grund: `Keine verwertbaren Zeilen in ${dateiname} (nur status=stattgefunden wird exportiert)`,
+    });
+  }
+  return { eintraege, probleme, patientenInfos };
+}
+
 export function parseTherapieplan(
   dateiname: string,
   base64: string,
@@ -178,6 +309,11 @@ export function parseTherapieplan(
   probleme: Unklarheit[];
   patientenInfos: Record<string, PatientInfo>;
 } {
+  // PraxisAkte-Export-CSV hat eigenes (flaches) Format -> eigener Pfad
+  if (/\.csv$/i.test(dateiname)) {
+    const text = Buffer.from(base64, "base64").toString("utf-8");
+    if (istPraxisAkteCsv(text)) return parsePraxisAkteCsv(dateiname, text, jahr);
+  }
   const wb = ladeArbeitsmappe(dateiname, base64);
   const eintraege: PlanEintrag[] = [];
   const probleme: Unklarheit[] = [];
@@ -319,6 +455,7 @@ export function parseTherapieplan(
             name,
             unsicher: /\(\s*\?\s*\)/.test(name),
             kwAbweichung: datum !== null && isoKalenderwoche(datum) !== kw,
+            hinweis: null,
           });
         }
       }

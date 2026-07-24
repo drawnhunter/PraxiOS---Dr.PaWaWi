@@ -178,6 +178,53 @@ describe("Vorlage v2: Patientendaten im Block-Kopf", () => {
   });
 });
 
+describe("PraxisAkte-CSV-Export", () => {
+  const SPALTEN =
+    "Patienten-Nr.;Nachname;Vorname;Geburtsdatum;Straße;PLZ;Ort;E-Mail;Telefon;Rechnungsempfänger abweichend;Abweichender Empfänger;Datum;Leistung;Menge;Abrechnungsabschnitt;Therapeut;Bemerkung";
+  const csv =
+    "\uFEFF" +
+    [
+      SPALTEN,
+      'IMTZ26001;Mustermann;Max;10.05.1992;Am Käppele 15;88487;Walpertshofen;max@example.de;0151 234;nein;;28.09.2026;mGKHT;1;1 · GOÄ-Leistung;Dr. A;',
+      'IMTZ26001;Mustermann;Max;10.05.1992;Am Käppele 15;88487;Walpertshofen;max@example.de;0151 234;nein;;28.09.2026;500 ml NaCl;1.5;2 · Auslage § 10;Dr. A;"Nachvertragung; 16 Uhr"',
+      'IMTZ26001;Mustermann;Max;10.05.1992;Am Käppele 15;88487;Walpertshofen;max@example.de;0151 234;ja;"Mustermann, Erika, Am Käppele 15, 88487 Walpertshofen";05.10.2026;EECP;1;1 · GOÄ-Leistung;Dr. B;',
+    ].join("\r\n");
+  const b64 = () => Buffer.from(csv, "utf-8").toString("base64");
+
+  it("erkennt das Format und liefert ein Pseudo-Blatt", () => {
+    expect(blaetterDesPlans("therapieplan-3-KW40.csv", b64())).toEqual([
+      { name: "PraxisAkte-Export", kw: 0 },
+    ]);
+  });
+
+  it("liest Einträge mit KW aus dem Datum, Quoting und Hinweisen", () => {
+    const { eintraege, probleme, patientenInfos } = parseTherapieplan(
+      "therapieplan-3-KW40.csv",
+      b64(),
+      2026,
+    );
+    expect(probleme).toHaveLength(0);
+    expect(eintraege).toHaveLength(3);
+    expect(eintraege[0]).toMatchObject({
+      sheet: "PraxisAkte-Export", kw: 40, zeile: 2,
+      patient: "Mustermann, Max", datum: "2026-09-28", menge: 1,
+      name: "mGKHT", hinweis: "Dr. A",
+    });
+    // Punkt-Dezimal + quotiertes Semikolon in der Bemerkung
+    expect(eintraege[1]).toMatchObject({ menge: 1.5 });
+    expect(eintraege[1].hinweis).toContain("Nachvertragung; 16 Uhr");
+    // KW wird aus dem Datum abgeleitet (Woche 2 desselben Plans)
+    expect(eintraege[2].kw).toBe(41);
+
+    const info = patientenInfos["mustermann, max"];
+    expect(info).toMatchObject({
+      geburtsdatum: "1992-05-10", strasse: "Am Käppele 15", plz: "88487",
+      ort: "Walpertshofen", patientenNr: "IMTZ26001", empfaengerAbweichend: true,
+    });
+    expect(info.empfaengerText).toContain("Erika");
+  });
+});
+
 describe("baueReportText", () => {
   it("enthält Fundstellen und Zusammenfassung", () => {
     const erg: ImportErgebnis = {

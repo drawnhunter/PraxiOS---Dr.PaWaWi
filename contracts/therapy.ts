@@ -32,6 +32,7 @@ export interface ImportPosition {
   ustSatz: number;
   kategorie: "leistung" | "auslage";
   quelle: string; // Originalbezeichnung aus der Vorlage
+  hinweis: string | null; // Therapeut/Bemerkung (PraxisAkte-Export) oder null
 }
 
 export interface PatientVorschau {
@@ -74,6 +75,28 @@ export interface ImportProtokoll {
   anzahlRechnungen: number;
   anzahlUnklarheiten: number;
 }
+
+/** PraxisAkte-CSV-Export (flaches Format, 17 Spalten — mit PraxisAkte contracts/constants.ts abgestimmt). */
+export const PRAXISAKTE_BLATTNAME = "PraxisAkte-Export";
+export const PRAXISAKTE_CSV_SPALTEN = [
+  "Patienten-Nr.",
+  "Nachname",
+  "Vorname",
+  "Geburtsdatum",
+  "Straße",
+  "PLZ",
+  "Ort",
+  "E-Mail",
+  "Telefon",
+  "Rechnungsempfänger abweichend",
+  "Abweichender Empfänger",
+  "Datum",
+  "Leistung",
+  "Menge",
+  "Abrechnungsabschnitt",
+  "Therapeut",
+  "Bemerkung",
+] as const;
 
 /** Abschnitts-Überschriften auf der Rechnung (spiegeln Dr. Kühnel's Layout). */
 export const ABSCHNITT_LEISTUNGEN = "1. Ärztliche Leistungen (GOÄ / Honorarvereinbarung)";
