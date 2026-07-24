@@ -3,6 +3,9 @@ import { NavLink, Outlet } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { akzentAnwenden } from "@/lib/design";
 import {
+  LayoutDashboard,
+  Calendar,
+  ClipboardList,
   FileUp,
   Landmark,
   FileText,
@@ -21,11 +24,14 @@ import { useAuth } from "@/hooks/useAuth";
 // (Angebote/Lieferscheine/Bestellungen/Lieferanten/Statistik sind weiterhin
 // über ihre URLs erreichbar, stehen aber nicht im Menü.)
 const NAV = [
-  { to: "/", label: "Therapie-Import", icon: FileUp, end: true },
+  { to: "/", label: "Übersicht", icon: LayoutDashboard, end: true },
+  { to: "/kalender", label: "Kalender", icon: Calendar },
+  { to: "/patienten", label: "Patienten", icon: Users },
+  { to: "/plaene", label: "Therapiepläne", icon: ClipboardList },
+  { to: "/therapie-import", label: "Abrechnung", icon: FileUp },
   { to: "/rechnungen", label: "Rechnungen", icon: FileText },
   { to: "/gutschriften", label: "Gutschriften", icon: Receipt },
   { to: "/bank", label: "Bank", icon: Landmark },
-  { to: "/kunden", label: "Patienten", icon: Users },
   { to: "/produkte", label: "Leistungen", icon: Package },
   { to: "/einstellungen", label: "Einstellungen", icon: Settings },
 ];
@@ -37,7 +43,7 @@ export default function Layout() {
   // Akzentfarbe aus den Einstellungen aufs UI anwenden
   const einstellungen = trpc.settings.get.useQuery(undefined, { retry: false });
   useEffect(() => {
-    akzentAnwenden(einstellungen.data?.akzentfarbe ?? "neutral");
+    akzentAnwenden(einstellungen.data?.akzentfarbe ?? "petrol");
   }, [einstellungen.data?.akzentfarbe]);
 
   if (isLoading || !user) {
@@ -52,8 +58,8 @@ export default function Layout() {
     <>
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-5">
         <div>
-          <div className="text-sm font-semibold tracking-tight">Dr.ReWaWi</div>
-          <div className="text-xs text-neutral-500">Rechnungswesen Kühnel</div>
+          <div className="text-sm font-semibold tracking-tight">PraxisWerk</div>
+          <div className="text-xs text-neutral-500">ReWaDo · Akte &amp; Abrechnung</div>
         </div>
         <button
           onClick={() => setNavOffen(false)}
@@ -97,7 +103,7 @@ export default function Layout() {
             <LogOut className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="text-[11px] text-neutral-400">Dr.ReWaWi · Fork von WAWIPROS</div>
+        <div className="text-[11px] text-neutral-400">PraxisWerk — ReWaDo</div>
       </div>
     </>
   );
@@ -114,7 +120,7 @@ export default function Layout() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="text-sm font-semibold tracking-tight">Dr.ReWaWi</span>
+          <span className="text-sm font-semibold tracking-tight">PraxisWerk</span>
         </div>
         <button
           onClick={logout}

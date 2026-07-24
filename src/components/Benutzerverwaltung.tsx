@@ -18,7 +18,69 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, KeyRound, Trash2 } from "lucide-react";
+import { Plus, KeyRound, Trash2, Palette } from "lucide-react";
+
+// Vordefinierte Therapeuten-Farben (Kalender). „keine" = null.
+const THERAPEUT_FARBEN = [
+  { hex: "#0F766E", label: "Petrol" },
+  { hex: "#B45309", label: "Bernstein" },
+  { hex: "#1D4ED8", label: "Blau" },
+  { hex: "#15803D", label: "Grün" },
+  { hex: "#7C3AED", label: "Violett" },
+  { hex: "#B91C1C", label: "Rot" },
+  { hex: "#0E7490", label: "Cyan" },
+  { hex: "#A21CAF", label: "Magenta" },
+];
+
+function FarbPunkt({ farbe }: { farbe: string | null | undefined }) {
+  if (!farbe) return null;
+  return (
+    <span
+      className="mr-2 inline-block h-3 w-3 rounded-full align-middle ring-1 ring-black/10"
+      style={{ backgroundColor: farbe }}
+      title={`Kalenderfarbe ${farbe}`}
+    />
+  );
+}
+
+/** Klickbare Farb-Palette: 8 Swatches + „keine". */
+function FarbAuswahl({
+  wert,
+  onWahl,
+}: {
+  wert: string | null;
+  onWahl: (farbe: string | null) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {THERAPEUT_FARBEN.map((f) => (
+        <button
+          key={f.hex}
+          type="button"
+          title={f.label}
+          onClick={() => onWahl(f.hex)}
+          className={`h-7 w-7 rounded-full transition-all ${
+            wert === f.hex
+              ? "ring-2 ring-neutral-800 ring-offset-2"
+              : "hover:scale-110"
+          }`}
+          style={{ backgroundColor: f.hex }}
+        />
+      ))}
+      <button
+        type="button"
+        onClick={() => onWahl(null)}
+        className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+          wert === null
+            ? "border-neutral-800 bg-neutral-100 text-neutral-800"
+            : "border-neutral-200 text-neutral-500 hover:border-neutral-300"
+        }`}
+      >
+        keine
+      </button>
+    </div>
+  );
+}
 
 export function Benutzerverwaltung() {
   const utils = trpc.useUtils();
@@ -32,7 +94,18 @@ export function Benutzerverwaltung() {
 
   const [anlegenOffen, setAnlegenOffen] = useState(false);
   const [passwortZiel, setPasswortZiel] = useState<{ id: number; name: string } | null>(null);
-  const [form, setForm] = useState({ username: "", name: "", password: "", role: "user" as "user" | "admin" });
+  const [farbeZiel, setFarbeZiel] = useState<{
+    id: number;
+    name: string;
+    farbe: string | null;
+  } | null>(null);
+  const [form, setForm] = useState({
+    username: "",
+    name: "",
+    password: "",
+    role: "user" as "user" | "admin",
+    kalenderFarbe: null as string | null,
+  });
   const [neuesPasswort, setNeuesPasswort] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
 
@@ -42,7 +115,7 @@ export function Benutzerverwaltung() {
     onSuccess: () => {
       invalid();
       setAnlegenOffen(false);
-      setForm({ username: "", name: "", password: "", role: "user" });
+      setForm({ username: "", name: "", password: "", role: "user", kalenderFarbe: null });
       setFehler(null);
     },
     onError: (e) => setFehler(e.message),
@@ -52,6 +125,15 @@ export function Benutzerverwaltung() {
     onSuccess: () => {
       setPasswortZiel(null);
       setNeuesPasswort("");
+      setFehler(null);
+    },
+    onError: (e) => setFehler(e.message),
+  });
+
+  const farbe = trpc.auth.benutzerFarbe.useMutation({
+    onSuccess: () => {
+      invalid();
+      setFarbeZiel(null);
       setFehler(null);
     },
     onError: (e) => setFehler(e.message),
@@ -73,8 +155,9 @@ export function Benutzerverwaltung() {
         </Button>
       </div>
       <p className="mb-4 text-xs text-neutral-500">
-        Wer sich anmelden darf. Admins können zusätzlich Benutzer verwalten und
-        alle Einstellungen ändern.
+        Wer sich anmelden darf. Die Praxisleitung kann zusätzlich Benutzer
+        verwalten und alle Einstellungen ändern. Die Kalenderfarbe kennzeichnet
+        Therapeut:innen im Terminkalender.
       </p>
 
             <div className="overflow-x-auto">
@@ -97,10 +180,13 @@ export function Benutzerverwaltung() {
                   <span className="ml-2 text-xs text-neutral-400">(du)</span>
                 )}
               </td>
-              <td className="px-2 py-2.5 text-neutral-600">{b.name ?? "–"}</td>
+              <td className="px-2 py-2.5 text-neutral-600">
+                <FarbPunkt farbe={b.kalenderFarbe} />
+                {b.name ?? "–"}
+              </td>
               <td className="px-2 py-2.5">
                 <Badge variant={b.role === "admin" ? "default" : "secondary"}>
-                  {b.role === "admin" ? "Admin" : "Benutzer"}
+                  {b.role === "admin" ? "Praxisleitung" : "Therapeut:in"}
                 </Badge>
                 {!b.hatPasswort && (
                   <Badge variant="outline" className="ml-1.5 text-neutral-400">
@@ -115,6 +201,21 @@ export function Benutzerverwaltung() {
               </td>
               <td className="px-2 py-2.5 text-right">
                 <div className="flex items-center justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Kalenderfarbe setzen"
+                    onClick={() => {
+                      setFehler(null);
+                      setFarbeZiel({
+                        id: b.id,
+                        name: b.name ?? b.username ?? `#${b.id}`,
+                        farbe: b.kalenderFarbe ?? null,
+                      });
+                    }}
+                  >
+                    <Palette className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -190,10 +291,17 @@ export function Benutzerverwaltung() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">Benutzer</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="user">Therapeut:in</SelectItem>
+                  <SelectItem value="admin">Praxisleitung</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label className="mb-2 block">Kalenderfarbe (optional)</Label>
+              <FarbAuswahl
+                wert={form.kalenderFarbe}
+                onWahl={(f) => setForm({ ...form, kalenderFarbe: f })}
+              />
             </div>
             {fehler && (
               <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{fehler}</p>
@@ -211,6 +319,7 @@ export function Benutzerverwaltung() {
                   password: form.password,
                   name: form.name.trim() || undefined,
                   role: form.role,
+                  kalenderFarbe: form.kalenderFarbe,
                 })
               }
             >
@@ -252,6 +361,38 @@ export function Benutzerverwaltung() {
               }
             >
               Passwort setzen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Farb-Dialog */}
+      <Dialog open={!!farbeZiel} onOpenChange={(o) => !o && setFarbeZiel(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Kalenderfarbe für {farbeZiel?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <FarbAuswahl
+              wert={farbeZiel?.farbe ?? null}
+              onWahl={(f) => farbeZiel && setFarbeZiel({ ...farbeZiel, farbe: f })}
+            />
+            {fehler && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{fehler}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFarbeZiel(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              disabled={farbe.isPending}
+              onClick={() =>
+                farbeZiel &&
+                farbe.mutate({ userId: farbeZiel.id, kalenderFarbe: farbeZiel.farbe })
+              }
+            >
+              Speichern
             </Button>
           </DialogFooter>
         </DialogContent>

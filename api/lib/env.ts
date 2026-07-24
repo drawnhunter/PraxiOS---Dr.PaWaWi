@@ -1,4 +1,5 @@
 import "dotenv/config";
+import path from "node:path";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -19,4 +20,6 @@ export const env = {
   kimiAuthUrl: process.env.KIMI_AUTH_URL ?? "",
   kimiOpenUrl: process.env.KIMI_OPEN_URL ?? "",
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  // Ablageort für Patienten-Dokumente (Uploads, PraxisWerk-Akte)
+  uploadDir: process.env.UPLOAD_DIR ?? path.resolve(process.cwd(), "dokumente"),
 };

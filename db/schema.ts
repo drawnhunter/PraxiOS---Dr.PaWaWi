@@ -40,7 +40,7 @@ export const companySettings = mysqlTable("company_settings", {
   erloeskonto0: varchar("erloeskonto_0", { length: 10 }).notNull().default("8120"),
   debitorStartnummer: int("debitor_startnummer").notNull().default(10000),
   // Design
-  akzentfarbe: varchar("akzentfarbe", { length: 30 }).notNull().default("neutral"),
+  akzentfarbe: varchar("akzentfarbe", { length: 30 }).notNull().default("petrol"),
   pdfLayout: varchar("pdf_layout", { length: 30 }).notNull().default("klassisch"),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });
@@ -71,9 +71,13 @@ export const customers = mysqlTable(
     land: varchar("land", { length: 100 }).notNull().default("Deutschland"),
     email: varchar("email", { length: 320 }),
     telefon: varchar("telefon", { length: 50 }),
-    // Dr.ReWaWi: Patienten-Felder (Kunden = Patienten)
+    // PraxisWerk: Patienten-Felder (Kunden = Patienten)
     geburtsdatum: date("geburtsdatum", { mode: "string" }),
     patientenNr: varchar("patienten_nr", { length: 50 }),
+    krankenkasse: varchar("krankenkasse", { length: 255 }),
+    versichertennummer: varchar("versichertennummer", { length: 50 }),
+    aerztlicherAnsprechpartner: varchar("aerztlicher_ansprechpartner", { length: 255 }),
+    tags: varchar("tags", { length: 500 }), // kommagetrennt, z. B. "borreliose,apherese"
     ustIdNr: varchar("ust_id_nr", { length: 50 }),
     zahlungszielTage: int("zahlungsziel_tage"),
     debitornummer: int("debitornummer"),
@@ -83,6 +87,7 @@ export const customers = mysqlTable(
   },
   (t) => ({
     nameIdx: index("customers_name_idx").on(t.name),
+    patientenNrUnique: uniqueIndex("customers_patienten_nr_unique").on(t.patientenNr),
   }),
 );
 
@@ -255,6 +260,8 @@ export const creditNoteItems = mysqlTable(
 export type CompanySettings = typeof companySettings.$inferSelect;
 export type BankAccount = typeof bankAccounts.$inferSelect;
 export type Customer = typeof customers.$inferSelect;
+// PraxisWerk: Kunde = Patient (vereinigtes Modell)
+export type Patient = Customer;
 export type Product = typeof products.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type InvoiceItem = typeof invoiceItems.$inferSelect;
@@ -415,6 +422,8 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   avatar: text("avatar"),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  // Farbe des Therapeuten im Kalender (z. B. "#0F766E")
+  kalenderFarbe: varchar("kalenderFarbe", { length: 20 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()
@@ -531,3 +540,156 @@ export const therapyImports = mysqlTable("therapy_imports", {
 
 export type InvoiceTherapieWoche = typeof invoiceTherapieWochen.$inferSelect;
 export type TherapyImport = typeof therapyImports.$inferSelect;
+
+// ── PraxisWerk: Patientenakte (aus PraxisAkte; patientId = customers.id) ────
+export const patientContacts = mysqlTable("patient_contacts", {
+  id: serial("id").primaryKey(),
+  patientId: bigint("patient_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  verhaeltnis: varchar("verhaeltnis", { length: 100 }),
+  telefon: varchar("telefon", { length: 50 }),
+  email: varchar("email", { length: 320 }),
+  adresse: varchar("adresse", { length: 500 }),
+  istRechnungsempfaenger: boolean("ist_rechnungsempfaenger").notNull().default(false),
+  notiz: varchar("notiz", { length: 500 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const therapyPlans = mysqlTable(
+  "therapy_plans",
+  {
+    id: serial("id").primaryKey(),
+    patientId: bigint("patient_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    titel: varchar("titel", { length: 255 }),
+    vonDatum: date("von_datum", { mode: "string" }).notNull(),
+    bisDatum: date("bis_datum", { mode: "string" }).notNull(),
+    diagnoseZiele: text("diagnose_ziele"),
+    status: mysqlEnum("status", ["geplant", "aktiv", "dokumentiert", "abgerechnet"])
+      .notNull()
+      .default("geplant"),
+    rechnungsempfaengerAbweichend: boolean("rechnungsempfaenger_abweichend")
+      .notNull()
+      .default(false),
+    abweichenderEmpfaenger: text("abweichender_empfaenger"),
+    notizen: text("notizen"),
+    createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  },
+  (t) => [
+    index("therapy_plans_patient_idx").on(t.patientId),
+    index("therapy_plans_status_idx").on(t.status),
+  ],
+);
+
+export const planEntries = mysqlTable(
+  "plan_entries",
+  {
+    id: serial("id").primaryKey(),
+    planId: bigint("plan_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => therapyPlans.id, { onDelete: "cascade" }),
+    datum: date("datum", { mode: "string" }).notNull(),
+    zeitVon: varchar("zeit_von", { length: 5 }),
+    zeitBis: varchar("zeit_bis", { length: 5 }),
+    leistungId: bigint("leistung_id", { mode: "number", unsigned: true }).references(
+      () => products.id,
+      { onDelete: "set null" },
+    ),
+    leistungText: varchar("leistung_text", { length: 255 }),
+    menge: decimal("menge", { precision: 6, scale: 1 }).notNull().default("1"),
+    therapeutId: bigint("therapeut_id", { mode: "number", unsigned: true }).references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    raum: varchar("raum", { length: 100 }),
+    status: mysqlEnum("status", ["geplant", "stattgefunden", "abgesagt", "ausgefallen"])
+      .notNull()
+      .default("geplant"),
+    bemerkung: varchar("bemerkung", { length: 500 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  },
+  (t) => [
+    index("plan_entries_datum_idx").on(t.datum),
+    index("plan_entries_plan_idx").on(t.planId),
+  ],
+);
+
+export const documents = mysqlTable(
+  "documents",
+  {
+    id: serial("id").primaryKey(),
+    patientId: bigint("patient_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    planId: bigint("plan_id", { mode: "number", unsigned: true }).references(
+      () => therapyPlans.id,
+      { onDelete: "set null" },
+    ),
+    kategorie: mysqlEnum("kategorie", [
+      "befund",
+      "arztbrief",
+      "rezept",
+      "einverstaendnis",
+      "sonstiges",
+    ])
+      .notNull()
+      .default("sonstiges"),
+    dateiname: varchar("dateiname", { length: 255 }).notNull(),
+    dateipfad: varchar("dateipfad", { length: 500 }).notNull(),
+    mimeType: varchar("mime_type", { length: 100 }),
+    groesse: int("groesse", { unsigned: true }),
+    notiz: varchar("notiz", { length: 500 }),
+    uploadedBy: bigint("uploaded_by", { mode: "number", unsigned: true }).references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("documents_patient_idx").on(t.patientId)],
+);
+
+export const timelineEvents = mysqlTable(
+  "timeline_events",
+  {
+    id: serial("id").primaryKey(),
+    patientId: bigint("patient_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    typ: mysqlEnum("typ", ["plan", "termin", "dokument", "notiz", "status"]).notNull(),
+    titel: varchar("titel", { length: 255 }).notNull(),
+    beschreibung: text("beschreibung"),
+    datum: date("datum", { mode: "string" }).notNull(),
+    createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("timeline_patient_datum_idx").on(t.patientId, t.datum)],
+);
+
+export const loeschprotokoll = mysqlTable("loeschprotokoll", {
+  id: serial("id").primaryKey(),
+  patientenNr: varchar("patienten_nr", { length: 50 }),
+  patientKuerzel: varchar("patient_kuerzel", { length: 20 }),
+  umfang: varchar("umfang", { length: 255 }),
+  grund: varchar("grund", { length: 500 }),
+  geloeschtVon: varchar("geloescht_von", { length: 255 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type PatientContact = typeof patientContacts.$inferSelect;
+export type TherapyPlan = typeof therapyPlans.$inferSelect;
+export type PlanEntry = typeof planEntries.$inferSelect;
+export type Dokument = typeof documents.$inferSelect;
+export type TimelineEvent = typeof timelineEvents.$inferSelect;
+export type LoeschprotokollEintrag = typeof loeschprotokoll.$inferSelect;

@@ -6,7 +6,9 @@ export interface Akzentfarbe {
   hex: string; // fuer Swatches / Vorschau
 }
 
+// Petrol ist der Standard-Akzent von PraxisAkte (ruhiges Teal, Tailwind teal-700).
 export const AKZENTFARBEN: Akzentfarbe[] = [
+  { id: "petrol", label: "Petrol", hsl: "174 60% 26%", hex: "#0F766E" },
   { id: "neutral", label: "Graphit", hsl: "240 5.9% 10%", hex: "#171717" },
   { id: "blau", label: "Blau", hsl: "221 83% 41%", hex: "#1d4ed8" },
   { id: "gruen", label: "Grün", hsl: "152 60% 32%", hex: "#15803d" },

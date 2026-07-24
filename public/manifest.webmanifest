@@ -1,7 +1,7 @@
 {
-  "name": "Dr.ReWaWi",
-  "short_name": "Dr.ReWaWi",
-  "description": "Rechnungswesen Kühnel — Therapieplan-Abrechnung",
+  "name": "PraxisWerk — ReWaDo",
+  "short_name": "PraxisWerk",
+  "description": "PraxisWerk ReWaDo — Patientenakte, Therapiepläne, Kalender, Abrechnung",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fafafa",

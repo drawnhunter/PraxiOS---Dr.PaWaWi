@@ -1,21 +1,21 @@
-name: rewaki
+name: praxiswerk
 
-# Dr.ReWaWi (Fork von WAWIPROS) - App + MySQL-Datenbank mit einem Befehl.
+# PraxisWerk (ReWaDo) - Akte & Abrechnung in einer App.
 # Start:         docker compose up --build
 # Stoppen:       Strg+C  (bzw. docker compose down)
 # Alles loeschen (inkl. Datenbank):  docker compose down -v
 #
-# Beim ersten Start wird eine LEERE Datenbank angelegt (schema.sql).
-# Danach im Browser die Ersteinrichtung durchlaufen (Admin + Firmendaten).
-# Standard-Port: 3100 (damit Dr.ReWaWi neben WAWIPROS auf demselben Server laufen kann)
+# Beim ersten Start wird eine LEERE Datenbank angelegt (schema.sql) und der
+# Leistungskatalog (79 Eintraege) automatisch geseedet.
+# Danach im Browser die Ersteinrichtung durchlaufen (Admin + Praxisdaten).
 services:
   db:
     image: mysql:8.0
     restart: unless-stopped
     environment:
       # Fuer den Produktivbetrieb unbedingt ein eigenes Passwort waehlen!
-      MYSQL_ROOT_PASSWORD: rewaki
-      MYSQL_DATABASE: rewaki
+      MYSQL_ROOT_PASSWORD: praxiswerk
+      MYSQL_DATABASE: praxiswerk
     volumes:
       - db-daten:/var/lib/mysql
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
@@ -23,7 +23,7 @@ services:
       # Datei als dump.sql ablegen und stattdessen diese Zeile nutzen:
       # - ./dump.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prewaki"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ppraxiswerk"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -35,14 +35,19 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql://root:rewaki@db:3306/rewaki
+      DATABASE_URL: mysql://root:praxiswerk@db:3306/praxiswerk
       # Geheimnis fuer Login-Sessions - unbedingt zufaellig setzen!
       APP_SECRET: bitte-zufaellig-setzen
       PORT: "3000"
+      UPLOAD_DIR: /app/dokumente
       # GEFAHR: Login ueberspringen - nur fuer lokale Tests, niemals oeffentlich!
       # LOCAL_AUTH_BYPASS: "1"
+    volumes:
+      # Patienten-Dokumente (Uploads) persistent — Backup mitnehmen!
+      - dokumente:/app/dokumente
     ports:
       - "3100:3000"
 
 volumes:
   db-daten:
+  dokumente:

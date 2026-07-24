@@ -128,3 +128,77 @@ export const konditionenRelations = relations(konditionen, ({ one }) => ({
     references: [products.id],
   }),
 }));
+
+// ── PraxisWerk: Patientenakte ───────────────────────────────────────────────
+import {
+  patientContacts,
+  therapyPlans,
+  planEntries,
+  documents,
+  timelineEvents,
+  users,
+} from "./schema";
+
+export const customersRelations = relations(customers, ({ many }) => ({
+  kontakte: many(patientContacts),
+  plaene: many(therapyPlans),
+  dokumente: many(documents),
+  timeline: many(timelineEvents),
+}));
+
+export const patientContactsRelations = relations(patientContacts, ({ one }) => ({
+  patient: one(customers, {
+    fields: [patientContacts.patientId],
+    references: [customers.id],
+  }),
+}));
+
+export const therapyPlansRelations = relations(therapyPlans, ({ one, many }) => ({
+  patient: one(customers, {
+    fields: [therapyPlans.patientId],
+    references: [customers.id],
+  }),
+  createdByUser: one(users, {
+    fields: [therapyPlans.createdBy],
+    references: [users.id],
+  }),
+  entries: many(planEntries),
+  dokumente: many(documents),
+}));
+
+export const planEntriesRelations = relations(planEntries, ({ one }) => ({
+  plan: one(therapyPlans, {
+    fields: [planEntries.planId],
+    references: [therapyPlans.id],
+  }),
+  leistung: one(products, {
+    fields: [planEntries.leistungId],
+    references: [products.id],
+  }),
+  therapeut: one(users, {
+    fields: [planEntries.therapeutId],
+    references: [users.id],
+  }),
+}));
+
+export const documentsRelations = relations(documents, ({ one }) => ({
+  patient: one(customers, {
+    fields: [documents.patientId],
+    references: [customers.id],
+  }),
+  plan: one(therapyPlans, {
+    fields: [documents.planId],
+    references: [therapyPlans.id],
+  }),
+  uploader: one(users, {
+    fields: [documents.uploadedBy],
+    references: [users.id],
+  }),
+}));
+
+export const timelineEventsRelations = relations(timelineEvents, ({ one }) => ({
+  patient: one(customers, {
+    fields: [timelineEvents.patientId],
+    references: [customers.id],
+  }),
+}));

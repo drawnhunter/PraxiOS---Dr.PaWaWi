@@ -2,6 +2,11 @@ import { Routes, Route } from "react-router";
 import Layout from "@/components/Layout";
 import TherapyImport from "@/pages/TherapyImport";
 import Dashboard from "@/pages/Dashboard";
+import Kalender from "@/pages/Kalender";
+import Patients from "@/pages/Patients";
+import PatientDetail from "@/pages/PatientDetail";
+import Plans from "@/pages/Plans";
+import PlanDetail from "@/pages/PlanDetail";
 import Statistics from "@/pages/Statistics";
 import BankImport from "@/pages/BankImport";
 import InvoiceImport from "@/pages/InvoiceImport";
@@ -26,7 +31,14 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<TherapyImport />} />
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/kalender" element={<Kalender />} />
+        <Route path="/patienten" element={<Patients />} />
+        <Route path="/kunden" element={<Patients />} />
+        <Route path="/patienten/:id" element={<PatientDetail />} />
+        <Route path="/plaene" element={<Plans />} />
+        <Route path="/plaene/:id" element={<PlanDetail />} />
+        <Route path="/therapie-import" element={<TherapyImport />} />
         <Route path="/uebersicht" element={<Dashboard />} />
         <Route path="/statistik" element={<Statistics />} />
         <Route path="/bank" element={<BankImport />} />

@@ -19,6 +19,12 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "products", spalte: "import_namen", ddl: "ALTER TABLE products ADD COLUMN import_namen TEXT NULL AFTER kategorie" },
   { tabelle: "customers", spalte: "geburtsdatum", ddl: "ALTER TABLE customers ADD COLUMN geburtsdatum DATE NULL AFTER telefon" },
   { tabelle: "customers", spalte: "patienten_nr", ddl: "ALTER TABLE customers ADD COLUMN patienten_nr VARCHAR(50) NULL AFTER geburtsdatum" },
+  // PraxisWerk (Akte-Merge)
+  { tabelle: "customers", spalte: "krankenkasse", ddl: "ALTER TABLE customers ADD COLUMN krankenkasse VARCHAR(255) NULL AFTER patienten_nr" },
+  { tabelle: "customers", spalte: "versichertennummer", ddl: "ALTER TABLE customers ADD COLUMN versichertennummer VARCHAR(50) NULL AFTER krankenkasse" },
+  { tabelle: "customers", spalte: "aerztlicher_ansprechpartner", ddl: "ALTER TABLE customers ADD COLUMN aerztlicher_ansprechpartner VARCHAR(255) NULL AFTER versichertennummer" },
+  { tabelle: "customers", spalte: "tags", ddl: "ALTER TABLE customers ADD COLUMN tags VARCHAR(500) NULL AFTER aerztlicher_ansprechpartner" },
+  { tabelle: "users", spalte: "kalenderFarbe", ddl: "ALTER TABLE users ADD COLUMN kalenderFarbe VARCHAR(20) NULL AFTER role" },
 ];
 
 const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
@@ -60,10 +66,122 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
   },
+  // PraxisWerk (Akte-Merge)
+  {
+    tabelle: "patient_contacts",
+    ddl: `CREATE TABLE IF NOT EXISTS patient_contacts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      verhaeltnis VARCHAR(100) NULL,
+      telefon VARCHAR(50) NULL,
+      email VARCHAR(320) NULL,
+      adresse VARCHAR(500) NULL,
+      ist_rechnungsempfaenger TINYINT(1) NOT NULL DEFAULT 0,
+      notiz VARCHAR(500) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT kontakte_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE
+    )`,
+  },
+  {
+    tabelle: "therapy_plans",
+    ddl: `CREATE TABLE IF NOT EXISTS therapy_plans (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      titel VARCHAR(255) NULL,
+      von_datum DATE NOT NULL,
+      bis_datum DATE NOT NULL,
+      diagnose_ziele TEXT NULL,
+      status ENUM('geplant','aktiv','dokumentiert','abgerechnet') NOT NULL DEFAULT 'geplant',
+      rechnungsempfaenger_abweichend TINYINT(1) NOT NULL DEFAULT 0,
+      abweichender_empfaenger TEXT NULL,
+      notizen TEXT NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX therapy_plans_patient_idx (patient_id),
+      INDEX therapy_plans_status_idx (status),
+      CONSTRAINT plans_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT plans_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "plan_entries",
+    ddl: `CREATE TABLE IF NOT EXISTS plan_entries (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      plan_id BIGINT UNSIGNED NOT NULL,
+      datum DATE NOT NULL,
+      zeit_von VARCHAR(5) NULL,
+      zeit_bis VARCHAR(5) NULL,
+      leistung_id BIGINT UNSIGNED NULL,
+      leistung_text VARCHAR(255) NULL,
+      menge DECIMAL(6,1) NOT NULL DEFAULT '1',
+      therapeut_id BIGINT UNSIGNED NULL,
+      raum VARCHAR(100) NULL,
+      status ENUM('geplant','stattgefunden','abgesagt','ausgefallen') NOT NULL DEFAULT 'geplant',
+      bemerkung VARCHAR(500) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX plan_entries_datum_idx (datum),
+      INDEX plan_entries_plan_idx (plan_id),
+      CONSTRAINT entries_plan_fk FOREIGN KEY (plan_id) REFERENCES therapy_plans(id) ON DELETE CASCADE,
+      CONSTRAINT entries_leistung_fk FOREIGN KEY (leistung_id) REFERENCES products(id) ON DELETE SET NULL,
+      CONSTRAINT entries_therapeut_fk FOREIGN KEY (therapeut_id) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "documents",
+    ddl: `CREATE TABLE IF NOT EXISTS documents (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      plan_id BIGINT UNSIGNED NULL,
+      kategorie ENUM('befund','arztbrief','rezept','einverstaendnis','sonstiges') NOT NULL DEFAULT 'sonstiges',
+      dateiname VARCHAR(255) NOT NULL,
+      dateipfad VARCHAR(500) NOT NULL,
+      mime_type VARCHAR(100) NULL,
+      groesse INT UNSIGNED NULL,
+      notiz VARCHAR(500) NULL,
+      uploaded_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX documents_patient_idx (patient_id),
+      CONSTRAINT docs_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT docs_plan_fk FOREIGN KEY (plan_id) REFERENCES therapy_plans(id) ON DELETE SET NULL,
+      CONSTRAINT docs_user_fk FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "timeline_events",
+    ddl: `CREATE TABLE IF NOT EXISTS timeline_events (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      typ ENUM('plan','termin','dokument','notiz','status') NOT NULL,
+      titel VARCHAR(255) NOT NULL,
+      beschreibung TEXT NULL,
+      datum DATE NOT NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX timeline_patient_datum_idx (patient_id, datum),
+      CONSTRAINT timeline_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT timeline_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "loeschprotokoll",
+    ddl: `CREATE TABLE IF NOT EXISTS loeschprotokoll (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patienten_nr VARCHAR(50) NULL,
+      patient_kuerzel VARCHAR(20) NULL,
+      umfang VARCHAR(255) NULL,
+      grund VARCHAR(500) NULL,
+      geloescht_von VARCHAR(255) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
 ];
 
 const NEUE_INDIZES: { tabelle: string; index: string; ddl: string }[] = [
   { tabelle: "users", index: "users_username_unique", ddl: "ALTER TABLE users ADD UNIQUE INDEX users_username_unique (username)" },
+  { tabelle: "customers", index: "customers_patienten_nr_unique", ddl: "ALTER TABLE customers ADD UNIQUE INDEX customers_patienten_nr_unique (patienten_nr)" },
 ];
 
 export async function migriereFehlendeSpalten(): Promise<void> {

@@ -125,6 +125,20 @@ export const authRouter = createRouter({
 
   me: authedQuery.query((opts) => opts.ctx.user),
 
+  // Therapeuten-Auswahl für Kalender/Serien/Pläne — für ALLE eingeloggten
+  // Nutzer, aber nur öffentliche Felder (kein Hash, keine E-Mail)
+  therapeuten: authedQuery.query(async () => {
+    return getDb()
+      .select({
+        id: users.id,
+        username: users.username,
+        name: users.name,
+        kalenderFarbe: users.kalenderFarbe,
+      })
+      .from(users)
+      .where(isNotNull(users.passwordHash));
+  }),
+
   logout: authedQuery.mutation(async ({ ctx }) => {
     const opts = getSessionCookieOptions(ctx.req.headers);
     ctx.resHeaders.append(
@@ -148,6 +162,7 @@ export const authRouter = createRouter({
         username: users.username,
         name: users.name,
         role: users.role,
+        kalenderFarbe: users.kalenderFarbe,
         lastSignInAt: users.lastSignInAt,
         hatPasswort: users.passwordHash,
       })
@@ -162,6 +177,8 @@ export const authRouter = createRouter({
         password: passwortInput,
         name: z.string().trim().max(255).optional(),
         role: z.enum(["user", "admin"]).default("user"),
+        // Therapeuten-Farbe im Kalender, z. B. "#0F766E"
+        kalenderFarbe: z.string().trim().max(20).nullable().optional(),
       }),
     )
     .mutation(async ({ input }) => {
@@ -183,8 +200,25 @@ export const authRouter = createRouter({
         passwordHash: hashPassword(input.password),
         name: input.name || input.username,
         role: input.role,
+        kalenderFarbe: input.kalenderFarbe ?? null,
         lastSignInAt: new Date(),
       });
+      return { success: true };
+    }),
+
+  // Therapeuten-Farbe eines Benutzers setzen/ändern (Kalender)
+  benutzerFarbe: adminQuery
+    .input(
+      z.object({
+        userId: z.number().int(),
+        kalenderFarbe: z.string().trim().max(20).nullable(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await getDb()
+        .update(users)
+        .set({ kalenderFarbe: input.kalenderFarbe })
+        .where(eq(users.id, input.userId));
       return { success: true };
     }),
 

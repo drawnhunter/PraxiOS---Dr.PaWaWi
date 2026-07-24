@@ -1,4 +1,4 @@
--- Dr.ReWaWi - Datenbankschema (ohne Daten)
+-- PraxisWerk (ReWaDo) - Datenbankschema (ohne Daten)
 -- Fork von WAWIPROS, Stand:
 -- Stand: 2026-07-23
 SET FOREIGN_KEY_CHECKS=0;
@@ -106,6 +106,10 @@ CREATE TABLE `customers` (
   `telefon` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `geburtsdatum` date DEFAULT NULL,
   `patienten_nr` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `krankenkasse` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `versichertennummer` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `aerztlicher_ansprechpartner` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `tags` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `ust_id_nr` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `zahlungsziel_tage` int DEFAULT NULL,
   `notizen` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -114,6 +118,7 @@ CREATE TABLE `customers` (
   `debitornummer` int DEFAULT NULL,
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,
   UNIQUE KEY `id` (`id`),
+  UNIQUE KEY `customers_patienten_nr_unique` (`patienten_nr`),
   KEY `customers_name_idx` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=4000001;
 
@@ -384,6 +389,7 @@ CREATE TABLE `users` (
   `email` varchar(320) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `avatar` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `role` enum('user','admin') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'user',
+  `kalenderFarbe` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `lastSignInAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -415,6 +421,116 @@ CREATE TABLE `therapy_imports` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,
   UNIQUE KEY `id` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `patient_contacts`;
+CREATE TABLE `patient_contacts` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `verhaeltnis` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `telefon` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `email` varchar(320) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `adresse` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ist_rechnungsempfaenger` tinyint(1) NOT NULL DEFAULT '0',
+  `notiz` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `kontakte_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `therapy_plans`;
+CREATE TABLE `therapy_plans` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `titel` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `von_datum` date NOT NULL,
+  `bis_datum` date NOT NULL,
+  `diagnose_ziele` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('geplant','aktiv','dokumentiert','abgerechnet') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'geplant',
+  `rechnungsempfaenger_abweichend` tinyint(1) NOT NULL DEFAULT '0',
+  `abweichender_empfaenger` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `notizen` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `therapy_plans_patient_idx` (`patient_id`),
+  KEY `therapy_plans_status_idx` (`status`),
+  CONSTRAINT `plans_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `plans_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `plan_entries`;
+CREATE TABLE `plan_entries` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `plan_id` bigint unsigned NOT NULL,
+  `datum` date NOT NULL,
+  `zeit_von` varchar(5) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `zeit_bis` varchar(5) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `leistung_id` bigint unsigned DEFAULT NULL,
+  `leistung_text` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `menge` decimal(6,1) NOT NULL DEFAULT '1',
+  `therapeut_id` bigint unsigned DEFAULT NULL,
+  `raum` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('geplant','stattgefunden','abgesagt','ausgefallen') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'geplant',
+  `bemerkung` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `plan_entries_datum_idx` (`datum`),
+  KEY `plan_entries_plan_idx` (`plan_id`),
+  CONSTRAINT `entries_plan_fk` FOREIGN KEY (`plan_id`) REFERENCES `therapy_plans` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `entries_leistung_fk` FOREIGN KEY (`leistung_id`) REFERENCES `products` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `entries_therapeut_fk` FOREIGN KEY (`therapeut_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `documents`;
+CREATE TABLE `documents` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `plan_id` bigint unsigned DEFAULT NULL,
+  `kategorie` enum('befund','arztbrief','rezept','einverstaendnis','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'sonstiges',
+  `dateiname` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `dateipfad` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `mime_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `groesse` int unsigned DEFAULT NULL,
+  `notiz` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `uploaded_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `documents_patient_idx` (`patient_id`),
+  CONSTRAINT `docs_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `docs_plan_fk` FOREIGN KEY (`plan_id`) REFERENCES `therapy_plans` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `docs_user_fk` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `timeline_events`;
+CREATE TABLE `timeline_events` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `typ` enum('plan','termin','dokument','notiz','status') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `titel` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `beschreibung` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `datum` date NOT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `timeline_patient_datum_idx` (`patient_id`,`datum`),
+  CONSTRAINT `timeline_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `timeline_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `loeschprotokoll`;
+CREATE TABLE `loeschprotokoll` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patienten_nr` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `patient_kuerzel` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `umfang` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `grund` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `geloescht_von` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;

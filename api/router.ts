@@ -19,6 +19,9 @@ import { statsRouter } from "./statsRouter";
 import { bankImportRouter } from "./bankImportRouter";
 import { invoiceImportRouter } from "./invoiceImportRouter";
 import { therapyImportRouter } from "./therapyImportRouter";
+import { planRouter } from "./planRouter";
+import { calendarRouter } from "./calendarRouter";
+import { documentRouter } from "./documentRouter";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -42,6 +45,11 @@ export const appRouter = createRouter({
   bankImport: bankImportRouter,
   invoiceImport: invoiceImportRouter,
   therapyImport: therapyImportRouter,
+  // PraxisWerk-Akte
+  plaene: planRouter,
+  kalender: calendarRouter,
+  dokumente: documentRouter,
+  leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 
 export type AppRouter = typeof appRouter;

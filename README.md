@@ -1,58 +1,79 @@
-# Dr.ReWaWi — Rechnungswesen Kühnel
+# PraxisWerk — ReWaDo
 
-**Fork von [WAWIPROS](https://example.invalid) — zugeschnitten auf genau einen
-Workflow: die wöchentliche Abrechnung der IMTZ-Therapiepläne durch Dr. Kühnel.**
+**Die vereinigte Praxis-Software: Patientenakte, Therapiepläne, Kalender und
+Abrechnung in einer App.** Entstanden aus der Fusion von **PraxisAkte** (Akte,
+Pläne, Kalender, Dokumente) und **Dr.ReWaWi** (Therapieplan-Abrechnung,
+Rechnungen, GOÄ/§-10-Engine) — beides Forks von WAWIPROS (React 19 + TS + Vite
++ Tailwind/shadcn, Hono + tRPC 11 + Drizzle + MySQL 8, Docker, PWA).
 
-## Kern-Workflow
+## Was die App kann
 
-1. **IMTZ** dokumentiert die Therapiewochen in der Excel-Vorlage
-   (ein Blatt pro Kalenderwoche, z. B. `KW28`, bis zu 3 Patientenblöcke,
-   bis zu 5 Behandlungstage mit Menge/Leistung je Tag).
-2. **Dr. Kühnel** lädt die Datei auf der Startseite hoch, wählt die
-   abzurechnenden Wochen und prüft die Vorschau.
-3. Dr.ReWaWi erstellt **pro Patient eine Rechnung (Entwurf)** über alle gewählten
-   Wochen — Positionen gruppiert in
-   **1. Ärztliche Leistungen (GOÄ, VK)** und **2. Auslagen § 10 GOÄ (EK)**.
-4. **Unklarheiten** (unbekannte Leistung, fehlende Adresse, unsichere
-   „(?)“-Angaben, Duplikate) erzeugen einen **Report als PDF/TXT** mit
-   Fundstellen (Sheet + Excel-Zeile), der an IMTZ zurückgeht.
-5. Nach Klärung werden die Entwürfe ergänzt und per Klick finalisiert
-   (GoBD-Nummernkreis: `RK 01 2026`, `RK 02 2026`, …).
+### Akte (aus PraxisAkte)
+- **Patientenakte** pro Person: Stammdaten (Name „Nachname, Vorname",
+  Geburtsdatum, Adresse, Kontakt, Krankenkasse, Versichertennummer, ärztl.
+  Ansprechpartner, Tags), Kontaktpersonen (inkl. Flag „abweichender
+  Rechnungsempfänger"), Chronik (Timeline), Dokumentenablage (Upload auch vom
+  Handy), Ausfallquote, DSGVO-Löschkonzept (pseudonymisiertes Protokoll,
+  GoBD-Guard: Patienten mit Rechnungen werden archiviert statt gelöscht)
+- **Therapiepläne** mit Wochenraster (Mo–Fr, wie die IMTZ-Excel): Einträge mit
+  Leistung (Katalog/Freitext), Menge, Therapeut (mit Farbe), Raum, Zeiten,
+  Status (geplant/stattgefunden/abgesagt/ausgefallen); Serien-Assistent
+  (Wochentage × N Wochen); Statusfluss geplant → aktiv → dokumentiert →
+  abgerechnet
+- **Wochenkalender** Mo–Fr mit Therapeuten-Farben
+- **Dashboard**: heutige Termine, Praxis-Kennzahlen + Abrechnungs-Kennzahlen
 
-## Regeln im Detail
+### Abrechnung (aus Dr.ReWaWi)
+- **Therapie-Import** (Menü „Abrechnung"): IMTZ-Excel (Block-Layout, v2 mit
+  Patientendaten) **oder** PraxisWerk/PraxisAkte-CSV-Export → 1 Rechnung
+  (Entwurf) pro Patient über alle gewählten Wochen; Katalog-Matching mit
+  Aliasen + Mengen-Umstellung; KW-Plausicheck; Duplikatsschutz (Patient+KW);
+  Unklarheiten-Report (PDF/TXT) mit Fundstellen
+- **Rechnungen**: Entwurf → Finalisierung (GoBD-Kreis „RK nn JJJJ"),
+  Abschnitte „1. Ärztliche Leistungen (GOÄ, VK)" / „2. Auslagen § 10 (EK)",
+  Konditionen je Patient, Teilzahlungen, Storno/Gutschriften, PDF
+- **Leistungskatalog**: 79 Einträge (Preisliste EK&VK 2026) werden beim ersten
+  Start automatisch geseedet; Preise/Aliase im UI pflegbar
+- Bank, Bankimport, DATEV, XRechnung (aus WAWIPROS, per URL erreichbar)
 
-- **Leistungskatalog** (Menü „Leistungen“): jede Leistung hat Kategorie
-  (GOÄ-Leistung mit VK / Auslage § 10 mit EK), optional **Import-Namen**
-  für abweichende Schreibweisen im Therapieplan (eine pro Zeile).
-- **Patientenstamm** (Menü „Patienten“): Matching per Name (exakt, sonst
-  Nachname); Unbekannte werden angelegt und landen als Unklarheit im Report
-  (Adresse/Geburtsdatum nachpflegen).
-- **„Erledigt“-Häkchen** in der Vorlage werden ignoriert — jede Zeile mit
-  Menge + Name zählt als erbrachte Leistung.
-- **Duplikatsschutz**: pro Patient und KW nur eine Rechnung; bereits
-  berechnete Wochen werden übersprungen und im Report benannt.
-- Heilbehandlungen: **0 % USt** (§ 4 Nr. 14a UStG) — USt-Standard im Katalog.
+### Eine Datenbasis
+**Kunde = Patient** (eine Tabelle): Rechnungen, Konditionen, Pläne, Dokumente,
+Kontakte und Chronik hängen an derselben Person. Patientendaten aus dem
+Therapieplan-Import ergänzen Stamm-Lücken (nie überschreibend); Patienten-Nr.
+ist der starke Abgleichschlüssel (unique).
 
 ## Betrieb
 
-Stack: React 19 + TS + Vite + Tailwind/shadcn, Hono + tRPC + Drizzle +
-MySQL 8, Docker. Selbst-Migration beim Start zieht fehlende Spalten nach.
-
 ```bash
-docker compose up --build        # App auf Port 3100 (neben WAWIPROS lauffähig)
+docker compose up --build   # App auf Port 3100, MySQL 8 + dokumente-Volume
 ```
 
-- Lokaler Start ohne Docker: siehe [LOKAL-STARTEN.md](LOKAL-STARTEN.md)
-- Server/Caddy/Backup/Update: siehe [SERVER-ANLEITUNG.md](SERVER-ANLEITUNG.md)
-  (dort `wawipros` durch `rewaki` und Port `3100` ersetzen)
+Beim ersten Start: DB aus `schema.sql`, Selbst-Migration, **Seed des
+Leistungskatalogs (79 Einträge)** und der Nummernkreise. Danach im Browser:
+Ersteinrichtung (Admin + Praxisdaten) → Benutzer mit Kalenderfarben anlegen →
+Bankkonto (Standard) → CSV-Import der Patienten (`patienten-vorlage.csv`) oder
+direkt losdokumentieren.
 
-## Wichtige Abweichungen vom WAWIPROS-Stand
+Env: `DATABASE_URL`, `APP_SECRET` (Pflicht, `openssl rand -hex 32`), `PORT`,
+`UPLOAD_DIR` (Default `./dokumente`; im Compose als Volume `/app/dokumente`),
+`LOCAL_AUTH_BYPASS` (**nur lokal**).
 
-- Startseite = **Therapieplan-Import** (statt Dashboard)
-- Nummernformat Rechnungen: **`RK <lfd.> <Jahr>`**
-- `products`: + `kategorie` (leistung/auslage), + `import_namen`
-- `customers`: + `geburtsdatum`, + `patienten_nr`
-- Neu: `invoice_therapie_wochen` (Duplikatsschutz), `therapy_imports`
-  (Import-Protokoll inkl. Report-Nachdownload)
-- Menü verschlankt (Import, Rechnungen, Gutschriften, Bank, Patienten,
-  Leistungen, Einstellungen) — übrige Module bleiben per URL erreichbar
+## Rollen
+
+- **Praxisleitung = admin**: Benutzerverwaltung (+Farben), Einstellungen,
+  Löschungen (DSGVO-Protokoll)
+- **Therapeut = user**: Pläne, Termine, Dokumente, Patienten, Abrechnung
+
+## DSGVO-Hinweis
+
+On-Premise; Patientendaten (Art. 9) verlassen das Haus nicht. Keine
+TI/ePA-Anbindung (kein §-291-SGB-V-System). Löschkonzept Art. 17 mit
+pseudonymisiertem Protokoll; Rechnungsdaten unterliegen der GoBD
+(Aufbewahrung i. d. R. 10 Jahre). **Backups verschlüsselt** (mysqldump +
+dokumente-Volume via gpg — Skript siehe SERVER-ANLEITUNG.md).
+
+## Herkunft / Merge
+
+Merge-Stand siehe `FUSION.md`. CSV-Brücke PraxisWerk ↔ Dr.ReWaWi-Instanzen:
+`contracts/constants.ts` (`DR_REWAWI_CSV_SPALTEN`, 17 Spalten) — bei
+Änderungen beidseitig abstimmen.

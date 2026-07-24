@@ -1,7 +1,8 @@
 import { authedQuery, createRouter } from "./middleware";
 import { getDb } from "./queries/connection";
-import { invoices } from "@db/schema";
-import { gte } from "drizzle-orm";
+import { customers, invoices, planEntries, therapyPlans, users } from "@db/schema";
+import { and, asc, count, eq, gte, lt } from "drizzle-orm";
+import { heuteIso } from "./lib/kalender";
 
 export const dashboardRouter = createRouter({
   stats: authedQuery.query(async () => {
@@ -56,5 +57,53 @@ export const dashboardRouter = createRouter({
       .select()
       .from(invoices)
       .where(gte(invoices.bezahltAm, seit));
+  }),
+
+  // ── PraxisWerk-Akte: Heutige Termine + Praxis-Kennzahlen ────────────────
+  heute: authedQuery.query(async () => {
+    const heute = heuteIso();
+    const rows = await getDb()
+      .select({
+        entry: planEntries,
+        planTitel: therapyPlans.titel,
+        patientId: customers.id,
+        patientName: customers.name,
+        therapeutName: users.name,
+        therapeutFarbe: users.kalenderFarbe,
+      })
+      .from(planEntries)
+      .innerJoin(therapyPlans, eq(planEntries.planId, therapyPlans.id))
+      .innerJoin(customers, eq(therapyPlans.patientId, customers.id))
+      .leftJoin(users, eq(planEntries.therapeutId, users.id))
+      .where(eq(planEntries.datum, heute))
+      .orderBy(asc(planEntries.zeitVon));
+    return rows;
+  }),
+
+  uebersicht: authedQuery.query(async () => {
+    const db = getDb();
+    const heute = heuteIso();
+    const [patientenGesamt] = await db
+      .select({ n: count() })
+      .from(customers)
+      .where(eq(customers.archiviert, false));
+    const [aktivePlaene] = await db
+      .select({ n: count() })
+      .from(therapyPlans)
+      .where(eq(therapyPlans.status, "aktiv"));
+    const [dokumentationsfaellig] = await db
+      .select({ n: count() })
+      .from(therapyPlans)
+      .where(and(eq(therapyPlans.status, "aktiv"), lt(therapyPlans.bisDatum, heute)));
+    const [termineHeute] = await db
+      .select({ n: count() })
+      .from(planEntries)
+      .where(eq(planEntries.datum, heute));
+    return {
+      patientenGesamt: patientenGesamt.n,
+      aktivePlaene: aktivePlaene.n,
+      dokumentationsfaellig: dokumentationsfaellig.n,
+      termineHeute: termineHeute.n,
+    };
   }),
 });
