@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Plus, Trash2, Truck } from "lucide-react";
 import { PdfButton } from "@/components/PdfButton";
+import { PdfVorschauButton } from "@/components/PdfVorschauButton";
 import { XrechnungButton } from "@/components/XrechnungButton";
 import { Mahnwesen } from "@/components/Mahnwesen";
 
@@ -339,6 +340,7 @@ export default function InvoiceDetail() {
           {statusBadge(r.status)}
         </div>
         <div className="flex items-center gap-2">
+          <PdfVorschauButton art="invoice" id={r.id} titel={`Rechnung ${r.nummer ?? "Entwurf"}`} />
           <PdfButton art="invoice" id={r.id} />
           {r.status !== "entwurf" && <XrechnungButton id={r.id} />}
           {r.status === "finalisiert" && (

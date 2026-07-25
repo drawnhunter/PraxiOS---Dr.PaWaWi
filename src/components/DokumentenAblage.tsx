@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { trpc } from "@/providers/trpc";
 import type { Dokument } from "@db/schema";
+import { PdfCanvasVorschau } from "@/components/PdfCanvasVorschau";
+import { useEffect } from "react";
 import { DOKUMENT_KATEGORIEN, type DokumentKategorie } from "@contracts/constants";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -352,17 +354,13 @@ export function DokumentenAblage({ patientId }: Props) {
 
       {/* ── Vorschau-Dialog ── */}
       <Dialog open={vorschau !== null} onOpenChange={(o) => !o && setVorschau(null)}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="flex h-[90vh] max-w-4xl flex-col">
           <DialogHeader>
             <DialogTitle>{vorschau?.dateiname}</DialogTitle>
           </DialogHeader>
           {vorschau &&
             (istPdf(vorschau) ? (
-              <iframe
-                src={`/api/dokumente/${vorschau.id}/datei`}
-                className="h-[70vh] w-full"
-                title={vorschau.dateiname}
-              />
+              <PdfVorschauBytes dokumentId={vorschau.id} />
             ) : (
               <img
                 src={`/api/dokumente/${vorschau.id}/datei`}
@@ -464,4 +462,33 @@ export function DokumentenAblage({ patientId }: Props) {
       </AlertDialog>
     </section>
   );
+}
+
+
+/** Lädt ein Dokument als Bytes und rendert es per pdf.js (handy-tauglich). */
+function PdfVorschauBytes({ dokumentId }: { dokumentId: number }) {
+  const [bytes, setBytes] = useState<Uint8Array | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  useEffect(() => {
+    let abbruch = false;
+    fetch(`/api/dokumente/${dokumentId}/datei`, { credentials: "include" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Laden fehlgeschlagen (${r.status})`);
+        return new Uint8Array(await r.arrayBuffer());
+      })
+      .then((b) => !abbruch && setBytes(b))
+      .catch((e) => !abbruch && setFehler(e instanceof Error ? e.message : "Fehler"));
+    return () => {
+      abbruch = true;
+    };
+  }, [dokumentId]);
+
+  if (fehler) {
+    return <p className="py-8 text-center text-sm text-red-600">{fehler}</p>;
+  }
+  if (!bytes) {
+    return <p className="py-8 text-center text-sm text-neutral-400">Lade PDF …</p>;
+  }
+  return <PdfCanvasVorschau bytes={bytes} />;
 }

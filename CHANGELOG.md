@@ -2,6 +2,16 @@
 
 Alle nennenswerten Änderungen. Schema: [Version] — Datum — Kurztitel.
 
+## [0.9.8] — 2026-07-26 — PDF-Vorschau (handyfest) per pdf.js
+
+- **Beleg-Vorschau** (aus Main-System inspiriert, richtig gelöst): „Vorschau“
+  in Rechnungs- und Gutschriften-Detail — PDF wird per tRPC erzeugt und mit
+  **pdf.js als Canvas** gerendert (Seiten-Navigation + Zoom), statt per iframe
+- **Handy-Bug gefixt**: Mobile Browser zeigen in iframes keine PDFs an (nur
+  Icon + „Öffnen“-Button). Die Vorschau in der Dokumentenablage nutzt jetzt
+  ebenfalls pdf.js — funktioniert auf Handy und Desktop
+- pdf.js-Worker wird lokal gebündelt (offline-fähig, kein CDN nötig)
+
 ## [0.9.7] — 2026-07-26 — Plan-Interaktion: Drag & Drop, Status-Klick, Markieren
 
 - **Drag & Drop**: Einträge zwischen Tagen im Wochenraster ziehen (= Datum
