@@ -1,7 +1,7 @@
 {
-  "name": "PraxisWerk — ReWaDo",
-  "short_name": "PraxisWerk",
-  "description": "PraxisWerk ReWaDo — Patientenakte, Therapiepläne, Kalender, Abrechnung",
+  "name": "PraxiOS",
+  "short_name": "PraxiOS",
+  "description": "PraxiOS — Patientenakte, Therapiepläne, Kalender, Abrechnung",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fafafa",

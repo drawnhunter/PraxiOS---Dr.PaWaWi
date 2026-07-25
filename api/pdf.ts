@@ -557,6 +557,30 @@ export function renderBelegPdf(beleg: PdfBeleg, design?: PdfDesign): Promise<Buf
             .stroke();
         }
       });
+
+      // PraxiOS: Pflicht-Hinweis bei komplett steuerfreien Heilbehandlungen
+      // (alle Positionen 0 % USt) — § 4 Nr. 14a UStG
+      if (
+        (beleg.art === "rechnung" || beleg.art === "gutschrift") &&
+        beleg.items.length > 0 &&
+        beleg.items.every((it) => it.ustSatz === 0)
+      ) {
+        if (y + 30 > unterkante) {
+          doc.addPage();
+          y = MARGIN;
+        }
+        doc
+          .font(regular)
+          .fontSize(8)
+          .fillColor(GRAY)
+          .text(
+            "Der Rechnungsbetrag versteht sich als Honorar für Heilbehandlungen und ist nach § 4 Nr. 14 Buchstabe a UStG von der Umsatzsteuer befreit.",
+            MARGIN,
+            y + 6,
+            { width: CONTENT_W },
+          );
+        y += 24;
+      }
       y += 4;
     }
 

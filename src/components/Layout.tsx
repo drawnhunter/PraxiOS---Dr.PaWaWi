@@ -58,8 +58,8 @@ export default function Layout() {
     <>
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-5">
         <div>
-          <div className="text-sm font-semibold tracking-tight">PraxisWerk</div>
-          <div className="text-xs text-neutral-500">ReWaDo · Akte &amp; Abrechnung</div>
+          <div className="text-sm font-semibold tracking-tight">PraxiOS</div>
+          <div className="text-xs text-neutral-500">Akte &amp; Abrechnung</div>
         </div>
         <button
           onClick={() => setNavOffen(false)}
@@ -103,7 +103,7 @@ export default function Layout() {
             <LogOut className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="text-[11px] text-neutral-400">PraxisWerk — ReWaDo</div>
+        <div className="text-[11px] text-neutral-400">PraxiOS</div>
       </div>
     </>
   );
@@ -120,7 +120,7 @@ export default function Layout() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="text-sm font-semibold tracking-tight">PraxisWerk</span>
+          <span className="text-sm font-semibold tracking-tight">PraxiOS</span>
         </div>
         <button
           onClick={logout}
