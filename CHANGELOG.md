@@ -2,6 +2,25 @@
 
 Alle nennenswerten Änderungen. Schema: [Version] — Datum — Kurztitel.
 
+## [0.9.5] — 2026-07-26 — Plan → Rechnung direkt + Duplizieren
+
+- **„Rechnung erstellen" im Therapieplan** (Status dokumentiert): erzeugt den
+  Rechnungsentwurf direkt aus den stattgefundenen Einträgen — ohne CSV-Umweg.
+  Geteilte Engine (`api/abrechnung.ts`): Katalog-Auflösung (ID direkt oder
+  Namens-Matching inkl. Aliase/Mengen-Umstellung), Preis (Kondition > EK § 10 /
+  VK GOÄ), Abschnitte, Wochen-Duplikatschutz (Patient+KW), Plan wird auf
+  „abgerechnet" gesetzt, Chronik-Eintrag; nicht zuordenbare Einträge werden
+  als Liste zurückgemeldet (im Entwurf ergänzbar)
+- **Einträge duplizieren** (einzeln, Kopie-Button am Eintrag) und
+  **Tag duplizieren** (alle Einträge eines Tages auf Zieldatum — für
+  wiederkehrende Mischungen/Abläufe; Kopien starten als „geplant")
+- **Sortierung gefixt**: Einträge ohne Uhrzeit sprangen an manchen Tagen nach
+  oben — jetzt überall: Uhrzeit zuerst, dann ohne, neue Einträge immer unten
+  (Plan-Detail und Wochenkalender)
+- CSV-Export: verständliche Fehlermeldung statt leerer Datei, wenn keine
+  Einträge mit Status „stattgefunden" markiert sind
+- Tests: 38/38 grün (Sortier-Helfer)
+
 ## [0.9.4] — 2026-07-26 — Arzt-zu-Arzt-Austausch (age) + Combobox-Fix
 
 - **Akten-Pakete verschlüsselt an Kollegen-Praxen** (`age-encryption`, BSD):

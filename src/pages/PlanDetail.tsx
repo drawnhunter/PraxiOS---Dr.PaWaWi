@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../api/router";
 import { trpc } from "@/providers/trpc";
@@ -46,7 +46,7 @@ import {
   tageAddieren,
   uhrzeitBereich,
 } from "./Kalender";
-import { CalendarPlus, Download, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, Copy, Download, Plus, Trash2 } from "lucide-react";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type PlanDetailDaten = RouterOutputs["plaene"]["byId"];
@@ -112,6 +112,32 @@ export default function PlanDetail() {
   };
 
   const setStatus = trpc.plaene.setStatus.useMutation({ onSuccess: invalidate });
+  const rechnungErstellen = trpc.plaene.rechnungErstellen.useMutation({
+    onSuccess: (r) => {
+      if (r.nichtUebernommen.length > 0) {
+        zeigeErfolg(
+          `Entwurf erstellt — ${r.nichtUebernommen.length} Position(en) nicht übernommen (im Entwurf ergänzen).`,
+        );
+      }
+      navigate(`/rechnungen/${r.invoiceId}`);
+    },
+  });
+  const dupliziereEintrag = trpc.plaene.duplicateEntry.useMutation({
+    onSuccess: () => {
+      invalidate();
+      zeigeErfolg("Eintrag dupliziert.");
+    },
+  });
+  const dupliziereTag = trpc.plaene.duplicateDay.useMutation({
+    onSuccess: (r) => {
+      invalidate();
+      setTagDuplikat(null);
+      zeigeErfolg(`${r.anzahl} Einträge dupliziert.`);
+    },
+  });
+  const navigate = useNavigate();
+  const [tagDuplikat, setTagDuplikat] = useState<string | null>(null);
+  const [duplikatZiel, setDuplikatZiel] = useState("");
   const dokumentieren = trpc.plaene.dokumentieren.useMutation({ onSuccess: invalidate });
   const speichernNeu = trpc.plaene.addEntry.useMutation({
     onSuccess: () => {
@@ -277,6 +303,8 @@ export default function PlanDetail() {
   };
 
   const eintragFehler = speichernNeu.error ?? speichernAlt.error ?? loeschen.error;
+  const aktionFehler =
+    rechnungErstellen.error ?? dupliziereEintrag.error ?? dupliziereTag.error;
   const heute = heuteIso();
 
   return (
@@ -322,7 +350,18 @@ export default function PlanDetail() {
             </AlertDialog>
           )}
           {p.status === "dokumentiert" && (
-            <Button onClick={() => setStatus.mutate({ id: planId, status: "abgerechnet" })}>
+            <Button
+              onClick={() => rechnungErstellen.mutate({ id: planId })}
+              disabled={rechnungErstellen.isPending}
+            >
+              {rechnungErstellen.isPending ? "Erstelle …" : "Rechnung erstellen"}
+            </Button>
+          )}
+          {p.status === "dokumentiert" && (
+            <Button
+              variant="outline"
+              onClick={() => setStatus.mutate({ id: planId, status: "abgerechnet" })}
+            >
               Als abgerechnet markieren
             </Button>
           )}
@@ -343,6 +382,7 @@ export default function PlanDetail() {
         </p>
       )}
       {exportFehler && <p className="text-sm text-red-600">{exportFehler}</p>}
+      {aktionFehler && <p className="text-sm text-red-600">{aktionFehler.message}</p>}
       {meldung && (
         <p className="rounded-md bg-primary/10 px-3 py-2 text-sm text-primary">{meldung}</p>
       )}
@@ -399,29 +439,46 @@ export default function PlanDetail() {
                   >
                     <div
                       className={cn(
-                        "border-b border-neutral-100 px-2 py-1.5 text-xs",
+                        "flex items-center justify-between border-b border-neutral-100 px-2 py-1.5 text-xs",
                         tag === heute
                           ? "font-semibold text-primary"
                           : "text-neutral-500",
                       )}
                     >
-                      {WOCHENTAGE_KURZ[i]}{" "}
-                      <span className="tabular-nums">{datum(tag)}</span>
+                      <span>
+                        {WOCHENTAGE_KURZ[i]}{" "}
+                        <span className="tabular-nums">{datum(tag)}</span>
+                      </span>
+                      {tagesEintraege.length > 0 && imZeitraum && (
+                        <button
+                          type="button"
+                          title="Alle Einträge dieses Tages duplizieren"
+                          onClick={() => {
+                            setTagDuplikat(tag);
+                            setDuplikatZiel("");
+                          }}
+                          className="rounded p-0.5 text-neutral-300 hover:bg-neutral-100 hover:text-primary"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
                     <div className="space-y-1 p-1.5">
                       {tagesEintraege.map((e) => (
-                        <button
+                        <div
                           key={e.id}
-                          type="button"
+                          role="button"
+                          tabIndex={0}
                           onClick={() => oeffneBearbeiten(e)}
+                          onKeyDown={(ev) => ev.key === "Enter" && oeffneBearbeiten(e)}
                           className={cn(
-                            "w-full rounded border border-neutral-200 bg-white p-1.5 text-left text-xs hover:bg-neutral-50",
+                            "relative w-full cursor-pointer rounded border border-neutral-200 bg-white p-1.5 text-left text-xs hover:bg-neutral-50",
                             e.status === "stattgefunden" && "opacity-70",
                             (e.status === "abgesagt" || e.status === "ausgefallen") &&
                               "opacity-70",
                           )}
                         >
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 pr-5">
                             <span
                               className={cn(
                                 "inline-block h-2 w-2 shrink-0 rounded-full",
@@ -445,7 +502,18 @@ export default function PlanDetail() {
                               .filter(Boolean)
                               .join(" · ")}
                           </div>
-                        </button>
+                          <button
+                            type="button"
+                            title="Eintrag duplizieren"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              dupliziereEintrag.mutate({ id: e.id });
+                            }}
+                            className="absolute right-1 top-1 rounded p-0.5 text-neutral-300 hover:bg-neutral-100 hover:text-primary"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
                       ))}
                       {imZeitraum && (
                         <button
@@ -472,6 +540,50 @@ export default function PlanDetail() {
         onOpenChange={setSerienOffen}
         onSuccess={(anzahl) => zeigeErfolg(`${anzahl} Termine angelegt.`)}
       />
+
+      {/* ── Tag-Duplikat-Dialog ── */}
+      <Dialog open={tagDuplikat !== null} onOpenChange={(o) => !o && setTagDuplikat(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Tag duplizieren</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-neutral-600">
+            Alle Einträge vom {tagDuplikat ? datum(tagDuplikat) : ""} auf einen anderen
+            Tag im Plan-Zeitraum kopieren (Kopien starten als „geplant“).
+          </p>
+          <div>
+            <Label>Zieldatum</Label>
+            <Input
+              type="date"
+              value={duplikatZiel}
+              min={p.vonDatum}
+              max={p.bisDatum}
+              onChange={(e) => setDuplikatZiel(e.target.value)}
+            />
+          </div>
+          {dupliziereTag.error && (
+            <p className="text-sm text-red-600">{dupliziereTag.error.message}</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTagDuplikat(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              disabled={!duplikatZiel || dupliziereTag.isPending}
+              onClick={() =>
+                tagDuplikat &&
+                dupliziereTag.mutate({
+                  planId,
+                  vonDatum: tagDuplikat,
+                  nachDatum: duplikatZiel,
+                })
+              }
+            >
+              {dupliziereTag.isPending ? "Dupliziere …" : "Duplizieren"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Eintrag-Dialog (anlegen/bearbeiten) ── */}
       <Dialog

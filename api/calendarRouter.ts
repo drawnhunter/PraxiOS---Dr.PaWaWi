@@ -4,6 +4,7 @@ import { authedQuery, createRouter } from "./middleware";
 import { getDb } from "./queries/connection";
 import { customers, planEntries, therapyPlans, users } from "@db/schema";
 import { kwZuDatum } from "./lib/kalender";
+import { eintraegeSortieren } from "./abrechnung";
 
 // Wochenansicht des Kalenders (Montag–Freitag einer ISO-Kalenderwoche).
 export const calendarRouter = createRouter({
@@ -32,18 +33,23 @@ export const calendarRouter = createRouter({
 
       const tage = [1, 2, 3, 4, 5].map((wt) => {
         const datum = kwZuDatum(input.jahr, input.kw, wt);
+        const tagesRows = eintraegeSortieren(rows.map((r) => r.entry)).filter(
+          (e) => e.datum === datum,
+        );
+        const nachId = new Map(rows.map((r) => [r.entry.id, r]));
         return {
           datum,
-          eintraege: rows
-            .filter((r) => r.entry.datum === datum)
-            .map((r) => ({
+          eintraege: tagesRows.map((e) => {
+            const r = nachId.get(e.id)!;
+            return {
               entry: r.entry,
               planTitel: r.planTitel,
               patientId: r.patientId,
               patientName: r.patientName,
               therapeutName: r.therapeutName,
               therapeutFarbe: r.therapeutFarbe,
-            })),
+            };
+          }),
         };
       });
       return { tage };

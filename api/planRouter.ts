@@ -6,6 +6,7 @@ import { getDb } from "./queries/connection";
 import { customers, planEntries, products, therapyPlans, users } from "@db/schema";
 import { schreibeTimeline } from "./lib/timeline";
 import { datumZuKw, heuteIso } from "./lib/kalender";
+import { eintraegeSortieren, erstelleEntwurfAusEintraegen } from "./abrechnung";
 import {
   DR_REWAWI_CSV_SPALTEN,
   DR_REWAWI_CSV_TRENNZEICHEN,
@@ -119,6 +120,8 @@ export const planRouter = createRouter({
       if (!plan) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Therapieplan nicht gefunden." });
       }
+      // Sortierung je Tag: mit Uhrzeit zuerst, dann ohne, neue Einträge unten
+      plan.entries = eintraegeSortieren(plan.entries);
       return plan;
     }),
 
@@ -324,6 +327,150 @@ export const planRouter = createRouter({
       return { ok: true };
     }),
 
+  // ── Einzelnen Eintrag duplizieren (landet unten am selben oder neuem Tag) ─
+  duplicateEntry: authedQuery
+    .input(z.object({ id: z.number().int(), datum: datumInput.optional() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const alt = await db.query.planEntries.findFirst({
+        where: eq(planEntries.id, input.id),
+      });
+      if (!alt) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Eintrag nicht gefunden." });
+      }
+      const [{ id }] = await db
+        .insert(planEntries)
+        .values({
+          planId: alt.planId,
+          datum: input.datum ?? alt.datum,
+          zeitVon: alt.zeitVon,
+          zeitBis: alt.zeitBis,
+          leistungId: alt.leistungId,
+          leistungText: alt.leistungText,
+          menge: alt.menge,
+          therapeutId: alt.therapeutId,
+          raum: alt.raum,
+          status: "geplant" as const, // Kopien starten als geplant
+          bemerkung: alt.bemerkung,
+        })
+        .$returningId();
+      return { id };
+    }),
+
+  // ── Alle Einträge eines Tages auf einen anderen Tag duplizieren ──────────
+  duplicateDay: authedQuery
+    .input(
+      z.object({
+        planId: z.number().int(),
+        vonDatum: datumInput,
+        nachDatum: datumInput,
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (input.vonDatum === input.nachDatum) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Quell- und Zieldatum sind gleich." });
+      }
+      const db = getDb();
+      const plan = await db.query.therapyPlans.findFirst({
+        where: eq(therapyPlans.id, input.planId),
+      });
+      if (!plan) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Therapieplan nicht gefunden." });
+      }
+      if (input.nachDatum < plan.vonDatum || input.nachDatum > plan.bisDatum) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Zieldatum liegt außerhalb des Plan-Zeitraums.",
+        });
+      }
+      const quell = await db.query.planEntries.findMany({
+        where: and(eq(planEntries.planId, input.planId), eq(planEntries.datum, input.vonDatum)),
+      });
+      if (quell.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Am ${datumDe(input.vonDatum)} gibt es keine Einträge zum Duplizieren.`,
+        });
+      }
+      await db.insert(planEntries).values(
+        quell.map((e) => ({
+          planId: input.planId,
+          datum: input.nachDatum,
+          zeitVon: e.zeitVon,
+          zeitBis: e.zeitBis,
+          leistungId: e.leistungId,
+          leistungText: e.leistungText,
+          menge: e.menge,
+          therapeutId: e.therapeutId,
+          raum: e.raum,
+          status: "geplant" as const,
+          bemerkung: e.bemerkung,
+        })),
+      );
+      return { ok: true, anzahl: quell.length };
+    }),
+
+  // ── Direkt verrechnen: Plan → Rechnungsentwurf (der Fusion-Weg) ──────────
+  rechnungErstellen: authedQuery
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const plan = await db.query.therapyPlans.findFirst({
+        where: eq(therapyPlans.id, input.id),
+        with: { entries: true },
+      });
+      if (!plan) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Therapieplan nicht gefunden." });
+      }
+      if (plan.status !== "dokumentiert") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Erst „Woche dokumentieren“, dann die Rechnung erstellen (verrechnet werden nur dokumentierte Pläne).",
+        });
+      }
+      const eintraege = eintraegeSortieren(plan.entries)
+        .filter((e) => e.status === "stattgefunden")
+        .map((e) => ({
+          datum: e.datum,
+          menge: Number(e.menge),
+          leistungText: e.leistungText ?? "Leistung",
+          leistungId: e.leistungId,
+        }));
+      if (eintraege.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Keine Einträge mit Status „stattgefunden“ — bitte zuerst die tatsächlich erbrachten Leistungen markieren.",
+        });
+      }
+
+      const quelle = `Therapieplan #${plan.id} (${datumDe(plan.vonDatum)}–${datumDe(plan.bisDatum)})`;
+      const ergebnis = await erstelleEntwurfAusEintraegen(
+        plan.patientId,
+        eintraege,
+        quelle,
+        ctx.user.id,
+      );
+
+      // Plan ist damit abgerechnet + Chronik
+      await db
+        .update(therapyPlans)
+        .set({ status: "abgerechnet" })
+        .where(eq(therapyPlans.id, plan.id));
+      await schreibeTimeline({
+        patientId: plan.patientId,
+        typ: "status",
+        titel: `Rechnungsentwurf #${ergebnis.invoiceId} aus Therapieplan #${plan.id} erstellt`,
+        beschreibung: `Planstatus: Dokumentiert → Abgerechnet · ${eintraege.length} Positionen` +
+          (ergebnis.nichtUebernommen.length > 0
+            ? ` · ${ergebnis.nichtUebernommen.length} nicht übernommen`
+            : ""),
+        createdBy: ctx.user.id,
+      });
+
+      return ergebnis;
+    }),
+
   // ── Dr.ReWaWi-Export (CSV, nur stattgefundene Einträge) ─────────────────
   exportDrReWaWi: authedQuery
     .input(z.object({ id: z.number().int() }))
@@ -347,6 +494,14 @@ export const planRouter = createRouter({
         .leftJoin(users, eq(planEntries.therapeutId, users.id))
         .where(and(eq(planEntries.planId, input.id), eq(planEntries.status, "stattgefunden")))
         .orderBy(asc(planEntries.datum), asc(planEntries.zeitVon));
+
+      if (rows.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Der Export wäre leer: Keine Einträge mit Status „stattgefunden“. Bitte zuerst die erbrachten Leistungen markieren (oder direkt „Rechnung erstellen“).",
+        });
+      }
 
       const p = plan.patient;
       // Kundenname ist „Nachname, Vorname" (oder nur Nachname)
