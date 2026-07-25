@@ -12,6 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -143,6 +148,33 @@ export default function PlanDetail() {
   const [tagDuplikat, setTagDuplikat] = useState<string | null>(null);
   const [duplikatZiel, setDuplikatZiel] = useState("");
   const [duplikatModus, setDuplikatModus] = useState<"kopieren" | "verschieben">("kopieren");
+  // Markieren (Block-Aktionen) + Drag & Drop
+  const [markiert, setMarkiert] = useState<Set<number>>(new Set());
+  const [dragTag, setDragTag] = useState<string | null>(null);
+  const [bulkDialog, setBulkDialog] = useState<null | "duplizieren">(null);
+  const [bulkZiel, setBulkZiel] = useState("");
+
+  const toggleMark = (id: number) =>
+    setMarkiert((alt) => {
+      const neu = new Set(alt);
+      if (neu.has(id)) neu.delete(id);
+      else neu.add(id);
+      return neu;
+    });
+
+  const bulk = trpc.plaene.bulk.useMutation({
+    onSuccess: (r, vars) => {
+      invalidate();
+      setMarkiert(new Set());
+      setBulkDialog(null);
+      setBulkZiel("");
+      zeigeErfolg(
+        vars.aktion === "loeschen"
+          ? `${r.anzahl} Einträge gelöscht.`
+          : `${r.anzahl} Einträge dupliziert.`,
+      );
+    },
+  });
   const dokumentieren = trpc.plaene.dokumentieren.useMutation({ onSuccess: invalidate });
   const speichernNeu = trpc.plaene.addEntry.useMutation({
     onSuccess: () => {
@@ -309,7 +341,7 @@ export default function PlanDetail() {
 
   const eintragFehler = speichernNeu.error ?? speichernAlt.error ?? loeschen.error;
   const aktionFehler =
-    rechnungErstellen.error ?? dupliziereEintrag.error ?? dupliziereTag.error;
+    rechnungErstellen.error ?? dupliziereEintrag.error ?? dupliziereTag.error ?? bulk.error;
   const heute = heuteIso();
 
   return (
@@ -478,57 +510,49 @@ export default function PlanDetail() {
                         </button>
                       )}
                     </div>
-                    <div className="space-y-1 p-1.5">
+                    <div
+                      className={cn(
+                        "space-y-1 p-1.5 transition-colors",
+                        dragTag === tag && "rounded bg-primary/5 ring-1 ring-primary/30 ring-inset",
+                      )}
+                      onDragOver={(ev) => {
+                        ev.preventDefault();
+                        if (dragTag !== tag) setDragTag(tag);
+                      }}
+                      onDragLeave={() => setDragTag(null)}
+                      onDrop={(ev) => {
+                        ev.preventDefault();
+                        setDragTag(null);
+                        const id = Number(ev.dataTransfer.getData("text/entry-id"));
+                        if (Number.isInteger(id) && id > 0) {
+                          speichernAlt.mutate(
+                            { id, data: { datum: tag } },
+                            { onSuccess: () => zeigeErfolg(`Verschoben auf ${datum(tag)}.`) },
+                          );
+                        }
+                      }}
+                    >
                       {tagesEintraege.map((e) => (
-                        <div
+                        <EintragsKarte
                           key={e.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => oeffneBearbeiten(e)}
-                          onKeyDown={(ev) => ev.key === "Enter" && oeffneBearbeiten(e)}
-                          className={cn(
-                            "relative w-full cursor-pointer rounded border border-neutral-200 bg-white p-1.5 text-left text-xs hover:bg-neutral-50",
-                            e.status === "stattgefunden" && "opacity-70",
-                            (e.status === "abgesagt" || e.status === "ausgefallen") &&
-                              "opacity-70",
-                          )}
-                        >
-                          <div className="flex items-center gap-1.5 pr-5">
-                            <span
-                              className={cn(
-                                "inline-block h-2 w-2 shrink-0 rounded-full",
-                                statusPunktKlasse(e.status),
-                              )}
-                              title={ENTRY_STATUS[e.status]}
-                            />
-                            <span
-                              className={cn(
-                                "font-medium text-neutral-800",
-                                (e.status === "abgesagt" || e.status === "ausgefallen") &&
-                                  "line-through",
-                              )}
-                            >
-                              {e.menge.replace(".", ",")} ×{" "}
-                              {e.leistungText ?? e.leistung?.name ?? "Leistung"}
-                            </span>
-                          </div>
-                          <div className="mt-0.5 pl-3.5 text-neutral-500">
-                            {[e.therapeut?.name, uhrzeitBereich(e), e.raum]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </div>
-                          <button
-                            type="button"
-                            title="Eintrag duplizieren"
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              dupliziereEintrag.mutate({ id: e.id });
-                            }}
-                            className="absolute right-1 top-1 rounded p-0.5 text-neutral-300 hover:bg-neutral-100 hover:text-primary"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </button>
-                        </div>
+                          e={e}
+                          markiert={markiert.has(e.id)}
+                          onToggleMark={() => toggleMark(e.id)}
+                          onEdit={() => oeffneBearbeiten(e)}
+                          onDuplicate={() => dupliziereEintrag.mutate({ id: e.id })}
+                          onDelete={() => {
+                            if (window.confirm("Eintrag wirklich löschen?")) {
+                              loeschen.mutate({ id: e.id });
+                            }
+                          }}
+                          onStatus={(status) =>
+                            speichernAlt.mutate({ id: e.id, data: { status } })
+                          }
+                          onDragStart={(ev) => {
+                            ev.dataTransfer.setData("text/entry-id", String(e.id));
+                            ev.dataTransfer.effectAllowed = "move";
+                          }}
+                        />
                       ))}
                       {imZeitraum && (
                         <button
@@ -547,6 +571,70 @@ export default function PlanDetail() {
           </section>
         ))}
       </div>
+
+      {/* ── Block-Aktionsleiste (markierte Einträge) ── */}
+      {markiert.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-neutral-300 bg-white px-4 py-2.5 shadow-lg">
+          <span className="text-sm font-medium tabular-nums">{markiert.size} markiert</span>
+          <Button size="sm" variant="outline" onClick={() => setBulkDialog("duplizieren")}>
+            <Copy className="mr-1 h-3.5 w-3.5" /> Duplizieren
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-red-600"
+            onClick={() => {
+              if (window.confirm(`${markiert.size} markierte Einträge wirklich löschen?`)) {
+                bulk.mutate({ ids: [...markiert], aktion: "loeschen" });
+              }
+            }}
+          >
+            <Trash2 className="mr-1 h-3.5 w-3.5" /> Löschen
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setMarkiert(new Set())}>
+            Aufheben
+          </Button>
+        </div>
+      )}
+
+      {/* ── Block-Duplizieren-Dialog ── */}
+      <Dialog open={bulkDialog !== null} onOpenChange={(o) => !o && setBulkDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{markiert.size} Einträge duplizieren</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-neutral-600">
+            Zieldatum leer lassen = am selben Tag duplizieren (Kopien starten als „geplant“).
+          </p>
+          <div>
+            <Label>Zieldatum (optional)</Label>
+            <Input
+              type="date"
+              value={bulkZiel}
+              min={p.vonDatum}
+              max={p.bisDatum}
+              onChange={(e) => setBulkZiel(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDialog(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              disabled={bulk.isPending}
+              onClick={() =>
+                bulk.mutate({
+                  ids: [...markiert],
+                  aktion: "duplizieren",
+                  zielDatum: bulkZiel || undefined,
+                })
+              }
+            >
+              {bulk.isPending ? "Dupliziere …" : "Duplizieren"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Serien-Assistent ── */}
       <SerienAssistent
@@ -778,6 +866,126 @@ export default function PlanDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ── Eintrags-Karte (Drag & Drop, Status-Klick, Markieren, Aktionen) ─────────
+function EintragsKarte({
+  e,
+  markiert,
+  onToggleMark,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onStatus,
+  onDragStart,
+}: {
+  e: PlanEintrag;
+  markiert: boolean;
+  onToggleMark: () => void;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onStatus: (s: EntryStatus) => void;
+  onDragStart: (ev: React.DragEvent) => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      className={cn(
+        "w-full rounded border bg-white p-1.5 text-left text-xs transition-colors",
+        markiert
+          ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
+          : "border-neutral-200 hover:bg-neutral-50",
+        e.status === "stattgefunden" && "opacity-70",
+        (e.status === "abgesagt" || e.status === "ausgefallen") && "opacity-70",
+      )}
+    >
+      <div className="flex items-stretch gap-1.5">
+        {/* Links: Status-Punkt (klickbar) + Markieren-Checkbox (gespiegelt) */}
+        <div className="flex shrink-0 flex-col items-center justify-between py-0.5">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                title={`${ENTRY_STATUS[e.status]} — klicken zum Ändern`}
+                className="rounded-full p-0.5 hover:bg-neutral-100"
+              >
+                <span
+                  className={cn("block h-3.5 w-3.5 rounded-full", statusPunktKlasse(e.status))}
+                />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-44 p-1" align="start">
+              {(Object.keys(ENTRY_STATUS) as EntryStatus[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => onStatus(s)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-neutral-50",
+                    e.status === s && "bg-neutral-50 font-semibold",
+                  )}
+                >
+                  <span className={cn("h-2.5 w-2.5 rounded-full", statusPunktKlasse(s))} />
+                  {ENTRY_STATUS[s]}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+          <input
+            type="checkbox"
+            checked={markiert}
+            onChange={onToggleMark}
+            onClick={(ev) => ev.stopPropagation()}
+            title="Markieren (Block-Aktionen)"
+            className="h-3.5 w-3.5 cursor-pointer accent-[#0F766E]"
+          />
+        </div>
+
+        {/* Inhalt: Klick = bearbeiten */}
+        <div className="min-w-0 flex-1 cursor-pointer" onClick={onEdit}>
+          <div
+            className={cn(
+              "font-medium text-neutral-800",
+              (e.status === "abgesagt" || e.status === "ausgefallen") && "line-through",
+            )}
+          >
+            {e.menge.replace(".", ",")} × {e.leistungText ?? e.leistung?.name ?? "Leistung"}
+          </div>
+          <div className="mt-0.5 text-neutral-500">
+            {[e.therapeut?.name, uhrzeitBereich(e), e.raum].filter(Boolean).join(" · ")}
+          </div>
+        </div>
+
+        {/* Rechts: Duplizieren (oben) + Löschen (unten, gespiegelt) */}
+        <div className="flex shrink-0 flex-col items-center justify-between py-0.5">
+          <button
+            type="button"
+            title="Eintrag duplizieren"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onDuplicate();
+            }}
+            className="rounded p-0.5 text-neutral-300 hover:bg-neutral-100 hover:text-primary"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            title="Eintrag löschen"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onDelete();
+            }}
+            className="rounded p-0.5 text-neutral-300 hover:bg-red-50 hover:text-red-600"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

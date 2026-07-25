@@ -2,6 +2,19 @@
 
 Alle nennenswerten Änderungen. Schema: [Version] — Datum — Kurztitel.
 
+## [0.9.7] — 2026-07-26 — Plan-Interaktion: Drag & Drop, Status-Klick, Markieren
+
+- **Drag & Drop**: Einträge zwischen Tagen im Wochenraster ziehen (= Datum
+  verschieben), Drop-Zonen mit Hervorhebung
+- **Status-Punkt klickbar** (größer, obere linke Ecke der Karte): öffnet
+  Status-Menü direkt an der Karte (geplant/stattgefunden/abgesagt/ausgefallen)
+  — kein Dialog mehr für reine Statuswechsel
+- **Löschen-Symbol** an der Karte (untere rechte Ecke, gespiegelt zu
+  Duplizieren oben rechts) mit Bestätigung
+- **Markieren-Checkbox** (untere linke Ecke, gespiegelt zu Löschen): bei
+  Auswahl erscheint eine Aktionsleiste — **Block-Duplizieren** (selber Tag
+  oder Zieldatum) und **Block-Löschen** mit Bestätigung (Backend: `plaene.bulk`)
+
 ## [0.9.6] — 2026-07-26 — Rollen, Kalender-Gruppierung, Mehrbenutzer, ICS
 
 - **Rollen-System**: „Leitung/Arzt" (= admin, alles + Verwaltung), dazu Gruppen

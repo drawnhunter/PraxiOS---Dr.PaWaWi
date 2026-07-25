@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   createRouter,
   rechtQuery,
@@ -292,6 +292,45 @@ export const planRouter = createRouter({
         );
       }
       return { ok: true, anzahl: tage.length };
+    }),
+
+  // ── Block-Aktionen: markierte Einträge gemeinsam löschen/duplizieren ─────
+  bulk: rechtQuery("plaene")
+    .input(
+      z.object({
+        ids: z.array(z.number().int()).min(1).max(200),
+        aktion: z.enum(["loeschen", "duplizieren"]),
+        zielDatum: datumInput.optional(), // nur bei duplizieren: sonst selber Tag
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const eintraege = await db.query.planEntries.findMany({
+        where: inArray(planEntries.id, input.ids),
+      });
+      if (eintraege.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Keine Einträge gefunden." });
+      }
+      if (input.aktion === "loeschen") {
+        await db.delete(planEntries).where(inArray(planEntries.id, input.ids));
+        return { ok: true, anzahl: eintraege.length };
+      }
+      await db.insert(planEntries).values(
+        eintraege.map((e) => ({
+          planId: e.planId,
+          datum: input.zielDatum ?? e.datum,
+          zeitVon: e.zeitVon,
+          zeitBis: e.zeitBis,
+          leistungId: e.leistungId,
+          leistungText: e.leistungText,
+          menge: e.menge,
+          therapeutId: e.therapeutId,
+          raum: e.raum,
+          status: "geplant" as const,
+          bemerkung: e.bemerkung,
+        })),
+      );
+      return { ok: true, anzahl: eintraege.length };
     }),
 
   // ── Plan als dokumentiert markieren ─────────────────────────────────────
