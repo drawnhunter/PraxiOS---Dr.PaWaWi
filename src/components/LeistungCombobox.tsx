@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { KATEGORIE_LABEL } from "@contracts/constants";
 import { cn } from "@/lib/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import {
   Command,
   CommandEmpty,
@@ -79,43 +79,50 @@ export function LeistungCombobox({
     <Popover
       open={offen}
       onOpenChange={(o) => {
-        setOffen(o);
-        if (!o) setSuche("");
+        // Öffnen nur über Fokus/Chevron; Schließen per Klick außerhalb/Escape
+        if (!o) {
+          setOffen(false);
+          setSuche("");
+        }
       }}
     >
-      <div className="relative">
-        <input
-          ref={inputRef}
-          value={anzeigeWert}
-          placeholder={placeholder}
-          className={cn(
-            "border-input placeholder:text-muted-foreground flex h-9 w-full rounded-md border bg-transparent px-3 pr-9 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none",
-            "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-          )}
-          onFocus={() => setOffen(true)}
-          onChange={(e) => {
-            setSuche(e.target.value);
-            if (!offen) setOffen(true);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setOffen(false);
-          }}
-        />
-        <PopoverTrigger asChild>
+      <PopoverAnchor asChild>
+        <div className="relative">
+          <input
+            ref={inputRef}
+            value={anzeigeWert}
+            placeholder={placeholder}
+            className={cn(
+              "border-input placeholder:text-muted-foreground flex h-9 w-full rounded-md border bg-transparent px-3 pr-9 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none",
+              "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+            )}
+            onFocus={() => setOffen(true)}
+            onChange={(e) => {
+              setSuche(e.target.value);
+              if (!offen) setOffen(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setOffen(false);
+            }}
+          />
           <button
             type="button"
             tabIndex={-1}
-            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
             aria-label="Leistungsliste öffnen"
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={() => setOffen(!offen)}
           >
             <ChevronDown className="h-4 w-4" />
           </button>
-        </PopoverTrigger>
-        <PopoverContent
-          className="w-[var(--radix-popover-trigger-width)] p-0"
-          align="start"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-        >
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        className="w-[var(--radix-popover-anchor-width)] p-0"
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
           <Command shouldFilter={false}>
             <CommandList>
               <CommandEmpty>Kein Katalog-Treffer — als Freitext übernehmen.</CommandEmpty>
@@ -156,7 +163,6 @@ export function LeistungCombobox({
             </CommandList>
           </Command>
         </PopoverContent>
-      </div>
     </Popover>
   );
 }

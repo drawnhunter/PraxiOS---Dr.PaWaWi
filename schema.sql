@@ -45,6 +45,8 @@ CREATE TABLE `company_settings` (
   `debitor_startnummer` int NOT NULL DEFAULT '10000',
   `akzentfarbe` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'neutral',
   `pdf_layout` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'klassisch',
+  `age_recipient` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `age_secret` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,
   UNIQUE KEY `id` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30002;
@@ -593,6 +595,30 @@ CREATE TABLE `anamnesis_submissions` (
   CONSTRAINT `sub_form_fk` FOREIGN KEY (`form_id`) REFERENCES `anamnesis_forms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `sub_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
   CONSTRAINT `sub_doc_fk` FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `kollegen`;
+CREATE TABLE `kollegen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `age_recipient` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `notiz` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `aktiv` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `akten_exporte`;
+CREATE TABLE `akten_exporte` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `kollege_id` bigint unsigned NOT NULL,
+  `einverstaendnis_doc_id` bigint unsigned DEFAULT NULL,
+  `dateiname` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `umfang` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;

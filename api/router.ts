@@ -23,6 +23,7 @@ import { planRouter } from "./planRouter";
 import { calendarRouter } from "./calendarRouter";
 import { documentRouter } from "./documentRouter";
 import { anamneseRouter } from "./anamneseRouter";
+import { austauschRouter } from "./austauschRouter";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -51,6 +52,7 @@ export const appRouter = createRouter({
   kalender: calendarRouter,
   dokumente: documentRouter,
   anamnese: anamneseRouter,
+  austausch: austauschRouter,
   leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 

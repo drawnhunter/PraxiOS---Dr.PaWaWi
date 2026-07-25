@@ -42,7 +42,37 @@ export const companySettings = mysqlTable("company_settings", {
   // Design
   akzentfarbe: varchar("akzentfarbe", { length: 30 }).notNull().default("petrol"),
   pdfLayout: varchar("pdf_layout", { length: 30 }).notNull().default("klassisch"),
+  // PraxiOS: Arzt-zu-Arzt-Austausch (age-Verschlüsselung)
+  // Öffentlicher Schlüssel (wird an Kollegen gegeben)
+  ageRecipient: varchar("age_recipient", { length: 100 }),
+  // Geheimer Schlüssel — verlässt den Server NIE (wird in der API nicht ausgeliefert)
+  ageSecret: varchar("age_secret", { length: 100 }),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+// ── Kollegen-Praxen (Empfänger für den Akten-Export) ────────────────────────
+export const kollegen = mysqlTable("kollegen", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(), // z. B. „Praxis Dr. Kühnel, Potsdam"
+  ageRecipient: varchar("age_recipient", { length: 100 }).notNull(), // age1...
+  notiz: varchar("notiz", { length: 500 }),
+  aktiv: boolean("aktiv").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Export-Protokoll (Nachvollziehbarkeit des Datentransfers, DSGVO) ────────
+export const aktenExporte = mysqlTable("akten_exporte", {
+  id: serial("id").primaryKey(),
+  patientId: bigint("patient_id", { mode: "number", unsigned: true }).notNull(),
+  kollegeId: bigint("kollege_id", { mode: "number", unsigned: true }).notNull(),
+  einverstaendnisDocId: bigint("einverstaendnis_doc_id", { mode: "number", unsigned: true }),
+  dateiname: varchar("dateiname", { length: 255 }).notNull(),
+  umfang: varchar("umfang", { length: 255 }), // „N Dokumente, N Pläne, N Kontakte"
+  createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ── Bankkonten ──────────────────────────────────────────────────────────────
@@ -785,3 +815,5 @@ export type AnamnesisBlock = typeof anamnesisBlocks.$inferSelect;
 export type AnamnesisForm = typeof anamnesisForms.$inferSelect;
 export type AnamnesisLink = typeof anamnesisLinks.$inferSelect;
 export type AnamnesisSubmission = typeof anamnesisSubmissions.$inferSelect;
+export type Kollege = typeof kollegen.$inferSelect;
+export type AktenExport = typeof aktenExporte.$inferSelect;

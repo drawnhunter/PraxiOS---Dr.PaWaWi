@@ -229,6 +229,7 @@ export default function PatientDetailPage() {
           <TabsTrigger value="kontakte">Kontakte</TabsTrigger>
           <TabsTrigger value="plaene">Therapiepläne</TabsTrigger>
           <TabsTrigger value="rechnungen">Rechnungen</TabsTrigger>
+          <TabsTrigger value="austausch">Austausch</TabsTrigger>
         </TabsList>
 
         <TabsContent value="verlauf">
@@ -345,6 +346,10 @@ export default function PatientDetailPage() {
             )}
           </section>
         </TabsContent>
+
+        <TabsContent value="austausch">
+          <AustauschTab patientId={patientId} />
+        </TabsContent>
       </Tabs>
 
       {/* ── Dialoge ── */}
@@ -423,6 +428,174 @@ export default function PatientDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+// ── PraxiOS: Austausch-Tab (Export mit Einverständnis-Gating) ───────────────
+function AustauschTab({ patientId }: { patientId: number }) {
+  const utils = trpc.useUtils();
+  const status = trpc.austausch.exportStatus.useQuery({ patientId });
+  const [kollegeId, setKollegeId] = useState("");
+  const [fehler, setFehler] = useState("");
+  const [meldung, setMeldung] = useState("");
+
+  const einverstaendnisPdf = async () => {
+    setFehler("");
+    try {
+      const r = await utils.austausch.einverstaendnisPdf.fetch({
+        patientId,
+        kollegeId: Number(kollegeId),
+      });
+      const bin = atob(r.base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = r.dateiname;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setFehler(e instanceof Error ? e.message : "PDF fehlgeschlagen.");
+    }
+  };
+
+  const exportieren = trpc.austausch.exportieren.useMutation({
+    onSuccess: (r) => {
+      const text = atob(r.base64);
+      const url = URL.createObjectURL(
+        new Blob([text], { type: "application/octet-stream" }),
+      );
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = r.dateiname;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMeldung(`Export erstellt (${r.umfang}) — Datei „${r.dateiname}“ liegt im Download.`);
+      utils.austausch.exportStatus.invalidate({ patientId });
+    },
+    onError: (e) => setFehler(e.message),
+  });
+
+  if (status.isLoading) return <p className="text-sm text-neutral-500">Lade …</p>;
+  const einverstaendnis = status.data?.einverstaendnis ?? null;
+  const kollegen = status.data?.kollegen ?? [];
+
+  return (
+    <div className="space-y-4">
+      {/* Einverständnis */}
+      <section className="rounded-lg border border-neutral-200 bg-white p-5">
+        <h3 className="mb-2 text-sm font-medium text-neutral-700">1 · Einverständnis</h3>
+        {einverstaendnis ? (
+          <p className="text-sm text-emerald-700">
+            ✓ Liegt vor: „{einverstaendnis.dateiname}“ (
+            {new Date(einverstaendnis.createdAt).toLocaleDateString("de-DE")})
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-amber-700">
+              Noch kein Einverständnis in der Akte (Kategorie „Einverständnis“). Ablauf:
+              Formular erzeugen → unterschreiben lassen → Scan/Foto im Tab
+              „Dokumente“ mit Kategorie „Einverständnis“ hochladen.
+            </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <div>
+                <Label>Für welche Praxis?</Label>
+                <select
+                  className="w-64 rounded-md border border-neutral-200 bg-white px-2 py-2 text-sm"
+                  value={kollegeId}
+                  onChange={(e) => setKollegeId(e.target.value)}
+                >
+                  <option value="">— wählen —</option>
+                  {kollegen.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button variant="outline" disabled={!kollegeId} onClick={einverstaendnisPdf}>
+                Einverständnis-PDF erzeugen
+              </Button>
+            </div>
+            {kollegen.length === 0 && (
+              <p className="text-xs text-neutral-400">
+                Keine Kollegen-Praxen hinterlegt — unter „Austausch“ im Menü zuerst anlegen.
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Export */}
+      <section className="rounded-lg border border-neutral-200 bg-white p-5">
+        <h3 className="mb-2 text-sm font-medium text-neutral-700">2 · Akte verschlüsselt senden</h3>
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <Label>An Kollegen-Praxis</Label>
+            <select
+              className="w-64 rounded-md border border-neutral-200 bg-white px-2 py-2 text-sm"
+              value={kollegeId}
+              onChange={(e) => setKollegeId(e.target.value)}
+            >
+              <option value="">— wählen —</option>
+              {kollegen.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            disabled={!einverstaendnis || !kollegeId || exportieren.isPending}
+            title={!einverstaendnis ? "Einverständnis erforderlich" : undefined}
+            onClick={() => {
+              setFehler("");
+              setMeldung("");
+              exportieren.mutate({ patientId, kollegeId: Number(kollegeId) });
+            }}
+          >
+            {exportieren.isPending ? "Verschlüssle …" : "Paket erzeugen (.age)"}
+          </Button>
+        </div>
+        {!einverstaendnis && (
+          <p className="mt-2 text-xs text-neutral-400">
+            Der Export ist erst mit hinterlegtem Einverständnis möglich (Art. 9 DSGVO).
+          </p>
+        )}
+        {fehler && <p className="mt-2 text-sm text-red-600">{fehler}</p>}
+        {meldung && <p className="mt-2 text-sm text-emerald-700">{meldung}</p>}
+      </section>
+
+      {/* Historie */}
+      {(status.data?.historie ?? []).length > 0 && (
+        <section className="rounded-lg border border-neutral-200 bg-white p-5">
+          <h3 className="mb-2 text-sm font-medium text-neutral-700">Export-Historie</h3>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500">
+                <th className="py-1.5 pr-3 font-medium">Datum</th>
+                <th className="py-1.5 pr-3 font-medium">An</th>
+                <th className="py-1.5 pr-3 font-medium">Umfang</th>
+                <th className="py-1.5 font-medium">Durch</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(status.data?.historie ?? []).map((h) => (
+                <tr key={h.id} className="border-b border-neutral-50 last:border-0">
+                  <td className="py-2 pr-3 text-neutral-600">
+                    {new Date(h.createdAt).toLocaleString("de-DE")}
+                  </td>
+                  <td className="py-2 pr-3">{h.kollegeName}</td>
+                  <td className="py-2 pr-3 text-neutral-600">{h.umfang}</td>
+                  <td className="py-2 text-neutral-600">{h.benutzerName ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
     </div>
   );
 }

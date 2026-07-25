@@ -26,8 +26,8 @@ const settingsInput = z.object({
   erloeskonto0: z.string().default("8120"),
   debitorStartnummer: z.number().int().min(1).default(10000),
   akzentfarbe: z
-    .enum(["neutral", "blau", "gruen", "bernstein", "violett", "rot"])
-    .default("neutral"),
+    .enum(["petrol", "neutral", "blau", "gruen", "bernstein", "violett", "rot"])
+    .default("petrol"),
   pdfLayout: z.enum(["klassisch", "modern", "kompakt"]).default("klassisch"),
 });
 
@@ -36,7 +36,10 @@ export const settingsRouter = createRouter({
     const row = await getDb().query.companySettings.findFirst({
       where: eq(companySettings.id, 1),
     });
-    return row ?? null;
+    if (!row) return null;
+    // age_secret verlässt den Server nie (geheimer Schlüssel für den Austausch)
+    const { ageSecret: _geheim, ...oeffentlich } = row;
+    return { ...oeffentlich, ageSecretVorhanden: !!row.ageSecret };
   }),
 
   update: authedQuery.input(settingsInput).mutation(async ({ input }) => {

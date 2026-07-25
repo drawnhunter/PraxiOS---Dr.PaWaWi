@@ -9,6 +9,7 @@ import Plans from "@/pages/Plans";
 import PlanDetail from "@/pages/PlanDetail";
 import Anamnese from "@/pages/Anamnese";
 import Bogen from "@/pages/Bogen";
+import Austausch from "@/pages/Austausch";
 import Statistics from "@/pages/Statistics";
 import BankImport from "@/pages/BankImport";
 import InvoiceImport from "@/pages/InvoiceImport";
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/plaene" element={<Plans />} />
         <Route path="/plaene/:id" element={<PlanDetail />} />
         <Route path="/anamnese" element={<Anamnese />} />
+        <Route path="/austausch" element={<Austausch />} />
         <Route path="/therapie-import" element={<TherapyImport />} />
         <Route path="/uebersicht" element={<Dashboard />} />
         <Route path="/statistik" element={<Statistics />} />

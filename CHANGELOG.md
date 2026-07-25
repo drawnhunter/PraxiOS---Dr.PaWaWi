@@ -2,6 +2,26 @@
 
 Alle nennenswerten Änderungen. Schema: [Version] — Datum — Kurztitel.
 
+## [0.9.4] — 2026-07-26 — Arzt-zu-Arzt-Austausch (age) + Combobox-Fix
+
+- **Akten-Pakete verschlüsselt an Kollegen-Praxen** (`age-encryption`, BSD):
+  Inhalt Stammdaten, Kontakte, Therapiepläne + Einträge, Dokumente (mit Dateien),
+  Chronik; Format `praxios-akte` v1 (zod-validiert)
+- **Einverständnis-Gating (Art. 9 DSGVO)**: Export erst mit unterschriebenem
+  Einverständnis in der Akte; **Einverständnis-PDF-Generator** (Praxisdaten +
+  Patient + Empfänger + Zweck + Signatur) im Austausch-Tab der Akte
+- **Export-Protokoll** (akten_exporte: wann, an wen, Umfang, durch wen)
+- **Import** mit Vorschau: entschlüsseln → Zusammenfassung → Patienten-Matching
+  (Pat.-Nr. > Name > Name+DOB), Lücken ergänzen ohne Überschreiben, Dedupe bei
+  Kontakten/Plänen/Dokumenten, Leistungen/Therapeuten per Katalog-Mapping
+- **Kollegen-Verwaltung** (Empfänger-Schlüssel age1…, aktiv/inaktiv) und
+  **eigener Schlüssel** (Erzeugen, Kopieren, Neu-Generieren mit Warnung) im
+  neuen Menüpunkt „Austausch"; geheimer Schlüssel verlässt den Server nie
+  (in settings.get gestrippt)
+- Nebenbefund-Fix: Akzentfarbe „petrol" in der Einstellungs-Validierung
+- Combobox-Breitenfix (PopoverAnchor statt Trigger-Button)
+- Tests: 35/35 grün (Paket-Schema, age-Roundtrip inkl. Fremdschlüssel-Negativ)
+
 ## [0.9.3] — 2026-07-26 — UX & Branding Dr.PaWaWi
 
 - **Rebranding auf Dr.PaWaWi** (Menü-Titel, Login, Manifest); Fußzeile im Menü
