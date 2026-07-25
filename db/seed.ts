@@ -1,7 +1,9 @@
 import { getDb } from "../api/queries/connection";
-import { numberSequences, products } from "./schema";
+import { gruppen, numberSequences, products } from "./schema";
 import { count } from "drizzle-orm";
 import { LEISTUNGSKATALOG } from "./leistungskatalog";
+import { STANDARD_GRUPPEN } from "../contracts/constants";
+import { eq } from "drizzle-orm";
 
 /** Nummernkreise anlegen (idempotent). */
 export async function seedNummernkreise() {
@@ -30,13 +32,30 @@ export async function seedLeistungskatalog(): Promise<number> {
   return LEISTUNGSKATALOG.length;
 }
 
+/** Standard-Rechte-Gruppen anlegen (idempotent, fehlen sie). */
+export async function seedGruppen(): Promise<number> {
+  const db = getDb();
+  let neu = 0;
+  for (const g of STANDARD_GRUPPEN) {
+    const vorhanden = await db.query.gruppen.findFirst({
+      where: eq(gruppen.name, g.name),
+    });
+    if (!vorhanden) {
+      await db.insert(gruppen).values({ name: g.name, rechte: JSON.stringify(g.rechte) });
+      neu++;
+    }
+  }
+  return neu;
+}
+
 // Direktaufruf: npx tsx db/seed.ts
 if (process.argv[1]?.endsWith("seed.ts")) {
   (async () => {
     console.log("Seeding database...");
     await seedNummernkreise();
     const n = await seedLeistungskatalog();
-    console.log(`Done. Leistungskatalog: ${n} neue Einträge.`);
+    const g = await seedGruppen();
+    console.log(`Done. Leistungskatalog: ${n}, Gruppen: ${g}.`);
     process.exit(0);
   })();
 }

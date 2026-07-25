@@ -3,7 +3,10 @@
 // ihren Kopfzeilen erkannt und vorkonfiguriert.
 import { z } from "zod";
 import Papa from "papaparse";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { invoices } from "@db/schema";
 import { eq } from "drizzle-orm";
@@ -118,7 +121,7 @@ function parseZeilen(rows: Record<string, string>[], m: Mapping) {
 
 export const bankImportRouter = createRouter({
   // Schritt 1: Spalten erkennen + Mapping vorschlagen
-  spaltenErkennen: authedQuery
+  spaltenErkennen: rechtQuery("abrechnung")
     .input(z.object({ csvText: z.string().min(1) }))
     .mutation(({ input }) => {
       const rows = parseCsv(input.csvText);
@@ -129,7 +132,7 @@ export const bankImportRouter = createRouter({
     }),
 
   // Schritt 2: Zeilen parsen + offene Rechnungen zuordnen
-  vorschlagen: authedQuery
+  vorschlagen: rechtQuery("abrechnung")
     .input(z.object({ csvText: z.string().min(1), mapping: mappingInput }))
     .mutation(async ({ input }) => {
       const rows = parseCsv(input.csvText);
@@ -189,7 +192,7 @@ export const bankImportRouter = createRouter({
     }),
 
   // Schritt 3: bestaetigte Zahlungen verbuchen (unterstuetzt Teilzahlungen)
-  buchen: authedQuery
+  buchen: rechtQuery("abrechnung")
     .input(
       z.object({
         zuordnungen: z

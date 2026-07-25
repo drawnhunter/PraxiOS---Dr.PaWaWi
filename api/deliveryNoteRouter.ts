@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   deliveryNotes,
@@ -68,19 +71,19 @@ async function ladeLieferscheinMitDetails(id: number) {
 }
 
 export const deliveryNoteRouter = createRouter({
-  list: authedQuery.query(async () => {
+  list: rechtQuery("abrechnung").query(async () => {
     return getDb().query.deliveryNotes.findMany({
       orderBy: [desc(deliveryNotes.createdAt)],
       with: { invoice: true },
     });
   }),
 
-  get: authedQuery
+  get: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .query(({ input }) => ladeLieferscheinMitDetails(input.id)),
 
   /** Blanko-Lieferschein für einen Kunden. */
-  createDraft: authedQuery
+  createDraft: rechtQuery("abrechnung")
     .input(z.object({ customerId: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -105,7 +108,7 @@ export const deliveryNoteRouter = createRouter({
     }),
 
   /** Lieferschein aus einer Rechnung (Positionen ohne Preise). */
-  createFromInvoice: authedQuery
+  createFromInvoice: rechtQuery("abrechnung")
     .input(z.object({ invoiceId: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -148,7 +151,7 @@ export const deliveryNoteRouter = createRouter({
       return { id };
     }),
 
-  updateDraft: authedQuery
+  updateDraft: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), kopf: kopfInput, items: z.array(itemInput) }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -189,7 +192,7 @@ export const deliveryNoteRouter = createRouter({
       return { ok: true };
     }),
 
-  finalize: authedQuery
+  finalize: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -223,7 +226,7 @@ export const deliveryNoteRouter = createRouter({
     }),
 
   /** Finalisierte Lieferscheine können storniert (ungültig markiert) werden. */
-  stornieren: authedQuery
+  stornieren: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -241,7 +244,7 @@ export const deliveryNoteRouter = createRouter({
       return { ok: true };
     }),
 
-  delete: authedQuery
+  delete: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();

@@ -69,3 +69,29 @@ export const ENTRY_STATUS = {
   ausgefallen: "Ausgefallen",
 } as const;
 export type EntryStatus = keyof typeof ENTRY_STATUS;
+
+// ── PraxiOS: Rollen/Rechte (Gruppen) ────────────────────────────────────────
+// Rolle „admin" = Leitung/Arzt (alle Rechte + Verwaltung). Alle anderen bekommen
+// eine Gruppe mit diesen Bereichs-Rechten (Checkboxen im Gruppen-Editor).
+export const RECHTE = {
+  akte: "Patientenakte",
+  plaene: "Therapiepläne",
+  dokumente: "Dokumente",
+  kalender: "Kalender",
+  anamnese: "Anamnesebögen",
+  austausch: "Austausch",
+  abrechnung: "Abrechnung",
+} as const;
+export type Recht = keyof typeof RECHTE;
+
+/** Vorbelegte Gruppen (werden beim Start geseedet, fehlen sie). */
+export const STANDARD_GRUPPEN: { name: string; rechte: Recht[] }[] = [
+  {
+    name: "Med. Personal",
+    rechte: ["akte", "plaene", "dokumente", "kalender", "anamnese"],
+  },
+  {
+    name: "Kaufm. Personal",
+    rechte: ["akte", "dokumente", "kalender", "anamnese", "abrechnung"],
+  },
+];

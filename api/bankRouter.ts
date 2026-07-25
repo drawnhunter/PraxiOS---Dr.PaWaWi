@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  authedQuery,
+  createRouter,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { bankAccounts, invoices } from "@db/schema";
 import { eq, desc } from "drizzle-orm";

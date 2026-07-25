@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   offers,
@@ -49,13 +52,13 @@ async function ladeAngebot(id: number) {
 }
 
 export const offerRouter = createRouter({
-  list: authedQuery.query(async () => {
+  list: rechtQuery("abrechnung").query(async () => {
     return getDb().query.offers.findMany({
       orderBy: [desc(offers.datum), desc(offers.id)],
     });
   }),
 
-  get: authedQuery
+  get: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const a = await ladeAngebot(input.id);
@@ -63,7 +66,7 @@ export const offerRouter = createRouter({
       return a;
     }),
 
-  createDraft: authedQuery
+  createDraft: rechtQuery("abrechnung")
     .input(z.object({ customerId: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -94,7 +97,7 @@ export const offerRouter = createRouter({
       return { id };
     }),
 
-  updateDraft: authedQuery
+  updateDraft: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), kopf: kopfInput, items: z.array(itemInput) }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -141,7 +144,7 @@ export const offerRouter = createRouter({
     }),
 
   /** Finalisieren: Nummer A-JJJJ-NNN vergeben, Firmendaten einfrieren. */
-  finalize: authedQuery
+  finalize: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -195,7 +198,7 @@ export const offerRouter = createRouter({
     }),
 
   /** Angebot in Rechnungsentwurf umwandeln (Positionen + Kundendaten kopieren). */
-  umwandeln: authedQuery
+  umwandeln: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -266,7 +269,7 @@ export const offerRouter = createRouter({
       return { invoiceId: rechnungId };
     }),
 
-  stornieren: authedQuery
+  stornieren: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -279,7 +282,7 @@ export const offerRouter = createRouter({
       return { ok: true };
     }),
 
-  delete: authedQuery
+  delete: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();

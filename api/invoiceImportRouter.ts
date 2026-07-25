@@ -5,7 +5,10 @@
 import { z } from "zod";
 import Papa from "papaparse";
 import { and, eq } from "drizzle-orm";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { invoices, invoiceItems, customers, companySettings, bankAccounts } from "@db/schema";
 import { computeTotals, centToDecimal } from "@contracts/invoicing";
@@ -224,7 +227,7 @@ function gruppiere(rows: Record<string, string>[], m: Mapping): Gruppe[] {
 }
 
 export const invoiceImportRouter = createRouter({
-  spaltenErkennen: authedQuery
+  spaltenErkennen: rechtQuery("abrechnung")
     .input(z.object({ csvText: z.string().min(1) }))
     .mutation(({ input }) => {
       const rows = parseCsv(input.csvText);
@@ -233,7 +236,7 @@ export const invoiceImportRouter = createRouter({
       return { spalten, mapping: errateMapping(spalten), zeilenGesamt: rows.length };
     }),
 
-  vorschau: authedQuery
+  vorschau: rechtQuery("abrechnung")
     .input(z.object({ csvText: z.string().min(1), mapping: mappingInput }))
     .mutation(async ({ input }) => {
       const rows = parseCsv(input.csvText);
@@ -257,7 +260,7 @@ export const invoiceImportRouter = createRouter({
       };
     }),
 
-  importieren: authedQuery
+  importieren: rechtQuery("abrechnung")
     .input(z.object({ csvText: z.string().min(1), mapping: mappingInput }))
     .mutation(async ({ input }) => {
       const db = getDb();

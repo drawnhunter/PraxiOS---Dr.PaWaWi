@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  authedQuery,
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { products, konditionen } from "@db/schema";
 import { eq, like, or, desc, and } from "drizzle-orm";
@@ -34,12 +38,12 @@ export const productRouter = createRouter({
     return getDb().query.products.findFirst({ where: eq(products.id, input.id) });
   }),
 
-  create: authedQuery.input(productInput).mutation(async ({ input }) => {
+  create: rechtQuery("abrechnung").input(productInput).mutation(async ({ input }) => {
     const [{ id }] = await getDb().insert(products).values(input).$returningId();
     return { id };
   }),
 
-  update: authedQuery
+  update: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), data: productInput }))
     .mutation(async ({ input }) => {
       await getDb()
@@ -49,7 +53,7 @@ export const productRouter = createRouter({
       return { ok: true };
     }),
 
-  setAktiv: authedQuery
+  setAktiv: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), aktiv: z.boolean() }))
     .mutation(async ({ input }) => {
       await getDb()
@@ -60,7 +64,7 @@ export const productRouter = createRouter({
     }),
 
   // ── Konditionen (Sonderpreise je Kunde/Lieferant + Produkt) ─────────────
-  konditionenListe: authedQuery
+  konditionenListe: rechtQuery("abrechnung")
     .input(z.object({ typ: z.enum(["kunde", "lieferant"]), partnerId: z.number() }))
     .query(async ({ input }) => {
       const rows = await getDb()
@@ -77,7 +81,7 @@ export const productRouter = createRouter({
       return rows;
     }),
 
-  konditionSetzen: authedQuery
+  konditionSetzen: rechtQuery("abrechnung")
     .input(
       z.object({
         typ: z.enum(["kunde", "lieferant"]),
@@ -94,7 +98,7 @@ export const productRouter = createRouter({
       return { ok: true };
     }),
 
-  konditionLoeschen: authedQuery
+  konditionLoeschen: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await getDb().delete(konditionen).where(eq(konditionen.id, input.id));
@@ -103,7 +107,7 @@ export const productRouter = createRouter({
 
   // Preisermittlung fuer Belege: Sonderpreis vor Standard
   // (Kunde -> VK, Lieferant -> EK mit VK-Fallback)
-  preisFuer: authedQuery
+  preisFuer: rechtQuery("abrechnung")
     .input(
       z.object({
         typ: z.enum(["kunde", "lieferant"]),

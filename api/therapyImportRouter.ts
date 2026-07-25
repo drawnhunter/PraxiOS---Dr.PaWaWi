@@ -4,7 +4,10 @@
 // Unklarheiten landen im Report (TXT/PDF) zum Zurückschicken an IMTZ.
 import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   invoices,
@@ -412,7 +415,7 @@ function kwListe(wochen: { jahr: number; kw: number }[]): string {
 // ── Router ──────────────────────────────────────────────────────────────────
 export const therapyImportRouter = createRouter({
   /** Erkennt die KW-Blätter einer hochgeladenen Datei (für die Auswahl). */
-  blaetter: authedQuery
+  blaetter: rechtQuery("abrechnung")
     .input(z.object({ dateiname: z.string().min(1), base64: z.string().min(1) }))
     .mutation(({ input }) => {
       const sheets = blaetterDesPlans(input.dateiname, input.base64);
@@ -423,13 +426,13 @@ export const therapyImportRouter = createRouter({
     }),
 
   /** Analyse ohne Schreibzugriff: Patienten, Positionen, Unklarheiten. */
-  vorschau: authedQuery.input(dateiInput).mutation(async ({ input }) => {
+  vorschau: rechtQuery("abrechnung").input(dateiInput).mutation(async ({ input }) => {
     const { kontext: _k, ...ergebnis } = await analysiere(input);
     return ergebnis;
   }),
 
   /** Legt Patienten (neu) und Rechnungsentwürfe an + protokolliert den Import. */
-  importieren: authedQuery.input(dateiInput).mutation(async ({ input }) => {
+  importieren: rechtQuery("abrechnung").input(dateiInput).mutation(async ({ input }) => {
     const db = getDb();
     const analyse = await analysiere(input);
 
@@ -613,7 +616,7 @@ export const therapyImportRouter = createRouter({
   }),
 
   /** Liste der bisherigen Importe (für Verlauf + Report-Nachdownload). */
-  historie: authedQuery.query(async () => {
+  historie: rechtQuery("abrechnung").query(async () => {
     const rows = await getDb()
       .select()
       .from(therapyImports)
@@ -634,7 +637,7 @@ export const therapyImportRouter = createRouter({
   }),
 
   /** Unklarheiten-Report eines Imports als TXT oder PDF (Base64). */
-  report: authedQuery
+  report: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), format: z.enum(["txt", "pdf"]) }))
     .query(async ({ input }) => {
       const row = await getDb().query.therapyImports.findFirst({

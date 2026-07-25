@@ -28,6 +28,9 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   // PraxiOS: Austausch (age)
   { tabelle: "company_settings", spalte: "age_recipient", ddl: "ALTER TABLE company_settings ADD COLUMN age_recipient VARCHAR(100) NULL AFTER pdf_layout" },
   { tabelle: "company_settings", spalte: "age_secret", ddl: "ALTER TABLE company_settings ADD COLUMN age_secret VARCHAR(100) NULL AFTER age_recipient" },
+  { tabelle: "company_settings", spalte: "kalender_token", ddl: "ALTER TABLE company_settings ADD COLUMN kalender_token VARCHAR(64) NULL AFTER age_secret" },
+  // PraxiOS: Rollen
+  { tabelle: "users", spalte: "gruppe_id", ddl: "ALTER TABLE users ADD COLUMN gruppe_id BIGINT UNSIGNED NULL AFTER kalenderFarbe" },
 ];
 
 // Spalten-Aenderungen (Enum-Erweiterungen, idempotent per SHOW COLUMNS)
@@ -251,6 +254,16 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       CONSTRAINT sub_form_fk FOREIGN KEY (form_id) REFERENCES anamnesis_forms(id) ON DELETE CASCADE,
       CONSTRAINT sub_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
       CONSTRAINT sub_doc_fk FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL
+    )`,
+  },
+  // PraxiOS: Rollen
+  {
+    tabelle: "gruppen",
+    ddl: `CREATE TABLE IF NOT EXISTS gruppen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      rechte TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
   },
   // PraxiOS: Austausch

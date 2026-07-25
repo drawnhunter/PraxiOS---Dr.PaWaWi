@@ -1,6 +1,9 @@
 import { z } from "zod";
 import Papa from "papaparse";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { customers, products } from "@db/schema";
 import { eq, and } from "drizzle-orm";
@@ -210,7 +213,7 @@ function parseProduktZeilen(rows: Record<string, string>[]): ProduktImport[] {
 const csvInput = z.object({ csvText: z.string().min(1) });
 
 export const importRouter = createRouter({
-  previewKunden: authedQuery.input(csvInput).query(({ input }) => {
+  previewKunden: rechtQuery("abrechnung").input(csvInput).query(({ input }) => {
     const zeilen = parseKundenZeilen(parseCsv(input.csvText));
     return {
       gesamt: zeilen.length,
@@ -220,7 +223,7 @@ export const importRouter = createRouter({
     };
   }),
 
-  importKunden: authedQuery.input(csvInput).mutation(async ({ input }) => {
+  importKunden: rechtQuery("abrechnung").input(csvInput).mutation(async ({ input }) => {
     const db = getDb();
     const zeilen = parseKundenZeilen(parseCsv(input.csvText));
     let importiert = 0;
@@ -258,7 +261,7 @@ export const importRouter = createRouter({
     return { importiert, uebersprungen, fehler: fehler.slice(0, 20) };
   }),
 
-  previewProdukte: authedQuery.input(csvInput).query(({ input }) => {
+  previewProdukte: rechtQuery("abrechnung").input(csvInput).query(({ input }) => {
     const zeilen = parseProduktZeilen(parseCsv(input.csvText));
     return {
       gesamt: zeilen.length,
@@ -268,7 +271,7 @@ export const importRouter = createRouter({
     };
   }),
 
-  importProdukte: authedQuery.input(csvInput).mutation(async ({ input }) => {
+  importProdukte: rechtQuery("abrechnung").input(csvInput).mutation(async ({ input }) => {
     const db = getDb();
     const zeilen = parseProduktZeilen(parseCsv(input.csvText));
     let importiert = 0;

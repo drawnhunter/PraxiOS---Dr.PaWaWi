@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { documents } from "@db/schema";
 import { env } from "./lib/env";
@@ -11,7 +14,7 @@ import path from "node:path";
 // Nur Metadaten — Upload/Download der Dateien läuft über Hono (siehe boot.ts:
 // POST /api/dokumente und GET /api/dokumente/:id/datei).
 export const documentRouter = createRouter({
-  list: authedQuery
+  list: rechtQuery("dokumente")
     .input(z.object({ patientId: z.number().int() }))
     .query(async ({ input }) => {
       return getDb().query.documents.findMany({
@@ -21,7 +24,7 @@ export const documentRouter = createRouter({
       });
     }),
 
-  byId: authedQuery
+  byId: rechtQuery("dokumente")
     .input(z.object({ id: z.number().int() }))
     .query(async ({ input }) => {
       const doc = await getDb().query.documents.findFirst({
@@ -33,7 +36,7 @@ export const documentRouter = createRouter({
       return doc;
     }),
 
-  update: authedQuery
+  update: rechtQuery("dokumente")
     .input(
       z.object({
         id: z.number().int(),
@@ -62,7 +65,7 @@ export const documentRouter = createRouter({
     }),
 
   // Datei von der Platte + DB-Eintrag loeschen
-  loeschen: authedQuery
+  loeschen: rechtQuery("dokumente")
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       const db = getDb();

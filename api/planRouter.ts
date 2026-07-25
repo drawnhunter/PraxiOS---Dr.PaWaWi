@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { and, asc, eq } from "drizzle-orm";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { customers, planEntries, products, therapyPlans, users } from "@db/schema";
 import { schreibeTimeline } from "./lib/timeline";
@@ -64,7 +67,7 @@ function datumDe(iso: string | null | undefined): string {
 }
 
 export const planRouter = createRouter({
-  list: authedQuery
+  list: rechtQuery("plaene")
     .input(
       z
         .object({
@@ -93,7 +96,7 @@ export const planRouter = createRouter({
       }));
     }),
 
-  byId: authedQuery
+  byId: rechtQuery("plaene")
     .input(z.object({ id: z.number().int() }))
     .query(async ({ input }) => {
       const plan = await getDb().query.therapyPlans.findFirst({
@@ -125,7 +128,7 @@ export const planRouter = createRouter({
       return plan;
     }),
 
-  create: authedQuery.input(planInput).mutation(async ({ ctx, input }) => {
+  create: rechtQuery("plaene").input(planInput).mutation(async ({ ctx, input }) => {
     const db = getDb();
     const [{ id }] = await db
       .insert(therapyPlans)
@@ -141,7 +144,7 @@ export const planRouter = createRouter({
     return { id };
   }),
 
-  update: authedQuery
+  update: rechtQuery("plaene")
     .input(z.object({ id: z.number().int(), data: planInput.omit({ patientId: true }).partial() }))
     .mutation(async ({ input }) => {
       await getDb()
@@ -151,7 +154,7 @@ export const planRouter = createRouter({
       return { ok: true };
     }),
 
-  setStatus: authedQuery
+  setStatus: rechtQuery("plaene")
     .input(
       z.object({
         id: z.number().int(),
@@ -180,12 +183,12 @@ export const planRouter = createRouter({
     }),
 
   // ── Planeinträge ────────────────────────────────────────────────────────
-  addEntry: authedQuery.input(entryInput).mutation(async ({ input }) => {
+  addEntry: rechtQuery("plaene").input(entryInput).mutation(async ({ input }) => {
     const [{ id }] = await getDb().insert(planEntries).values(input).$returningId();
     return { id };
   }),
 
-  updateEntry: authedQuery
+  updateEntry: rechtQuery("plaene")
     .input(z.object({ id: z.number().int(), data: entryInput.omit({ planId: true }).partial() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -221,7 +224,7 @@ export const planRouter = createRouter({
       return { ok: true };
     }),
 
-  removeEntry: authedQuery
+  removeEntry: rechtQuery("plaene")
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       await getDb().delete(planEntries).where(eq(planEntries.id, input.id));
@@ -230,7 +233,7 @@ export const planRouter = createRouter({
 
   // ── Serie anlegen: jede Woche × jeden Wochentag ab startDatum ───────────
   // wochentage: 1 = Mo … 5 = Fr. Datumsberechnung rein in TS (Montag-basiert).
-  serieAnlegen: authedQuery
+  serieAnlegen: rechtQuery("plaene")
     .input(
       z.object({
         planId: z.number().int(),
@@ -292,7 +295,7 @@ export const planRouter = createRouter({
     }),
 
   // ── Plan als dokumentiert markieren ─────────────────────────────────────
-  dokumentieren: authedQuery
+  dokumentieren: rechtQuery("plaene")
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -328,7 +331,7 @@ export const planRouter = createRouter({
     }),
 
   // ── Einzelnen Eintrag duplizieren (landet unten am selben oder neuem Tag) ─
-  duplicateEntry: authedQuery
+  duplicateEntry: rechtQuery("plaene")
     .input(z.object({ id: z.number().int(), datum: datumInput.optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -358,12 +361,13 @@ export const planRouter = createRouter({
     }),
 
   // ── Alle Einträge eines Tages auf einen anderen Tag duplizieren ──────────
-  duplicateDay: authedQuery
+  duplicateDay: rechtQuery("plaene")
     .input(
       z.object({
         planId: z.number().int(),
         vonDatum: datumInput,
         nachDatum: datumInput,
+        modus: z.enum(["kopieren", "verschieben"]).default("kopieren"),
       }),
     )
     .mutation(async ({ input }) => {
@@ -392,6 +396,16 @@ export const planRouter = createRouter({
           message: `Am ${datumDe(input.vonDatum)} gibt es keine Einträge zum Duplizieren.`,
         });
       }
+      if (input.modus === "verschieben") {
+        // Verschieben = echtes Move: Quelle aktualisieren statt kopieren
+        await db
+          .update(planEntries)
+          .set({ datum: input.nachDatum })
+          .where(
+            and(eq(planEntries.planId, input.planId), eq(planEntries.datum, input.vonDatum)),
+          );
+        return { ok: true, anzahl: quell.length };
+      }
       await db.insert(planEntries).values(
         quell.map((e) => ({
           planId: input.planId,
@@ -411,7 +425,7 @@ export const planRouter = createRouter({
     }),
 
   // ── Direkt verrechnen: Plan → Rechnungsentwurf (der Fusion-Weg) ──────────
-  rechnungErstellen: authedQuery
+  rechnungErstellen: rechtQuery("plaene")
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -472,7 +486,7 @@ export const planRouter = createRouter({
     }),
 
   // ── Dr.ReWaWi-Export (CSV, nur stattgefundene Einträge) ─────────────────
-  exportDrReWaWi: authedQuery
+  exportDrReWaWi: rechtQuery("plaene")
     .input(z.object({ id: z.number().int() }))
     .query(async ({ input }) => {
       const db = getDb();

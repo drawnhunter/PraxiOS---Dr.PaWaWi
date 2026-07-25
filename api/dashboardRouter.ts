@@ -1,11 +1,14 @@
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { customers, invoices, planEntries, therapyPlans, users } from "@db/schema";
 import { and, asc, count, eq, gte, lt } from "drizzle-orm";
 import { heuteIso } from "./lib/kalender";
 
 export const dashboardRouter = createRouter({
-  stats: authedQuery.query(async () => {
+  stats: rechtQuery("abrechnung").query(async () => {
     const db = getDb();
     const alle = await db.select().from(invoices);
 
@@ -48,7 +51,7 @@ export const dashboardRouter = createRouter({
     };
   }),
 
-  recentPaid: authedQuery.query(async () => {
+  recentPaid: rechtQuery("abrechnung").query(async () => {
     const db = getDb();
     const start = new Date();
     start.setDate(start.getDate() - 30);
@@ -60,7 +63,7 @@ export const dashboardRouter = createRouter({
   }),
 
   // ── PraxisWerk-Akte: Heutige Termine + Praxis-Kennzahlen ────────────────
-  heute: authedQuery.query(async () => {
+  heute: rechtQuery("kalender").query(async () => {
     const heute = heuteIso();
     const rows = await getDb()
       .select({
@@ -80,7 +83,7 @@ export const dashboardRouter = createRouter({
     return rows;
   }),
 
-  uebersicht: authedQuery.query(async () => {
+  uebersicht: rechtQuery("kalender").query(async () => {
     const db = getDb();
     const heute = heuteIso();
     const [patientenGesamt] = await db

@@ -1,4 +1,7 @@
-import { createRouter, publicQuery } from "./middleware";
+import {
+  createRouter,
+  publicQuery,
+} from "./middleware";
 import { settingsRouter } from "./settingsRouter";
 import { bankRouter } from "./bankRouter";
 import { customerRouter } from "./customerRouter";

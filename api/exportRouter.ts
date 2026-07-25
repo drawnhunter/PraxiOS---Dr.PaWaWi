@@ -1,6 +1,9 @@
 // ── Exporte: XRechnung (XML) + DATEV (Buchungsstapel CSV) ───────────────────
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { invoices, creditNotes, customers, companySettings } from "@db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
@@ -10,7 +13,7 @@ import { erzeugeBuchungsstapel, type DatevBuchung } from "./datev";
 import { computeTotals } from "@contracts/invoicing";
 
 export const exportRouter = createRouter({
-  xrechnungRechnung: authedQuery
+  xrechnungRechnung: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const r = await getDb().query.invoices.findFirst({
@@ -81,7 +84,7 @@ export const exportRouter = createRouter({
     }),
 
   /** DATEV-Buchungsstapel (Rechnungsausgang + Gutschriften) für einen Zeitraum. */
-  datevBuchungsstapel: authedQuery
+  datevBuchungsstapel: rechtQuery("abrechnung")
     .input(
       z.object({
         von: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

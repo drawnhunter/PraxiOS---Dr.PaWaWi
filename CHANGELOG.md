@@ -2,6 +2,27 @@
 
 Alle nennenswerten Änderungen. Schema: [Version] — Datum — Kurztitel.
 
+## [0.9.6] — 2026-07-26 — Rollen, Kalender-Gruppierung, Mehrbenutzer, ICS
+
+- **Rollen-System**: „Leitung/Arzt" (= admin, alles + Verwaltung), dazu Gruppen
+  mit Bereichs-Rechten (Checkboxen): Akte, Pläne, Dokumente, Kalender, Anamnese,
+  Austausch, Abrechnung. Standard-Gruppen „Med. Personal" und „Kaufm. Personal"
+  (Auto-Seed), eigene Gruppen im Gruppen-Editor anlegbar; Zuordnung inline in
+  der Benutzerverwaltung; serverseitig pro Router abgesichert (rechtQuery)
+- Sicherheitsfix: `auth.me` liefert kein passwordHash mehr aus; Rechte werden
+  aufgelöst mitgeliefert (für UI-Filter)
+- **Kalender**: Tageseinträge jetzt **patienten-gruppiert** (Name + Zeitspanne
+  aus frühesten/spätesten Zeiten + Anzahl-Badge), aufklappbar → dezente
+  Therapie-Karten darunter
+- **ICS-Feed** `/api/ics/<token>.ics` (RFC 5545): Google/Outlook-Abo,
+  2 Wochen zurück bis 12 Wochen voraus, Status-Mapping, Token jederzeit
+  neu erzeugbar („Abonnieren" im Kalender-Kopf)
+- **Mehrbenutzer**: Plan-Detail lädt alle 15 s automatisch nach +
+  manueller „Aktualisieren"-Button (zwei Zugänge, ein Plan)
+- **Tag-Übertrag**: neben „Kopieren" jetzt auch **„Verschieben"**
+  (Tag wird auf Zieldatum umgelegt statt dupliziert)
+- Tests: 45/45 grün (Kalender-Gruppierung, ICS-Format/Faltung/Status)
+
 ## [0.9.5] — 2026-07-26 — Plan → Rechnung direkt + Duplizieren
 
 - **„Rechnung erstellen" im Therapieplan** (Status dokumentiert): erzeugt den

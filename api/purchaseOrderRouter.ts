@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   purchaseOrders,
@@ -52,7 +55,7 @@ async function ladeBestellungMitDetails(id: number) {
 }
 
 export const purchaseOrderRouter = createRouter({
-  list: authedQuery
+  list: rechtQuery("abrechnung")
     .input(
       z
         .object({
@@ -69,11 +72,11 @@ export const purchaseOrderRouter = createRouter({
       });
     }),
 
-  get: authedQuery
+  get: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .query(({ input }) => ladeBestellungMitDetails(input.id)),
 
-  createDraft: authedQuery
+  createDraft: rechtQuery("abrechnung")
     .input(z.object({ supplierId: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -99,7 +102,7 @@ export const purchaseOrderRouter = createRouter({
       return { id };
     }),
 
-  updateDraft: authedQuery
+  updateDraft: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), kopf: kopfInput, items: z.array(itemInput) }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -148,7 +151,7 @@ export const purchaseOrderRouter = createRouter({
     }),
 
   /** Abschicken: Nummer vergeben, einfrieren. */
-  bestellen: authedQuery
+  bestellen: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -200,7 +203,7 @@ export const purchaseOrderRouter = createRouter({
     }),
 
   /** Wareneingang buchen (teilweise oder komplett). */
-  setLieferstatus: authedQuery
+  setLieferstatus: rechtQuery("abrechnung")
     .input(
       z.object({
         id: z.number(),
@@ -230,7 +233,7 @@ export const purchaseOrderRouter = createRouter({
       return { ok: true };
     }),
 
-  stornieren: authedQuery
+  stornieren: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -248,7 +251,7 @@ export const purchaseOrderRouter = createRouter({
       return { ok: true };
     }),
 
-  delete: authedQuery
+  delete: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();

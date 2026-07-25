@@ -47,6 +47,7 @@ CREATE TABLE `company_settings` (
   `pdf_layout` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'klassisch',
   `age_recipient` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `age_secret` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `kalender_token` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,
   UNIQUE KEY `id` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30002;
@@ -392,6 +393,7 @@ CREATE TABLE `users` (
   `avatar` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `role` enum('user','admin') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'user',
   `kalenderFarbe` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `gruppe_id` bigint unsigned DEFAULT NULL,
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `lastSignInAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -617,6 +619,15 @@ CREATE TABLE `akten_exporte` (
   `dateiname` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `umfang` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `gruppen`;
+CREATE TABLE `gruppen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `rechte` text COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

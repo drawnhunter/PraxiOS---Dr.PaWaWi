@@ -203,6 +203,13 @@ export const timelineEventsRelations = relations(timelineEvents, ({ one }) => ({
   }),
 }));
 
+// ── PraxiOS: Rollen-Gruppen ─────────────────────────────────────────────────
+import { gruppen } from "./schema";
+
+export const gruppenRelations = relations(gruppen, ({ many }) => ({
+  mitglieder: many(users),
+}));
+
 // ── PraxiOS: Anamnesebögen ──────────────────────────────────────────────────
 import { anamnesisForms, anamnesisLinks, anamnesisSubmissions } from "./schema";
 

@@ -11,7 +11,7 @@ import { createContext } from "./context";
 import { env } from "./lib/env";
 import { authenticateRequest } from "./kimi/auth";
 import { getDb } from "./queries/connection";
-import { customers, documents, therapyPlans } from "@db/schema";
+import { companySettings, customers, documents, therapyPlans } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { schreibeTimeline } from "./lib/timeline";
 
@@ -162,6 +162,64 @@ app.get("/api/dokumente/:id/datei", async (c) => {
   });
 });
 
+// ── ICS-Kalender-Feed (Token-Auth, kein Login — für Google/Outlook-Abo) ────
+app.get("/api/ics/:token.ics", async (c) => {
+  const token = c.req.param("token");
+  const db = getDb();
+  const s = await db.query.companySettings.findFirst({
+    where: eq(companySettings.id, 1),
+  });
+  if (!s?.kalenderToken || token !== s.kalenderToken) {
+    return c.json({ error: "Ungültig." }, 401);
+  }
+  const heute = new Date();
+  const von = new Date(heute);
+  von.setDate(von.getDate() - 14);
+  const bis = new Date(heute);
+  bis.setDate(bis.getDate() + 84);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+  const { planEntries, therapyPlans, customers, users } = await import("@db/schema");
+  const { and, asc, gte, lte, eq: eq2 } = await import("drizzle-orm");
+  const rows = await db
+    .select({
+      entry: planEntries,
+      planTitel: therapyPlans.titel,
+      patientName: customers.name,
+      therapeutName: users.name,
+    })
+    .from(planEntries)
+    .innerJoin(therapyPlans, eq2(planEntries.planId, therapyPlans.id))
+    .innerJoin(customers, eq2(therapyPlans.patientId, customers.id))
+    .leftJoin(users, eq2(planEntries.therapeutId, users.id))
+    .where(and(gte(planEntries.datum, fmt(von)), lte(planEntries.datum, fmt(bis))))
+    .orderBy(asc(planEntries.datum));
+
+  const { baueIcs } = await import("./lib/ics");
+  const ics = baueIcs(
+    rows.map((r) => ({
+      id: r.entry.id,
+      datum: r.entry.datum,
+      zeitVon: r.entry.zeitVon,
+      zeitBis: r.entry.zeitBis,
+      patientName: r.patientName,
+      leistungText: r.entry.leistungText,
+      therapeutName: r.therapeutName,
+      raum: r.entry.raum,
+      bemerkung: r.entry.bemerkung,
+      status: r.entry.status,
+      planTitel: r.planTitel,
+    })),
+    s.name,
+  );
+  return new Response(ics, {
+    headers: {
+      "Content-Type": "text/calendar; charset=utf-8",
+      "Cache-Control": "no-cache",
+    },
+  });
+});
+
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",
@@ -179,10 +237,12 @@ if (env.isProduction) {
   try {
     const { migriereFehlendeSpalten } = await import("./migrate");
     await migriereFehlendeSpalten();
-    const { seedNummernkreise, seedLeistungskatalog } = await import("../db/seed");
+    const { seedNummernkreise, seedLeistungskatalog, seedGruppen } = await import("../db/seed");
     await seedNummernkreise();
     const n = await seedLeistungskatalog();
     if (n > 0) console.log(`[seed] Leistungskatalog: ${n} Einträge`);
+    const g = await seedGruppen();
+    if (g > 0) console.log(`[seed] Gruppen: ${g} Standard-Gruppen`);
   } catch (e) {
     console.error("[migrate/seed] fehlgeschlagen:", e);
   }

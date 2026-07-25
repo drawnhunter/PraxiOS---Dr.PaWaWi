@@ -3,7 +3,10 @@
 // Binär-Downloads über eigene Routen blockiert (403). Der Weg über die
 // tRPC-API funktioniert überall, weil er denselben Kanal wie die App nutzt.
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { renderBelegPdf, BELEG_TITEL } from "./pdf";
 import {
   ladeRechnungsBeleg,
@@ -30,19 +33,19 @@ async function alsBase64(
 const idInput = z.object({ id: z.number() });
 
 export const pdfRouter = createRouter({
-  invoice: authedQuery.input(idInput).query(({ input }) =>
+  invoice: rechtQuery("abrechnung").input(idInput).query(({ input }) =>
     alsBase64(ladeRechnungsBeleg, input.id),
   ),
-  credit: authedQuery.input(idInput).query(({ input }) =>
+  credit: rechtQuery("abrechnung").input(idInput).query(({ input }) =>
     alsBase64(ladeGutschriftsBeleg, input.id),
   ),
-  delivery: authedQuery.input(idInput).query(({ input }) =>
+  delivery: rechtQuery("abrechnung").input(idInput).query(({ input }) =>
     alsBase64(ladeLieferscheinBeleg, input.id),
   ),
-  order: authedQuery.input(idInput).query(({ input }) =>
+  order: rechtQuery("abrechnung").input(idInput).query(({ input }) =>
     alsBase64(ladeBestellungsBeleg, input.id),
   ),
-  offer: authedQuery.input(idInput).query(({ input }) =>
+  offer: rechtQuery("abrechnung").input(idInput).query(({ input }) =>
     alsBase64(ladeAngebotsBeleg, input.id),
   ),
 });

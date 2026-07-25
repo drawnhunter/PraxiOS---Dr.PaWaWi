@@ -1,6 +1,9 @@
 // ── Mahnwesen: Zahlungserinnerungen und Mahnungen zu Rechnungen ─────────────
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { reminders, invoices } from "@db/schema";
 import { eq, asc, desc } from "drizzle-orm";
@@ -20,7 +23,7 @@ function plusTage(iso: string, tage: number): string {
 }
 
 export const reminderRouter = createRouter({
-  listByInvoice: authedQuery
+  listByInvoice: rechtQuery("abrechnung")
     .input(z.object({ invoiceId: z.number() }))
     .query(async ({ input }) => {
       return getDb().query.reminders.findMany({
@@ -30,7 +33,7 @@ export const reminderRouter = createRouter({
     }),
 
   /** Nächste sinnvolle Mahnstufe + Offenbetrag für das Erstell-Formular. */
-  vorschlag: authedQuery
+  vorschlag: rechtQuery("abrechnung")
     .input(z.object({ invoiceId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -53,7 +56,7 @@ export const reminderRouter = createRouter({
       };
     }),
 
-  create: authedQuery
+  create: rechtQuery("abrechnung")
     .input(
       z.object({
         invoiceId: z.number(),
@@ -88,7 +91,7 @@ export const reminderRouter = createRouter({
       return { id };
     }),
 
-  delete: authedQuery
+  delete: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await getDb().delete(reminders).where(eq(reminders.id, input.id));
@@ -96,7 +99,7 @@ export const reminderRouter = createRouter({
     }),
 
   /** Überfällige Rechnungen (für Übersicht/Badge). */
-  ueberfaellig: authedQuery.query(async () => {
+  ueberfaellig: rechtQuery("abrechnung").query(async () => {
     const rows = await getDb().query.invoices.findMany({
       where: eq(invoices.status, "finalisiert"),
       orderBy: [desc(invoices.faelligkeitsdatum)],
@@ -107,7 +110,7 @@ export const reminderRouter = createRouter({
     );
   }),
 
-  pdf: authedQuery
+  pdf: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const m = await getDb().query.reminders.findFirst({

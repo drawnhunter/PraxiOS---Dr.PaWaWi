@@ -13,7 +13,11 @@ import {
   identityToRecipient,
   armor,
 } from "age-encryption";
-import { adminQuery, authedQuery, createRouter } from "./middleware";
+import {
+  adminQuery,
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   aktenExporte,
@@ -58,7 +62,7 @@ const kollegeInput = z.object({
 
 export const austauschRouter = createRouter({
   // ── Eigener Schlüssel (nur der öffentliche Teil wird angezeigt) ──────────
-  schluessel: authedQuery.query(async () => {
+  schluessel: rechtQuery("austausch").query(async () => {
     const s = await ladeEinstellungenMitSecret();
     return { recipient: s.ageRecipient, vorhanden: !!s.ageSecret };
   }),
@@ -76,23 +80,23 @@ export const austauschRouter = createRouter({
   }),
 
   // ── Kollegen-Praxen ───────────────────────────────────────────────────────
-  kollegenListe: authedQuery.query(async () => {
+  kollegenListe: rechtQuery("austausch").query(async () => {
     return getDb().query.kollegen.findMany({ orderBy: [desc(kollegen.createdAt)] });
   }),
 
-  kollegeAnlegen: authedQuery.input(kollegeInput).mutation(async ({ input }) => {
+  kollegeAnlegen: rechtQuery("austausch").input(kollegeInput).mutation(async ({ input }) => {
     const [{ id }] = await getDb().insert(kollegen).values(input).$returningId();
     return { id };
   }),
 
-  kollegeUpdate: authedQuery
+  kollegeUpdate: rechtQuery("austausch")
     .input(z.object({ id: z.number().int(), data: kollegeInput.partial() }))
     .mutation(async ({ input }) => {
       await getDb().update(kollegen).set(input.data).where(eq(kollegen.id, input.id));
       return { ok: true };
     }),
 
-  kollegeSetAktiv: authedQuery
+  kollegeSetAktiv: rechtQuery("austausch")
     .input(z.object({ id: z.number().int(), aktiv: z.boolean() }))
     .mutation(async ({ input }) => {
       await getDb()
@@ -102,7 +106,7 @@ export const austauschRouter = createRouter({
       return { ok: true };
     }),
 
-  kollegeLoeschen: authedQuery
+  kollegeLoeschen: rechtQuery("austausch")
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       await getDb().delete(kollegen).where(eq(kollegen.id, input.id));
@@ -110,7 +114,7 @@ export const austauschRouter = createRouter({
     }),
 
   // ── Einverständnis-PDF (Generator) ────────────────────────────────────────
-  einverstaendnisPdf: authedQuery
+  einverstaendnisPdf: rechtQuery("austausch")
     .input(z.object({ patientId: z.number().int(), kollegeId: z.number().int() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -136,7 +140,7 @@ export const austauschRouter = createRouter({
     }),
 
   /** Status für den Export-Tab: Einverständnis vorhanden? Kollegen? Historie? */
-  exportStatus: authedQuery
+  exportStatus: rechtQuery("austausch")
     .input(z.object({ patientId: z.number().int() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -175,7 +179,7 @@ export const austauschRouter = createRouter({
     }),
 
   // ── Export (gated: nur mit Einverständnis-Dokument in der Akte) ──────────
-  exportieren: authedQuery
+  exportieren: rechtQuery("austausch")
     .input(z.object({ patientId: z.number().int(), kollegeId: z.number().int() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -340,7 +344,7 @@ export const austauschRouter = createRouter({
     }),
 
   // ── Import: Vorschau (entschlüsseln + zusammenfassen) ────────────────────
-  importVorschau: authedQuery
+  importVorschau: rechtQuery("austausch")
     .input(z.object({ dateiname: z.string(), base64: z.string().min(1) }))
     .mutation(async ({ input }) => {
       const s = await ladeEinstellungenMitSecret();
@@ -361,7 +365,7 @@ export const austauschRouter = createRouter({
       return { ...vorschau, vorhandenerPatient: treffer ? { id: treffer.id, name: treffer.name } : null };
     }),
 
-  importieren: authedQuery
+  importieren: rechtQuery("austausch")
     .input(z.object({ dateiname: z.string(), base64: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();

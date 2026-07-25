@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   creditNotes,
@@ -50,18 +53,18 @@ async function ladeGutschriftMitDetails(id: number) {
 }
 
 export const creditNoteRouter = createRouter({
-  list: authedQuery.query(async () => {
+  list: rechtQuery("abrechnung").query(async () => {
     return getDb().query.creditNotes.findMany({
       orderBy: [desc(creditNotes.createdAt)],
       with: { invoice: true },
     });
   }),
 
-  get: authedQuery
+  get: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .query(({ input }) => ladeGutschriftMitDetails(input.id)),
 
-  updateDraft: authedQuery
+  updateDraft: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), kopf: kopfInput, items: z.array(itemInput) }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -109,7 +112,7 @@ export const creditNoteRouter = createRouter({
     }),
 
   /** Finalisieren: ST-Nummer vergeben. Bei Vollstorno wird die Rechnung storniert. */
-  finalize: authedQuery
+  finalize: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -176,7 +179,7 @@ export const creditNoteRouter = createRouter({
       return { nummer };
     }),
 
-  delete: authedQuery
+  delete: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();

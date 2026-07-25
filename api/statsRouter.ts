@@ -2,12 +2,15 @@
 // Stornos fliessen nicht ein). Datenmengen sind klein — die Aggregation
 // erfolgt bewusst im Speicher statt in SQL.
 import { eq } from "drizzle-orm";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { invoices, invoiceItems } from "@db/schema";
 
 export const statsRouter = createRouter({
-  uebersicht: authedQuery.query(async () => {
+  uebersicht: rechtQuery("abrechnung").query(async () => {
     const db = getDb();
     const finale = await db.select().from(invoices).where(eq(invoices.status, "finalisiert"));
 
@@ -42,7 +45,7 @@ export const statsRouter = createRouter({
     };
   }),
 
-  verlauf: authedQuery.query(async () => {
+  verlauf: rechtQuery("abrechnung").query(async () => {
     const finale = await getDb()
       .select()
       .from(invoices)
@@ -75,7 +78,7 @@ export const statsRouter = createRouter({
     return out;
   }),
 
-  top: authedQuery.query(async () => {
+  top: rechtQuery("abrechnung").query(async () => {
     const db = getDb();
     const finale = await db.select().from(invoices).where(eq(invoices.status, "finalisiert"));
     const items = await db.select().from(invoiceItems);

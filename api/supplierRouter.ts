@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import { suppliers } from "@db/schema";
 import { eq, like, or, desc } from "drizzle-orm";
@@ -18,7 +21,7 @@ const supplierInput = z.object({
 });
 
 export const supplierRouter = createRouter({
-  list: authedQuery
+  list: rechtQuery("abrechnung")
     .input(
       z
         .object({ suche: z.string().optional(), inklArchivierte: z.boolean().optional() })
@@ -40,16 +43,16 @@ export const supplierRouter = createRouter({
       return input?.inklArchivierte ? rows : rows.filter((r) => !r.archiviert);
     }),
 
-  get: authedQuery.input(z.object({ id: z.number() })).query(async ({ input }) => {
+  get: rechtQuery("abrechnung").input(z.object({ id: z.number() })).query(async ({ input }) => {
     return getDb().query.suppliers.findFirst({ where: eq(suppliers.id, input.id) });
   }),
 
-  create: authedQuery.input(supplierInput).mutation(async ({ input }) => {
+  create: rechtQuery("abrechnung").input(supplierInput).mutation(async ({ input }) => {
     const [{ id }] = await getDb().insert(suppliers).values(input).$returningId();
     return { id };
   }),
 
-  update: authedQuery
+  update: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), data: supplierInput }))
     .mutation(async ({ input }) => {
       await getDb()
@@ -59,7 +62,7 @@ export const supplierRouter = createRouter({
       return { ok: true };
     }),
 
-  setArchiviert: authedQuery
+  setArchiviert: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), archiviert: z.boolean() }))
     .mutation(async ({ input }) => {
       await getDb()

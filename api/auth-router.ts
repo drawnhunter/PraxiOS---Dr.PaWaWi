@@ -2,10 +2,15 @@ import * as cookie from "cookie";
 import { z } from "zod";
 import { eq, isNotNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { Session } from "@contracts/constants";
-import { users } from "@db/schema";
+import { RECHTE, Session, type Recht } from "@contracts/constants";
+import { gruppen, users } from "@db/schema";
 import { getSessionCookieOptions } from "./lib/cookies";
-import { createRouter, publicQuery, authedQuery, adminQuery } from "./middleware";
+import {
+  adminQuery,
+  authedQuery,
+  createRouter,
+  publicQuery,
+} from "./middleware";
 import { signSessionToken } from "./kimi/session";
 import { hashPassword, verifyPassword } from "./lib/password";
 import { getDb } from "./queries/connection";
@@ -123,7 +128,22 @@ export const authRouter = createRouter({
       return { success: true };
     }),
 
-  me: authedQuery.query((opts) => opts.ctx.user),
+  // PraxiOS: Profil + aufgelöste Rechte (NIEMALS passwordHash ausliefern)
+  me: authedQuery.query(async ({ ctx }) => {
+    const { passwordHash: _hash, ...u } = ctx.user;
+    if (u.role === "admin") {
+      return { ...u, rechte: Object.keys(RECHTE) as Recht[], gruppeName: "Leitung/Arzt" };
+    }
+    if (!u.gruppeId) return { ...u, rechte: [] as Recht[], gruppeName: null };
+    const g = await getDb().query.gruppen.findFirst({
+      where: eq(gruppen.id, u.gruppeId),
+    });
+    return {
+      ...u,
+      rechte: g ? (JSON.parse(g.rechte) as Recht[]) : [],
+      gruppeName: g?.name ?? null,
+    };
+  }),
 
   // Therapeuten-Auswahl für Kalender/Serien/Pläne — für ALLE eingeloggten
   // Nutzer, aber nur öffentliche Felder (kein Hash, keine E-Mail)
@@ -163,6 +183,7 @@ export const authRouter = createRouter({
         name: users.name,
         role: users.role,
         kalenderFarbe: users.kalenderFarbe,
+        gruppeId: users.gruppeId,
         lastSignInAt: users.lastSignInAt,
         hatPasswort: users.passwordHash,
       })
@@ -179,6 +200,8 @@ export const authRouter = createRouter({
         role: z.enum(["user", "admin"]).default("user"),
         // Therapeuten-Farbe im Kalender, z. B. "#0F766E"
         kalenderFarbe: z.string().trim().max(20).nullable().optional(),
+        // Rechte-Gruppe (Med./Kaufm. Personal o. eigene Gruppe)
+        gruppeId: z.number().int().nullable().optional(),
       }),
     )
     .mutation(async ({ input }) => {
@@ -201,9 +224,74 @@ export const authRouter = createRouter({
         name: input.name || input.username,
         role: input.role,
         kalenderFarbe: input.kalenderFarbe ?? null,
+        gruppeId: input.role === "admin" ? null : (input.gruppeId ?? null),
         lastSignInAt: new Date(),
       });
       return { success: true };
+    }),
+
+  // Rechte-Gruppe eines Benutzers setzen (Rollen-System)
+  benutzerGruppe: adminQuery
+    .input(
+      z.object({
+        userId: z.number().int(),
+        gruppeId: z.number().int().nullable(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await getDb()
+        .update(users)
+        .set({ gruppeId: input.gruppeId })
+        .where(eq(users.id, input.userId));
+      return { success: true };
+    }),
+
+  // ── Gruppen-Verwaltung (Rollen-System) ────────────────────────────────────
+  gruppenListe: authedQuery.query(async () => {
+    const rows = await getDb().query.gruppen.findMany({
+      with: { mitglieder: { columns: { id: true } } },
+    });
+    return rows.map((g) => ({
+      id: g.id,
+      name: g.name,
+      rechte: JSON.parse(g.rechte) as Recht[],
+      mitglieder: g.mitglieder.length,
+    }));
+  }),
+
+  gruppeAnlegen: adminQuery
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(100),
+        rechte: z
+          .array(z.enum(Object.keys(RECHTE) as [Recht, ...Recht[]]))
+          .min(1, "Mindestens ein Recht wählen"),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const [{ id }] = await getDb()
+        .insert(gruppen)
+        .values({ name: input.name, rechte: JSON.stringify(input.rechte) })
+        .$returningId();
+      return { id };
+    }),
+
+  gruppeLoeschen: adminQuery
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const mitglieder = await db.query.users.findMany({
+        where: eq(users.gruppeId, input.id),
+        columns: { id: true },
+      });
+      if (mitglieder.length > 0) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Gruppe wird noch von ${mitglieder.length} Benutzer(n) genutzt — erst zuweisen.`,
+        });
+      }
+      await db.delete(gruppen).where(eq(gruppen.id, input.id));
+      return { ok: true };
     }),
 
   // Therapeuten-Farbe eines Benutzers setzen/ändern (Kalender)

@@ -7,7 +7,11 @@ import { writeFile } from "node:fs/promises";
 import QRCode from "qrcode";
 import { desc, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { authedQuery, createRouter, publicQuery } from "./middleware";
+import {
+  createRouter,
+  publicQuery,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   anamnesisBlocks,
@@ -90,13 +94,13 @@ export function patientZuordnen(
 
 export const anamneseRouter = createRouter({
   // ── Block-Katalog ─────────────────────────────────────────────────────────
-  bloecke: authedQuery.query(async () => {
+  bloecke: rechtQuery("anamnese").query(async () => {
     return getDb().query.anamnesisBlocks.findMany({
       orderBy: [desc(anamnesisBlocks.createdAt)],
     });
   }),
 
-  blockAnlegen: authedQuery.input(blockInput).mutation(async ({ ctx, input }) => {
+  blockAnlegen: rechtQuery("anamnese").input(blockInput).mutation(async ({ ctx, input }) => {
     const [{ id }] = await getDb()
       .insert(anamnesisBlocks)
       .values({ ...input, config: JSON.stringify(input.config), createdBy: ctx.user.id })
@@ -105,14 +109,14 @@ export const anamneseRouter = createRouter({
   }),
 
   // ── Bögen ─────────────────────────────────────────────────────────────────
-  liste: authedQuery.query(async () => {
+  liste: rechtQuery("anamnese").query(async () => {
     return getDb().query.anamnesisForms.findMany({
       orderBy: [desc(anamnesisForms.createdAt)],
       with: { links: true },
     });
   }),
 
-  byId: authedQuery.input(z.object({ id: z.number().int() })).query(async ({ input }) => {
+  byId: rechtQuery("anamnese").input(z.object({ id: z.number().int() })).query(async ({ input }) => {
     const form = await getDb().query.anamnesisForms.findFirst({
       where: eq(anamnesisForms.id, input.id),
       with: { links: { orderBy: [desc(anamnesisLinks.createdAt)] } },
@@ -121,7 +125,7 @@ export const anamneseRouter = createRouter({
     return { ...form, bloecke: parseBlocks(form) };
   }),
 
-  create: authedQuery.input(formInput).mutation(async ({ ctx, input }) => {
+  create: rechtQuery("anamnese").input(formInput).mutation(async ({ ctx, input }) => {
     const [{ id }] = await getDb()
       .insert(anamnesisForms)
       .values({
@@ -134,7 +138,7 @@ export const anamneseRouter = createRouter({
     return { id };
   }),
 
-  update: authedQuery
+  update: rechtQuery("anamnese")
     .input(z.object({ id: z.number().int(), data: formInput.partial() }))
     .mutation(async ({ input }) => {
       const { schemaJson, ...rest } = input.data;
@@ -147,7 +151,7 @@ export const anamneseRouter = createRouter({
       return { ok: true };
     }),
 
-  setAktiv: authedQuery
+  setAktiv: rechtQuery("anamnese")
     .input(z.object({ id: z.number().int(), aktiv: z.boolean() }))
     .mutation(async ({ input }) => {
       await getDb()
@@ -157,7 +161,7 @@ export const anamneseRouter = createRouter({
       return { ok: true };
     }),
 
-  loeschen: authedQuery
+  loeschen: rechtQuery("anamnese")
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       await getDb().delete(anamnesisForms).where(eq(anamnesisForms.id, input.id));
@@ -165,7 +169,7 @@ export const anamneseRouter = createRouter({
     }),
 
   // ── Leerer Bogen als PDF (Base64, zum Drucken/Verschicken) ────────────────
-  leerPdf: authedQuery.input(z.object({ id: z.number().int() })).query(async ({ input }) => {
+  leerPdf: rechtQuery("anamnese").input(z.object({ id: z.number().int() })).query(async ({ input }) => {
     const db = getDb();
     const form = await db.query.anamnesisForms.findFirst({
       where: eq(anamnesisForms.id, input.id),
@@ -187,7 +191,7 @@ export const anamneseRouter = createRouter({
   }),
 
   // ── Magic-Links ───────────────────────────────────────────────────────────
-  linkErstellen: authedQuery
+  linkErstellen: rechtQuery("anamnese")
     .input(
       z.object({
         formId: z.number().int(),
@@ -219,7 +223,7 @@ export const anamneseRouter = createRouter({
       return { id, token };
     }),
 
-  qr: authedQuery
+  qr: rechtQuery("anamnese")
     .input(z.object({ text: z.string().min(1).max(2000) }))
     .query(async ({ input }) => {
       const dataUrl = await QRCode.toDataURL(input.text, {

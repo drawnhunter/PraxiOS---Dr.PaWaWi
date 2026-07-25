@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RECHTE, type Recht } from "@contracts/constants";
 import {
   Dialog,
   DialogContent,
@@ -91,6 +93,26 @@ export function Benutzerverwaltung() {
     enabled: istAdmin,
     retry: false,
   });
+  const gruppen = trpc.auth.gruppenListe.useQuery(undefined, {
+    enabled: istAdmin,
+    retry: false,
+  });
+  const benutzerGruppe = trpc.auth.benutzerGruppe.useMutation({
+    onSuccess: () => utils.auth.benutzer.invalidate(),
+    onError: (e) => alert(e.message),
+  });
+  const gruppeAnlegen = trpc.auth.gruppeAnlegen.useMutation({
+    onSuccess: () => {
+      utils.auth.gruppenListe.invalidate();
+      setGruppenDialog(null);
+      setFehler(null);
+    },
+    onError: (e) => setFehler(e.message),
+  });
+  const gruppeLoeschen = trpc.auth.gruppeLoeschen.useMutation({
+    onSuccess: () => utils.auth.gruppenListe.invalidate(),
+    onError: (e) => alert(e.message),
+  });
 
   const [anlegenOffen, setAnlegenOffen] = useState(false);
   const [passwortZiel, setPasswortZiel] = useState<{ id: number; name: string } | null>(null);
@@ -104,8 +126,10 @@ export function Benutzerverwaltung() {
     name: "",
     password: "",
     role: "user" as "user" | "admin",
+    gruppeId: null as number | null,
     kalenderFarbe: null as string | null,
   });
+  const [gruppenDialog, setGruppenDialog] = useState<{ name: string; rechte: Recht[] } | null>(null);
   const [neuesPasswort, setNeuesPasswort] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
 
@@ -115,7 +139,7 @@ export function Benutzerverwaltung() {
     onSuccess: () => {
       invalid();
       setAnlegenOffen(false);
-      setForm({ username: "", name: "", password: "", role: "user", kalenderFarbe: null });
+      setForm({ username: "", name: "", password: "", role: "user", gruppeId: null, kalenderFarbe: null });
       setFehler(null);
     },
     onError: (e) => setFehler(e.message),
@@ -185,9 +209,31 @@ export function Benutzerverwaltung() {
                 {b.name ?? "–"}
               </td>
               <td className="px-2 py-2.5">
-                <Badge variant={b.role === "admin" ? "default" : "secondary"}>
-                  {b.role === "admin" ? "Praxisleitung" : "Therapeut:in"}
-                </Badge>
+                {b.role === "admin" ? (
+                  <Badge>Leitung/Arzt</Badge>
+                ) : (
+                  <Select
+                    value={b.gruppeId != null ? String(b.gruppeId) : "keine"}
+                    onValueChange={(v) =>
+                      benutzerGruppe.mutate({
+                        userId: b.id,
+                        gruppeId: v === "keine" ? null : Number(v),
+                      })
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="keine">— keine Rechte —</SelectItem>
+                      {(gruppen.data ?? []).map((g) => (
+                        <SelectItem key={g.id} value={String(g.id)}>
+                          {g.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 {!b.hatPasswort && (
                   <Badge variant="outline" className="ml-1.5 text-neutral-400">
                     kein Login
@@ -249,6 +295,121 @@ export function Benutzerverwaltung() {
       </table>
       </div>
 
+      {/* ── Gruppen (Rollen-System) ── */}
+      <div className="mt-6 border-t border-neutral-100 pt-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-neutral-700">Gruppen (Rechte)</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setFehler(null);
+              setGruppenDialog({ name: "", rechte: [] });
+            }}
+          >
+            <Plus className="mr-1.5 h-4 w-4" /> Neue Gruppe
+          </Button>
+        </div>
+        <p className="mb-3 text-xs text-neutral-500">
+          „Leitung/Arzt" darf alles (inkl. dieser Verwaltung). Allen anderen Benutzern
+          wird eine Gruppe mit Bereichs-Rechten zugewiesen.
+        </p>
+        <div className="space-y-2">
+          {(gruppen.data ?? []).map((g) => (
+            <div
+              key={g.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded border border-neutral-100 px-3 py-2"
+            >
+              <div>
+                <span className="text-sm font-medium">{g.name}</span>
+                <span className="ml-2 text-xs text-neutral-400">
+                  {g.mitglieder} Benutzer
+                </span>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {g.rechte.map((r) => (
+                    <Badge key={r} variant="secondary" className="text-xs">
+                      {RECHTE[r]}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              {g.mitglieder === 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-600"
+                  onClick={() => gruppeLoeschen.mutate({ id: g.id })}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Gruppen-Dialog */}
+      <Dialog open={gruppenDialog !== null} onOpenChange={(o) => !o && setGruppenDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Neue Gruppe</DialogTitle>
+          </DialogHeader>
+          {gruppenDialog && (
+            <div className="space-y-3">
+              <div>
+                <Label>Name *</Label>
+                <Input
+                  value={gruppenDialog.name}
+                  onChange={(e) => setGruppenDialog({ ...gruppenDialog, name: e.target.value })}
+                  placeholder="z. B. Empfang"
+                />
+              </div>
+              <div>
+                <Label className="mb-2 block">Rechte *</Label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {(Object.keys(RECHTE) as Recht[]).map((r) => (
+                    <label key={r} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={gruppenDialog.rechte.includes(r)}
+                        onCheckedChange={(v) =>
+                          setGruppenDialog({
+                            ...gruppenDialog,
+                            rechte: v
+                              ? [...gruppenDialog.rechte, r]
+                              : gruppenDialog.rechte.filter((x) => x !== r),
+                          })
+                        }
+                      />
+                      {RECHTE[r]}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {fehler && (
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{fehler}</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGruppenDialog(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              disabled={!gruppenDialog?.name.trim() || gruppenDialog?.rechte.length === 0 || gruppeAnlegen.isPending}
+              onClick={() =>
+                gruppenDialog &&
+                gruppeAnlegen.mutate({
+                  name: gruppenDialog.name.trim(),
+                  rechte: gruppenDialog.rechte,
+                })
+              }
+            >
+              Anlegen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Anlegen-Dialog */}
       <Dialog open={anlegenOffen} onOpenChange={setAnlegenOffen}>
         <DialogContent className="max-w-md">
@@ -291,11 +452,38 @@ export function Benutzerverwaltung() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">Therapeut:in</SelectItem>
-                  <SelectItem value="admin">Praxisleitung</SelectItem>
+                  <SelectItem value="user">Mit Gruppe (Personal)</SelectItem>
+                  <SelectItem value="admin">Leitung/Arzt (alles)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {form.role === "user" && (
+              <div>
+                <Label>Gruppe *</Label>
+                <Select
+                  value={form.gruppeId != null ? String(form.gruppeId) : ""}
+                  onValueChange={(v) => setForm({ ...form, gruppeId: Number(v) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Gruppe wählen …" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(gruppen.data ?? []).map((g) => (
+                      <SelectItem key={g.id} value={String(g.id)}>
+                        {g.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-neutral-400">
+                  Rechte der Gruppe:{" "}
+                  {(gruppen.data ?? [])
+                    .find((g) => g.id === form.gruppeId)
+                    ?.rechte.map((r) => RECHTE[r])
+                    .join(", ") ?? "—"}
+                </p>
+              </div>
+            )}
             <div>
               <Label className="mb-2 block">Kalenderfarbe (optional)</Label>
               <FarbAuswahl
@@ -312,13 +500,19 @@ export function Benutzerverwaltung() {
               Abbrechen
             </Button>
             <Button
-              disabled={!form.username || form.password.length < 8 || anlegen.isPending}
+              disabled={
+                !form.username ||
+                form.password.length < 8 ||
+                (form.role === "user" && form.gruppeId === null) ||
+                anlegen.isPending
+              }
               onClick={() =>
                 anlegen.mutate({
                   username: form.username,
                   password: form.password,
                   name: form.name.trim() || undefined,
                   role: form.role,
+                  gruppeId: form.role === "user" ? form.gruppeId : null,
                   kalenderFarbe: form.kalenderFarbe,
                 })
               }

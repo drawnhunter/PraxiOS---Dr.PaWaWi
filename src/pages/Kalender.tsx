@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../api/router";
 import { trpc } from "@/providers/trpc";
 import { datum } from "@/lib/format";
+import { gruppiereNachPatient } from "@/lib/kalenderGruppe";
 import { ENTRY_STATUS, type EntryStatus } from "@contracts/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarSync, Check, ChevronDown, ChevronLeft, ChevronRight, ClipboardCopy } from "lucide-react";
 
 // ── ISO-8601-Kalenderwochen-Hilfsfunktionen ─────────────────────────────────
 // Montag-basiert, reine String-/UTC-Rechnung (keine Zeitzonen-Falle).
@@ -174,6 +175,17 @@ export default function Kalender() {
   const [ausgewaehlt, setAusgewaehlt] = useState<KalenderEintrag | null>(null);
   const [status, setStatus] = useState<EntryStatus>("geplant");
   const [bemerkung, setBemerkung] = useState("");
+  const [aufgeklappt, setAufgeklappt] = useState<Set<string>>(new Set());
+  const [aboOffen, setAboOffen] = useState(false);
+  const [aboUrl, setAboUrl] = useState("");
+  const [aboKopiert, setAboKopiert] = useState(false);
+  const toggleAufklappen = (key: string) =>
+    setAufgeklappt((alt) => {
+      const neu = new Set(alt);
+      if (neu.has(key)) neu.delete(key);
+      else neu.add(key);
+      return neu;
+    });
 
   const utils = trpc.useUtils();
   const woche = trpc.kalender.woche.useQuery({ jahr, kw });
@@ -208,7 +220,12 @@ export default function Kalender() {
     <div>
       {/* ── Kopf mit KW-Navigation ── */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold tracking-tight">Kalender</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold tracking-tight">Kalender</h1>
+          <Button variant="outline" size="sm" onClick={() => setAboOffen(true)}>
+            <CalendarSync className="mr-1.5 h-4 w-4" /> Abonnieren
+          </Button>
+        </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => wocheWechseln(-1)}>
             <ChevronLeft className="h-4 w-4" />
@@ -258,17 +275,57 @@ export default function Kalender() {
                 {WOCHENTAGE_KURZ[i]}{" "}
                 <span className="tabular-nums">{datum(tag.datum)}</span>
               </div>
-              <div className="space-y-2 p-2">
+              <div className="space-y-1.5 p-2">
                 {sortiert.length === 0 && (
                   <p className="px-1 py-2 text-xs text-neutral-300">Keine Termine</p>
                 )}
-                {sortiert.map((eintrag) => (
-                  <TerminKarte
-                    key={eintrag.entry.id}
-                    eintrag={eintrag}
-                    onClick={() => oeffneEintrag(eintrag)}
-                  />
-                ))}
+                {gruppiereNachPatient(sortiert).map((gruppe) => {
+                  const key = `${tag.datum}|${gruppe.patientId}`;
+                  const offen = aufgeklappt.has(key);
+                  return (
+                    <div key={key} className="rounded-md border border-neutral-200 bg-white">
+                      <button
+                        type="button"
+                        onClick={() => toggleAufklappen(key)}
+                        className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left text-xs hover:bg-neutral-50"
+                      >
+                        <span className="flex items-center gap-1.5 font-medium text-neutral-900">
+                          {offen ? (
+                            <ChevronDown className="h-3.5 w-3.5 text-neutral-400" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 text-neutral-400" />
+                          )}
+                          <Link
+                            to={`/patienten/${gruppe.patientId}`}
+                            className="hover:underline"
+                            onClick={(ev) => ev.stopPropagation()}
+                          >
+                            {gruppe.patientName}
+                          </Link>
+                        </span>
+                        <span className="flex items-center gap-2 text-neutral-500">
+                          {gruppe.zeitspanne && (
+                            <span className="tabular-nums">{gruppe.zeitspanne}</span>
+                          )}
+                          <span className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] tabular-nums">
+                            {gruppe.eintraege.length}
+                          </span>
+                        </span>
+                      </button>
+                      {offen && (
+                        <div className="space-y-1.5 border-t border-neutral-100 p-2">
+                          {gruppe.eintraege.map((eintrag) => (
+                            <TerminKarte
+                              key={eintrag.entry.id}
+                              eintrag={eintrag}
+                              onClick={() => oeffneEintrag(eintrag)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -291,6 +348,30 @@ export default function Kalender() {
           ))}
         </div>
       )}
+
+      {/* ── Abo-Dialog (ICS-Feed) ── */}
+      <Dialog open={aboOffen} onOpenChange={setAboOffen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Kalender abonnieren (ICS)</DialogTitle>
+          </DialogHeader>
+          <AboInhalt
+            aboUrl={aboUrl}
+            setAboUrl={setAboUrl}
+            kopiert={aboKopiert}
+            onKopieren={async () => {
+              await navigator.clipboard.writeText(aboUrl);
+              setAboKopiert(true);
+              setTimeout(() => setAboKopiert(false), 2000);
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAboOffen(false)}>
+              Schließen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Eintrag-Dialog: Details + Status setzen ── */}
       <Dialog open={ausgewaehlt !== null} onOpenChange={(o) => !o && setAusgewaehlt(null)}>
@@ -369,6 +450,80 @@ export default function Kalender() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/** Abo-Dialog-Inhalt: Feed-URL laden/erzeugen + kopieren. */
+function AboInhalt({
+  aboUrl,
+  setAboUrl,
+  kopiert,
+  onKopieren,
+}: {
+  aboUrl: string;
+  setAboUrl: (u: string) => void;
+  kopiert: boolean;
+  onKopieren: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const [fehler, setFehler] = useState("");
+  const [laedt, setLaedt] = useState(true);
+  const neuToken = trpc.kalender.feedTokenNeu.useMutation({
+    onSuccess: (r) => {
+      setAboUrl(`${window.location.origin}${r.pfad}`);
+      setLaedt(false);
+    },
+    onError: (e) => {
+      setFehler(e.message);
+      setLaedt(false);
+    },
+  });
+
+  useEffect(() => {
+    utils.kalender.feedUrl
+      .fetch()
+      .then((r) => setAboUrl(`${window.location.origin}${r.pfad}`))
+      .catch((e) => setFehler(e.message))
+      .finally(() => setLaedt(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const neuErzeugen = () => {
+    setLaedt(true);
+    neuToken.mutate();
+  };
+
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-neutral-600">
+        Diese URL in Google Kalender („Weitere Kalender → Über URL“) oder Outlook
+        („Kalender hinzufügen → Aus dem Internet abonnieren“) eintragen. Zeigt
+        Termine von 2 Wochen zurück bis 12 Wochen voraus.
+      </p>
+      {laedt ? (
+        <p className="text-neutral-400">Lade Feed-URL …</p>
+      ) : fehler ? (
+        <p className="text-red-600">{fehler}</p>
+      ) : (
+        <div className="flex items-center gap-2">
+          <code className="max-w-full flex-1 overflow-x-auto rounded bg-neutral-50 px-2 py-2 font-mono text-xs">
+            {aboUrl}
+          </code>
+          <Button variant="outline" size="sm" onClick={onKopieren}>
+            <ClipboardCopy className="mr-1 h-3.5 w-3.5" />
+            {kopiert ? "Kopiert!" : "Kopieren"}
+          </Button>
+        </div>
+      )}
+      <p className="text-xs text-neutral-400">
+        Der Link enthält ein gemeinsames Geheimnis — nur an Personen weitergeben,
+        die den Kalender sehen dürfen. Bei Verlust/Missbrauch:{" "}
+        <button type="button" className="underline" onClick={neuErzeugen}>
+          neuen Link erzeugen
+        </button>{" "}
+        (alter wird ungültig).
+      </p>
     </div>
   );
 }

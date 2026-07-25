@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { authedQuery, createRouter } from "./middleware";
+import {
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   invoices,
@@ -65,7 +68,7 @@ async function ladeRechnungMitDetails(id: number) {
 }
 
 export const invoiceRouter = createRouter({
-  list: authedQuery
+  list: rechtQuery("abrechnung")
     .input(
       z
         .object({ status: z.enum(["entwurf", "finalisiert", "storniert"]).optional() })
@@ -81,12 +84,12 @@ export const invoiceRouter = createRouter({
       return rows;
     }),
 
-  get: authedQuery
+  get: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .query(({ input }) => ladeRechnungMitDetails(input.id)),
 
   /** Neuen Entwurf anlegen — Kundenadresse wird als Snapshot kopiert. */
-  createDraft: authedQuery
+  createDraft: rechtQuery("abrechnung")
     .input(z.object({ customerId: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -130,7 +133,7 @@ export const invoiceRouter = createRouter({
     }),
 
   /** Entwurf speichern (Kopf + Positionen). Nicht-finalisierte Belege only. */
-  updateDraft: authedQuery
+  updateDraft: rechtQuery("abrechnung")
     .input(z.object({ id: z.number(), kopf: kopfInput, items: z.array(itemInput) }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -179,7 +182,7 @@ export const invoiceRouter = createRouter({
     }),
 
   /** Finalisieren: Nummer vergeben, Snapshots einfrieren. Danach unveränderbar. */
-  finalize: authedQuery
+  finalize: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -258,7 +261,7 @@ export const invoiceRouter = createRouter({
     }),
 
   /** Zahlungseingang verbuchen. */
-  markPaid: authedQuery
+  markPaid: rechtQuery("abrechnung")
     .input(
       z.object({
         id: z.number(),
@@ -286,7 +289,7 @@ export const invoiceRouter = createRouter({
     }),
 
   /** Zahlung zurücksetzen (Korrektur, z.B. falscher Betrag eingetragen). */
-  unmarkPaid: authedQuery
+  unmarkPaid: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await getDb()
@@ -297,7 +300,7 @@ export const invoiceRouter = createRouter({
     }),
 
   /** Löschen nur im Entwurfsstadium — danach greift GoBD. */
-  delete: authedQuery
+  delete: rechtQuery("abrechnung")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -322,7 +325,7 @@ export const invoiceRouter = createRouter({
     }),
 
   /** Gutschrift (Storno) aus einer finalisierten Rechnung erzeugen. */
-  createCreditNote: authedQuery
+  createCreditNote: rechtQuery("abrechnung")
     .input(z.object({ invoiceId: z.number(), grund: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();

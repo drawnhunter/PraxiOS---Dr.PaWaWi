@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { authedQuery, adminQuery, createRouter } from "./middleware";
+import {
+  adminQuery,
+  createRouter,
+  rechtQuery,
+} from "./middleware";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./queries/connection";
 import {
@@ -67,7 +71,7 @@ const customerInput = z.object({
 });
 
 export const customerRouter = createRouter({
-  list: authedQuery
+  list: rechtQuery("akte")
     .input(
       z
         .object({
@@ -101,7 +105,7 @@ export const customerRouter = createRouter({
       return inklArch ? rows : rows.filter((r) => !r.archiviert);
     }),
 
-  get: authedQuery.input(z.object({ id: z.number() })).query(async ({ input }) => {
+  get: rechtQuery("akte").input(z.object({ id: z.number() })).query(async ({ input }) => {
     const patient = await getDb().query.customers.findFirst({
       where: eq(customers.id, input.id),
       with: {
@@ -118,7 +122,7 @@ export const customerRouter = createRouter({
     return patient;
   }),
 
-  create: authedQuery.input(customerInput).mutation(async ({ input }) => {
+  create: rechtQuery("akte").input(customerInput).mutation(async ({ input }) => {
     try {
       const [{ id }] = await getDb().insert(customers).values(input).$returningId();
       return { id };
@@ -133,7 +137,7 @@ export const customerRouter = createRouter({
     }
   }),
 
-  update: authedQuery
+  update: rechtQuery("akte")
     .input(z.object({ id: z.number(), data: customerInput }))
     .mutation(async ({ input }) => {
       try {
@@ -153,7 +157,7 @@ export const customerRouter = createRouter({
       }
     }),
 
-  setArchiviert: authedQuery
+  setArchiviert: rechtQuery("akte")
     .input(z.object({ id: z.number(), archiviert: z.boolean() }))
     .mutation(async ({ input }) => {
       await getDb()
@@ -164,12 +168,12 @@ export const customerRouter = createRouter({
     }),
 
   // ── PraxisWerk-Akte: Kontakte, Notizen, Ausfallquote, Löschkonzept ───────
-  addKontakt: authedQuery.input(kontaktInput).mutation(async ({ input }) => {
+  addKontakt: rechtQuery("akte").input(kontaktInput).mutation(async ({ input }) => {
     const [{ id }] = await getDb().insert(patientContacts).values(input).$returningId();
     return { id };
   }),
 
-  updateKontakt: authedQuery
+  updateKontakt: rechtQuery("akte")
     .input(
       z.object({
         id: z.number().int(),
@@ -184,14 +188,14 @@ export const customerRouter = createRouter({
       return { ok: true };
     }),
 
-  removeKontakt: authedQuery
+  removeKontakt: rechtQuery("akte")
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       await getDb().delete(patientContacts).where(eq(patientContacts.id, input.id));
       return { ok: true };
     }),
 
-  addNotiz: authedQuery
+  addNotiz: rechtQuery("akte")
     .input(z.object({ patientId: z.number().int(), text: z.string().trim().min(1) }))
     .mutation(async ({ ctx, input }) => {
       await schreibeTimeline({
@@ -204,7 +208,7 @@ export const customerRouter = createRouter({
       return { ok: true };
     }),
 
-  ausfallquote: authedQuery
+  ausfallquote: rechtQuery("akte")
     .input(z.object({ id: z.number().int() }))
     .query(async ({ input }) => {
       const db = getDb();

@@ -45,6 +45,8 @@ export const companySettings = mysqlTable("company_settings", {
   // PraxiOS: Arzt-zu-Arzt-Austausch (age-Verschlüsselung)
   // Öffentlicher Schlüssel (wird an Kollegen gegeben)
   ageRecipient: varchar("age_recipient", { length: 100 }),
+  // Shared-Secret für den ICS-Kalender-Feed (/api/ics/<token>.ics)
+  kalenderToken: varchar("kalender_token", { length: 64 }),
   // Geheimer Schlüssel — verlässt den Server NIE (wird in der API nicht ausgeliefert)
   ageSecret: varchar("age_secret", { length: 100 }),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
@@ -454,6 +456,8 @@ export const users = mysqlTable("users", {
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   // Farbe des Therapeuten im Kalender (z. B. "#0F766E")
   kalenderFarbe: varchar("kalenderFarbe", { length: 20 }),
+  // Rechte-Gruppe (Med./Kaufm. Personal oder eigene Gruppe); admin braucht keine
+  gruppeId: bigint("gruppe_id", { mode: "number", unsigned: true }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()
@@ -464,6 +468,14 @@ export const users = mysqlTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+// ── Rechte-Gruppen (PraxiOS Rollen-System) ──────────────────────────────────
+export const gruppen = mysqlTable("gruppen", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  rechte: text("rechte").notNull(), // JSON: Recht[] (s. contracts/constants RECHTE)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
 
 // ── Mahnwesen (Zahlungserinnerungen/Mahnungen zu Rechnungen) ────────────────
 export const reminders = mysqlTable(
@@ -817,3 +829,4 @@ export type AnamnesisLink = typeof anamnesisLinks.$inferSelect;
 export type AnamnesisSubmission = typeof anamnesisSubmissions.$inferSelect;
 export type Kollege = typeof kollegen.$inferSelect;
 export type AktenExport = typeof aktenExporte.$inferSelect;
+export type Gruppe = typeof gruppen.$inferSelect;

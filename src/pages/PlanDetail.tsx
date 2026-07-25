@@ -46,7 +46,7 @@ import {
   tageAddieren,
   uhrzeitBereich,
 } from "./Kalender";
-import { CalendarPlus, Copy, Download, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, Copy, Download, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type PlanDetailDaten = RouterOutputs["plaene"]["byId"];
@@ -94,7 +94,11 @@ export default function PlanDetail() {
   const planId = Number(id);
 
   const utils = trpc.useUtils();
-  const plan = trpc.plaene.byId.useQuery({ id: planId });
+  // Auto-Refresh alle 15 s (Mehrbenutzer-Betrieb) + manueller Refresh-Button
+  const plan = trpc.plaene.byId.useQuery(
+    { id: planId },
+    { refetchInterval: 15000, refetchIntervalInBackground: false },
+  );
   const leistungen = trpc.leistungen.list.useQuery({});
   // Therapeuten-Liste (für alle eingeloggten Nutzer, ohne sensible Felder)
   const benutzer = trpc.auth.therapeuten.useQuery();
@@ -138,6 +142,7 @@ export default function PlanDetail() {
   const navigate = useNavigate();
   const [tagDuplikat, setTagDuplikat] = useState<string | null>(null);
   const [duplikatZiel, setDuplikatZiel] = useState("");
+  const [duplikatModus, setDuplikatModus] = useState<"kopieren" | "verschieben">("kopieren");
   const dokumentieren = trpc.plaene.dokumentieren.useMutation({ onSuccess: invalidate });
   const speichernNeu = trpc.plaene.addEntry.useMutation({
     onSuccess: () => {
@@ -322,6 +327,16 @@ export default function PlanDetail() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            title="Neu laden (Mehrbenutzer-Sync, alle 15 s automatisch)"
+            onClick={() => plan.refetch()}
+            disabled={plan.isRefetching}
+          >
+            <RefreshCw className={cn("mr-1.5 h-4 w-4", plan.isRefetching && "animate-spin")} />
+            Aktualisieren
+          </Button>
           {p.status === "geplant" && (
             <Button onClick={() => setStatus.mutate({ id: planId, status: "aktiv" })}>
               Aktivieren
@@ -549,8 +564,20 @@ export default function PlanDetail() {
           </DialogHeader>
           <p className="text-sm text-neutral-600">
             Alle Einträge vom {tagDuplikat ? datum(tagDuplikat) : ""} auf einen anderen
-            Tag im Plan-Zeitraum kopieren (Kopien starten als „geplant“).
+            Tag im Plan-Zeitraum übertragen (Kopien starten als „geplant“).
           </p>
+          <div>
+            <Label>Aktion</Label>
+            <Select value={duplikatModus} onValueChange={(v) => setDuplikatModus(v as "kopieren" | "verschieben")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="kopieren">Kopieren (Tag bleibt bestehen)</SelectItem>
+                <SelectItem value="verschieben">Verschieben (Tag wird umgelegt)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div>
             <Label>Zieldatum</Label>
             <Input
@@ -576,10 +603,15 @@ export default function PlanDetail() {
                   planId,
                   vonDatum: tagDuplikat,
                   nachDatum: duplikatZiel,
+                  modus: duplikatModus,
                 })
               }
             >
-              {dupliziereTag.isPending ? "Dupliziere …" : "Duplizieren"}
+              {dupliziereTag.isPending
+                ? "Übertrage …"
+                : duplikatModus === "verschieben"
+                  ? "Verschieben"
+                  : "Kopieren"}
             </Button>
           </DialogFooter>
         </DialogContent>
