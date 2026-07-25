@@ -49,6 +49,7 @@ export const DOKUMENT_KATEGORIEN = {
   arztbrief: "Arztbrief",
   rezept: "Rezept",
   einverstaendnis: "Einverständnis",
+  anamnesebogen: "Anamnesebogen",
   sonstiges: "Sonstiges",
 } as const;
 export type DokumentKategorie = keyof typeof DOKUMENT_KATEGORIEN;

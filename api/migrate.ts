@@ -27,6 +27,16 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "users", spalte: "kalenderFarbe", ddl: "ALTER TABLE users ADD COLUMN kalenderFarbe VARCHAR(20) NULL AFTER role" },
 ];
 
+// Spalten-Aenderungen (Enum-Erweiterungen, idempotent per SHOW COLUMNS)
+const SPALTEN_AENDERUNGEN: { tabelle: string; spalte: string; ddl: string; pruefWert: string }[] = [
+  {
+    tabelle: "documents",
+    spalte: "kategorie",
+    ddl: "ALTER TABLE documents MODIFY COLUMN kategorie ENUM('befund','arztbrief','rezept','einverstaendnis','anamnesebogen','sonstiges') NOT NULL DEFAULT 'sonstiges'",
+    pruefWert: "anamnesebogen",
+  },
+];
+
 const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
   {
     tabelle: "konditionen",
@@ -177,6 +187,69 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
   },
+  // PraxiOS: Anamnesebögen
+  {
+    tabelle: "anamnesis_blocks",
+    ddl: `CREATE TABLE IF NOT EXISTS anamnesis_blocks (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      typ VARCHAR(30) NOT NULL,
+      titel VARCHAR(255) NOT NULL,
+      config TEXT NOT NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "anamnesis_forms",
+    ddl: `CREATE TABLE IF NOT EXISTS anamnesis_forms (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      titel VARCHAR(255) NOT NULL,
+      beschreibung TEXT NULL,
+      schema_json TEXT NOT NULL,
+      aktiv TINYINT(1) NOT NULL DEFAULT 1,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "anamnesis_links",
+    ddl: `CREATE TABLE IF NOT EXISTS anamnesis_links (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      form_id BIGINT UNSIGNED NOT NULL,
+      patient_id BIGINT UNSIGNED NULL,
+      token VARCHAR(64) NOT NULL,
+      notiz VARCHAR(255) NULL,
+      status ENUM('offen','eingereicht','abgelaufen') NOT NULL DEFAULT 'offen',
+      laeuft_ab_am TIMESTAMP NOT NULL,
+      eingereicht_am TIMESTAMP NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX anamnesis_links_token_unique (token),
+      INDEX anamnesis_links_form_idx (form_id),
+      CONSTRAINT links_form_fk FOREIGN KEY (form_id) REFERENCES anamnesis_forms(id) ON DELETE CASCADE,
+      CONSTRAINT links_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "anamnesis_submissions",
+    ddl: `CREATE TABLE IF NOT EXISTS anamnesis_submissions (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      link_id BIGINT UNSIGNED NOT NULL,
+      form_id BIGINT UNSIGNED NOT NULL,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      daten TEXT NOT NULL,
+      unterschrift_name VARCHAR(255) NOT NULL,
+      datenschutz_zugestimmt TINYINT(1) NOT NULL DEFAULT 0,
+      document_id BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX anamnesis_sub_patient_idx (patient_id),
+      CONSTRAINT sub_link_fk FOREIGN KEY (link_id) REFERENCES anamnesis_links(id) ON DELETE CASCADE,
+      CONSTRAINT sub_form_fk FOREIGN KEY (form_id) REFERENCES anamnesis_forms(id) ON DELETE CASCADE,
+      CONSTRAINT sub_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT sub_doc_fk FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL
+    )`,
+  },
 ];
 
 const NEUE_INDIZES: { tabelle: string; index: string; ddl: string }[] = [
@@ -221,6 +294,19 @@ export async function migriereFehlendeSpalten(): Promise<void> {
     if (Number(rows[0]?.n ?? 0) === 0) {
       console.log(`[migrate] + Index ${i.index}`);
       await db.execute(sql.raw(i.ddl));
+    }
+  }
+
+  for (const a of SPALTEN_AENDERUNGEN) {
+    const [rows] = (await db.execute(
+      sql.raw(
+        `SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${dbName}' AND TABLE_NAME='${a.tabelle}' AND COLUMN_NAME='${a.spalte}'`,
+      ),
+    )) as unknown as [{ t: string }[], unknown];
+    const typ = rows[0]?.t ?? "";
+    if (typ && !typ.includes(a.pruefWert)) {
+      console.log(`[migrate] ~ ${a.tabelle}.${a.spalte}`);
+      await db.execute(sql.raw(a.ddl));
     }
   }
 }

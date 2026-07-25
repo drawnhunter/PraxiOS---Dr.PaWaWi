@@ -22,6 +22,7 @@ import { therapyImportRouter } from "./therapyImportRouter";
 import { planRouter } from "./planRouter";
 import { calendarRouter } from "./calendarRouter";
 import { documentRouter } from "./documentRouter";
+import { anamneseRouter } from "./anamneseRouter";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -49,6 +50,7 @@ export const appRouter = createRouter({
   plaene: planRouter,
   kalender: calendarRouter,
   dokumente: documentRouter,
+  anamnese: anamneseRouter,
   leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 

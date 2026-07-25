@@ -639,6 +639,7 @@ export const documents = mysqlTable(
       "arztbrief",
       "rezept",
       "einverstaendnis",
+      "anamnesebogen",
       "sonstiges",
     ])
       .notNull()
@@ -693,3 +694,94 @@ export type PlanEntry = typeof planEntries.$inferSelect;
 export type Dokument = typeof documents.$inferSelect;
 export type TimelineEvent = typeof timelineEvents.$inferSelect;
 export type LoeschprotokollEintrag = typeof loeschprotokoll.$inferSelect;
+
+// ── PraxiOS: Anamnesebögen (Fragebogen-Creator + Magic-Links) ───────────────
+// Wiederverwendbarer Block-Katalog (Blocksystem)
+export const anamnesisBlocks = mysqlTable("anamnesis_blocks", {
+  id: serial("id").primaryKey(),
+  // typ: checkboxen | textfeld | textfeld_schreibfeld | skala_1_10 | haeufigkeit
+  typ: varchar("typ", { length: 30 }).notNull(),
+  titel: varchar("titel", { length: 255 }).notNull(),
+  config: text("config").notNull(), // JSON, je nach typ (s. contracts/anamnese.ts)
+  createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Bögen = Kopfbogen (Pflicht-Stammdaten, fix) + geordnete Blockliste (JSON)
+export const anamnesisForms = mysqlTable("anamnesis_forms", {
+  id: serial("id").primaryKey(),
+  titel: varchar("titel", { length: 255 }).notNull(),
+  beschreibung: text("beschreibung"),
+  schemaJson: text("schema_json").notNull(), // JSON: FormBlock[] (s. contracts)
+  aktiv: boolean("aktiv").notNull().default(true),
+  createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+export const anamnesisLinks = mysqlTable(
+  "anamnesis_links",
+  {
+    id: serial("id").primaryKey(),
+    formId: bigint("form_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => anamnesisForms.id, { onDelete: "cascade" }),
+    // Optionaler vorbestimmter Patient (Vorausfüllung + Update statt Neuanlage)
+    patientId: bigint("patient_id", { mode: "number", unsigned: true }).references(
+      () => customers.id,
+      { onDelete: "set null" },
+    ),
+    token: varchar("token", { length: 64 }).notNull(),
+    notiz: varchar("notiz", { length: 255 }), // z. B. „für Frau M. (WhatsApp)"
+    status: mysqlEnum("status", ["offen", "eingereicht", "abgelaufen"])
+      .notNull()
+      .default("offen"),
+    laeuftAbAm: timestamp("laeuft_ab_am").notNull(),
+    eingereichtAm: timestamp("eingereicht_am"),
+    createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("anamnesis_links_token_unique").on(t.token),
+    index("anamnesis_links_form_idx").on(t.formId),
+  ],
+);
+
+export const anamnesisSubmissions = mysqlTable(
+  "anamnesis_submissions",
+  {
+    id: serial("id").primaryKey(),
+    linkId: bigint("link_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => anamnesisLinks.id, { onDelete: "cascade" }),
+    formId: bigint("form_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => anamnesisForms.id, { onDelete: "cascade" }),
+    patientId: bigint("patient_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    daten: text("daten").notNull(), // JSON: Kopfbogen + Antworten je Block
+    unterschriftName: varchar("unterschrift_name", { length: 255 }).notNull(),
+    datenschutzZugestimmt: boolean("datenschutz_zugestimmt").notNull().default(false),
+    documentId: bigint("document_id", { mode: "number", unsigned: true }).references(
+      () => documents.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("anamnesis_sub_patient_idx").on(t.patientId)],
+);
+
+export type AnamnesisBlock = typeof anamnesisBlocks.$inferSelect;
+export type AnamnesisForm = typeof anamnesisForms.$inferSelect;
+export type AnamnesisLink = typeof anamnesisLinks.$inferSelect;
+export type AnamnesisSubmission = typeof anamnesisSubmissions.$inferSelect;

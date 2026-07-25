@@ -490,7 +490,7 @@ CREATE TABLE `documents` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `patient_id` bigint unsigned NOT NULL,
   `plan_id` bigint unsigned DEFAULT NULL,
-  `kategorie` enum('befund','arztbrief','rezept','einverstaendnis','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'sonstiges',
+  `kategorie` enum('befund','arztbrief','rezept','einverstaendnis','anamnesebogen','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'sonstiges',
   `dateiname` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `dateipfad` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
   `mime_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -531,6 +531,68 @@ CREATE TABLE `loeschprotokoll` (
   `geloescht_von` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `anamnesis_blocks`;
+CREATE TABLE `anamnesis_blocks` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `typ` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `titel` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `config` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `anamnesis_forms`;
+CREATE TABLE `anamnesis_forms` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `titel` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `beschreibung` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `schema_json` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `aktiv` tinyint(1) NOT NULL DEFAULT '1',
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `anamnesis_links`;
+CREATE TABLE `anamnesis_links` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `form_id` bigint unsigned NOT NULL,
+  `patient_id` bigint unsigned DEFAULT NULL,
+  `token` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `notiz` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('offen','eingereicht','abgelaufen') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'offen',
+  `laeuft_ab_am` timestamp NOT NULL,
+  `eingereicht_am` timestamp NULL DEFAULT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `anamnesis_links_token_unique` (`token`),
+  KEY `anamnesis_links_form_idx` (`form_id`),
+  CONSTRAINT `links_form_fk` FOREIGN KEY (`form_id`) REFERENCES `anamnesis_forms` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `links_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `anamnesis_submissions`;
+CREATE TABLE `anamnesis_submissions` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `link_id` bigint unsigned NOT NULL,
+  `form_id` bigint unsigned NOT NULL,
+  `patient_id` bigint unsigned NOT NULL,
+  `daten` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `unterschrift_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `datenschutz_zugestimmt` tinyint(1) NOT NULL DEFAULT '0',
+  `document_id` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `anamnesis_sub_patient_idx` (`patient_id`),
+  CONSTRAINT `sub_link_fk` FOREIGN KEY (`link_id`) REFERENCES `anamnesis_links` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `sub_form_fk` FOREIGN KEY (`form_id`) REFERENCES `anamnesis_forms` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `sub_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `sub_doc_fk` FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;

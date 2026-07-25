@@ -39,7 +39,14 @@ export const documentRouter = createRouter({
         id: z.number().int(),
         data: z.object({
           kategorie: z
-            .enum(["befund", "arztbrief", "rezept", "einverstaendnis", "sonstiges"])
+            .enum([
+              "befund",
+              "arztbrief",
+              "rezept",
+              "einverstaendnis",
+              "anamnesebogen",
+              "sonstiges",
+            ])
             .optional(),
           notiz: z.string().max(500).nullable().optional(),
           planId: z.number().int().nullable().optional(),

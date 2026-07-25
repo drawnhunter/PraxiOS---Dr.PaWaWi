@@ -2,6 +2,23 @@
 
 Alle nennenswerten Änderungen. Schema: [Version] — Datum — Kurztitel.
 
+## [0.9.2] — 2026-07-26 — Anamnesebögen (Fragebogen-Creator)
+
+- **Bogen-Editor mit Block-Katalog**: fünf Blocktypen (Ankreuz-Fragen 1/2-spaltig,
+  Textfeld, Textfeld mit Schreibfeld, Skala 1–10, Häufigkeitsskala
+  „gar nicht / wenig / normal / häufig / sehr häufig“); Blöcke optional im
+  Katalog wiederverwendbar; Kopfbogen „Persönliche Daten“ fix (Pflichtfelder
+  für saubere Akte/Rechnung)
+- **Magic-Links** (72 h Token, ohne Login) **+ QR-Code** (Data-URL/PNG)
+- **Öffentliche Ausfüll-Seite** `/bogen/:token`: Vorbefüllung bei bekannten
+  Patienten, Pflicht-Stammdaten, Datenschutz-Checkbox, getippte Unterschrift
+- **Einreichung**: Patienten-Zuordnung (Link > Name+DOB-Match > Neuanlage,
+  nur Lücken ergänzen), ausgefüllter Bogen als PDF in der Akte
+  (Dokument-Kategorie „Anamnesebogen“, Enum erweitert), Timeline-Eintrag
+- **Leerer Bogen als PDF** zum Drucken/Verschicken
+- Neue Tabellen: anamnesis_blocks/forms/links/submissions (+migrate/schema.sql)
+- 8 neue Tests (Patientenzuordnung, PDF-Render-Smoke) — gesamt 29/29 grün
+
 ## [0.9.1] — 2026-07-24 — Formalien & Branding
 
 - Rebranding der Oberfläche auf **PraxiOS** (technische Namen — Docker-Projekt,

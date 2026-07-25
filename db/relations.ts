@@ -202,3 +202,39 @@ export const timelineEventsRelations = relations(timelineEvents, ({ one }) => ({
     references: [customers.id],
   }),
 }));
+
+// ── PraxiOS: Anamnesebögen ──────────────────────────────────────────────────
+import { anamnesisForms, anamnesisLinks, anamnesisSubmissions } from "./schema";
+
+export const anamnesisFormsRelations = relations(anamnesisForms, ({ many }) => ({
+  links: many(anamnesisLinks),
+}));
+
+export const anamnesisLinksRelations = relations(anamnesisLinks, ({ one }) => ({
+  form: one(anamnesisForms, {
+    fields: [anamnesisLinks.formId],
+    references: [anamnesisForms.id],
+  }),
+  patient: one(customers, {
+    fields: [anamnesisLinks.patientId],
+    references: [customers.id],
+  }),
+}));
+
+export const anamnesisSubmissionsRelations = relations(
+  anamnesisSubmissions,
+  ({ one }) => ({
+    link: one(anamnesisLinks, {
+      fields: [anamnesisSubmissions.linkId],
+      references: [anamnesisLinks.id],
+    }),
+    form: one(anamnesisForms, {
+      fields: [anamnesisSubmissions.formId],
+      references: [anamnesisForms.id],
+    }),
+    patient: one(customers, {
+      fields: [anamnesisSubmissions.patientId],
+      references: [customers.id],
+    }),
+  }),
+);

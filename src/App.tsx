@@ -7,6 +7,8 @@ import Patients from "@/pages/Patients";
 import PatientDetail from "@/pages/PatientDetail";
 import Plans from "@/pages/Plans";
 import PlanDetail from "@/pages/PlanDetail";
+import Anamnese from "@/pages/Anamnese";
+import Bogen from "@/pages/Bogen";
 import Statistics from "@/pages/Statistics";
 import BankImport from "@/pages/BankImport";
 import InvoiceImport from "@/pages/InvoiceImport";
@@ -38,6 +40,7 @@ export default function App() {
         <Route path="/patienten/:id" element={<PatientDetail />} />
         <Route path="/plaene" element={<Plans />} />
         <Route path="/plaene/:id" element={<PlanDetail />} />
+        <Route path="/anamnese" element={<Anamnese />} />
         <Route path="/therapie-import" element={<TherapyImport />} />
         <Route path="/uebersicht" element={<Dashboard />} />
         <Route path="/statistik" element={<Statistics />} />
@@ -58,6 +61,7 @@ export default function App() {
         <Route path="/produkte" element={<Products />} />
         <Route path="/einstellungen" element={<SettingsPage />} />
       </Route>
+      <Route path="/bogen/:token" element={<Bogen />} />
       <Route path="/login" element={<Login />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
