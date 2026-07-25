@@ -1,7 +1,7 @@
 {
-  "name": "PraxiOS",
-  "short_name": "PraxiOS",
-  "description": "PraxiOS — Patientenakte, Therapiepläne, Kalender, Abrechnung",
+  "name": "Dr.PaWaWi",
+  "short_name": "Dr.PaWaWi",
+  "description": "Dr.PaWaWi — Patientenakte, Therapiepläne, Kalender, Abrechnung (PraxiOS)",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fafafa",

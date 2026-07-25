@@ -135,7 +135,7 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 py-8">
       <Card className={`w-full ${einrichtung && schritt === 2 ? "max-w-2xl" : "max-w-sm"}`}>
         <CardHeader className="text-center">
-          <CardTitle className="text-xl">PraxiOS</CardTitle>
+          <CardTitle className="text-xl">Dr.PaWaWi</CardTitle>
           <p className="pt-1 text-sm text-neutral-500">
             {einrichtung
               ? schritt === 1

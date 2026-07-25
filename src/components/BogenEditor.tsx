@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArrowDown, ArrowUp, Plus, Trash2, Library } from "lucide-react";
+import { FragenZellen } from "@/components/FragenZellen";
 
 const STANDARD_CONFIG: Record<BlockTyp, BlockConfig> = {
   checkboxen: { fragen: [], spalten: 2 },
@@ -96,7 +97,19 @@ export function BogenEditor({ offen, onOpenChange, formId, onGespeichert }: Prop
   const absenden = () => {
     if (!titel.trim()) return setFehler("Titel fehlt.");
     if (bloecke.length === 0) return setFehler("Mindestens ein Block ist nötig.");
-    const unvollstaendig = bloecke.find(
+    // Leere Frage-Zellen vor dem Speichern entfernen
+    const bereinigt = bloecke.map((b) =>
+      b.typ === "checkboxen" || b.typ === "haeufigkeit"
+        ? {
+            ...b,
+            config: {
+              ...b.config,
+              fragen: (b.config.fragen ?? []).map((s) => s.trim()).filter(Boolean),
+            },
+          }
+        : b,
+    );
+    const unvollstaendig = bereinigt.find(
       (b) =>
         !b.titel.trim() ||
         (b.typ === "checkboxen" && !(b.config.fragen ?? []).length) ||
@@ -106,7 +119,7 @@ export function BogenEditor({ offen, onOpenChange, formId, onGespeichert }: Prop
     );
     if (unvollstaendig) return setFehler(`Block „${unvollstaendig.titel || "ohne Titel"}“ ist unvollständig.`);
     setFehler("");
-    const daten = { titel: titel.trim(), beschreibung: beschreibung.trim() || null, schemaJson: bloecke };
+    const daten = { titel: titel.trim(), beschreibung: beschreibung.trim() || null, schemaJson: bereinigt };
     if (formId) aktualisieren.mutate({ id: formId, data: daten });
     else speichern.mutate(daten);
   };
@@ -172,6 +185,27 @@ export function BogenEditor({ offen, onOpenChange, formId, onGespeichert }: Prop
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {block.typ === "checkboxen" && (
+                    <div>
+                      <Label>Spalten</Label>
+                      <Select
+                        value={String(block.config.spalten ?? 2)}
+                        onValueChange={(v) =>
+                          aktualisiereBlock(i, {
+                            config: { ...block.config, spalten: Number(v) as 1 | 2 },
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-36">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 Spalte</SelectItem>
+                          <SelectItem value="2">2 Spalten</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="sm:col-span-2">
                     <Label>Block-Titel *</Label>
                     <Input
@@ -271,42 +305,34 @@ function BlockConfigEditor({
   block: FormBlock;
   onChange: (config: BlockConfig) => void;
 }) {
-  if (block.typ === "checkboxen" || block.typ === "haeufigkeit") {
+  if (block.typ === "checkboxen") {
+    // Zellen-Editor: jede Frage eine Eingabe-Zelle (Navigation per Pfeiltasten)
     return (
-      <>
-        <div className={block.typ === "checkboxen" ? "" : "sm:col-span-2"}>
-          <Label>Fragen (eine pro Zeile) *</Label>
-          <Textarea
-            rows={3}
-            value={(block.config.fragen ?? []).join("\n")}
-            onChange={(e) =>
-              onChange({
-                ...block.config,
-                fragen: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
-              })
-            }
-          />
-        </div>
-        {block.typ === "checkboxen" && (
-          <div>
-            <Label>Spalten</Label>
-            <Select
-              value={String(block.config.spalten ?? 2)}
-              onValueChange={(v) =>
-                onChange({ ...block.config, spalten: Number(v) as 1 | 2 })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 Spalte</SelectItem>
-                <SelectItem value="2">2 Spalten</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </>
+      <div className="sm:col-span-2">
+        <Label>Fragen *</Label>
+        <FragenZellen
+          fragen={block.config.fragen ?? []}
+          spalten={block.config.spalten ?? 2}
+          onChange={(fragen) => onChange({ ...block.config, fragen })}
+        />
+      </div>
+    );
+  }
+  if (block.typ === "haeufigkeit") {
+    return (
+      <div className="sm:col-span-2">
+        <Label>Fragen (eine pro Zeile) *</Label>
+        <Textarea
+          rows={3}
+          value={(block.config.fragen ?? []).join("\n")}
+          onChange={(e) =>
+            onChange({
+              ...block.config,
+              fragen: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+            })
+          }
+        />
+      </div>
     );
   }
   if (block.typ === "textfeld" || block.typ === "textfeld_schreibfeld") {

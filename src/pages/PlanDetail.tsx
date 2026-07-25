@@ -5,7 +5,7 @@ import type { AppRouter } from "../../api/router";
 import { trpc } from "@/providers/trpc";
 import { datum } from "@/lib/format";
 import { blobHerunterladen } from "@/lib/downloads";
-import { ENTRY_STATUS, KATEGORIE_LABEL, type EntryStatus } from "@contracts/constants";
+import { ENTRY_STATUS, type EntryStatus } from "@contracts/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,13 +32,12 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import SerienAssistent from "@/components/SerienAssistent";
+import { LeistungCombobox } from "@/components/LeistungCombobox";
 import { PlanStatusBadge } from "./Plans";
 import {
   datumZuKw,
@@ -173,16 +172,16 @@ export default function PlanDetail() {
     return [...map.entries()].map(([tid, name]) => ({ id: tid, name }));
   }, [benutzer.data, plan.data]);
 
-  // Leistungen nach Kategorie gruppieren
-  const leistungsGruppen = useMemo(() => {
-    const map = new Map<string, NonNullable<typeof leistungen.data>>();
-    for (const l of leistungen.data ?? []) {
-      const kat = l.kategorie ? KATEGORIE_LABEL[l.kategorie] : "Sonstige";
-      if (!map.has(kat)) map.set(kat, []);
-      map.get(kat)!.push(l);
-    }
-    return [...map.entries()];
-  }, [leistungen.data]);
+  // Leistungen nach Kategorie gruppieren (für die Combobox-Optionen)
+  const leistungsOptionen = useMemo(
+    () =>
+      (leistungen.data ?? []).map((l) => ({
+        id: l.id,
+        name: l.name,
+        kategorie: l.kategorie,
+      })),
+    [leistungen.data],
+  );
 
   if (plan.isLoading) return <p className="text-sm text-neutral-500">Lade …</p>;
   if (!plan.data)
@@ -490,30 +489,17 @@ export default function PlanDetail() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="col-span-2">
                 <Label>Leistung</Label>
-                <Select
-                  value={eintragForm.leistungAuswahl}
-                  onValueChange={(v) =>
+                <LeistungCombobox
+                  leistungen={leistungsOptionen}
+                  auswahl={eintragForm.leistungAuswahl}
+                  freitext={eintragForm.leistungFreitext}
+                  onAuswahl={(v) =>
                     setEintragForm({ ...eintragForm, leistungAuswahl: v })
                   }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="keine">Keine Leistung</SelectItem>
-                    <SelectItem value="freitext">Freitext</SelectItem>
-                    {leistungsGruppen.map(([kategorie, liste]) => (
-                      <SelectGroup key={kategorie}>
-                        <SelectLabel>{kategorie}</SelectLabel>
-                        {liste.map((l) => (
-                          <SelectItem key={l.id} value={String(l.id)}>
-                            {l.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onFreitext={(t) =>
+                    setEintragForm({ ...eintragForm, leistungFreitext: t })
+                  }
+                />
               </div>
               {eintragForm.leistungAuswahl === "freitext" && (
                 <div className="col-span-2">

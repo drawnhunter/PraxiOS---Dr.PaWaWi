@@ -2,6 +2,21 @@
 
 Alle nennenswerten Änderungen. Schema: [Version] — Datum — Kurztitel.
 
+## [0.9.3] — 2026-07-26 — UX & Branding Dr.PaWaWi
+
+- **Rebranding auf Dr.PaWaWi** (Menü-Titel, Login, Manifest); Fußzeile im Menü
+  zeigt „Dr.PaWaWi v<Version> · PraxiOS" (Version aus `src/const.ts`)
+- **Leistungs-Auswahl als Combobox** (Therapieplan-Eintrag): Tippen filtert
+  Katalog-Vorschläge (gruppiert GOÄ/§ 10), Chevron klappt die Liste auf,
+  „Freitext: …" bei Nicht-Katalog-Leistungen — kein Scrollen mehr nötig
+- **Ankreuz-Fragen als Zellen-Editor** (Bogen-Editor): erst Spaltenwahl (1/2),
+  dann Titel, dann Fragen als Eingabe-Zellen im passenden Raster; Navigation
+  per Pfeiltasten, Enter legt neue Zelle an, Backspace auf leerer Zelle löscht,
+  leere Zellen werden beim Speichern entfernt; Umbrüche macht das Layout
+  automatisch (angepasst an die Spalten)
+- Archive werden vor dem Packen auf Registry-URLs geprüft (Mirror-Fix bleibt)
+- Tests: 32/32 grün (inkl. Zellen-Navigation)
+
 ## [0.9.2] — 2026-07-26 — Anamnesebögen (Fragebogen-Creator)
 
 - **Bogen-Editor mit Block-Katalog**: fünf Blocktypen (Ankreuz-Fragen 1/2-spaltig,

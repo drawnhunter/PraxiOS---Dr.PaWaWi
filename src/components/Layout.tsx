@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { APP_VERSION } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
 
 // Dr.ReWaWi: Navigation auf den Abrechnungs-Workflow zugeschnitten.
@@ -60,7 +61,7 @@ export default function Layout() {
     <>
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-5">
         <div>
-          <div className="text-sm font-semibold tracking-tight">PraxiOS</div>
+          <div className="text-sm font-semibold tracking-tight">Dr.PaWaWi</div>
           <div className="text-xs text-neutral-500">Akte &amp; Abrechnung</div>
         </div>
         <button
@@ -105,7 +106,7 @@ export default function Layout() {
             <LogOut className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="text-[11px] text-neutral-400">PraxiOS</div>
+        <div className="text-[11px] text-neutral-400">{`Dr.PaWaWi v${APP_VERSION} · PraxiOS`}</div>
       </div>
     </>
   );
@@ -122,7 +123,7 @@ export default function Layout() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="text-sm font-semibold tracking-tight">PraxiOS</span>
+          <span className="text-sm font-semibold tracking-tight">Dr.PaWaWi</span>
         </div>
         <button
           onClick={logout}
