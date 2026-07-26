@@ -16,6 +16,10 @@ const productInput = z.object({
   ekPreisNetto: z.string().regex(/^\d+(\.\d{1,2})?$/, "Preis mit max. 2 Dezimalstellen").nullable().optional(),
   kategorie: z.enum(["leistung", "auslage"]).default("leistung"),
   importNamen: z.string().nullable().optional(),
+  artikelnummer: z.string().max(100).nullable().optional(),
+  barcode: z.string().max(100).nullable().optional(),
+  mindestbestand: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+  lagerAktiv: z.boolean().optional(),
   ustSatz: z.number().int().refine((v) => [19, 7, 0].includes(v), "Nur 19 %, 7 % oder 0 %"),
 });
 

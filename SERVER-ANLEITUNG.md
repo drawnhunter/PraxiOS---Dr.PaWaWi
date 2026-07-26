@@ -289,3 +289,51 @@ Handkorrekturen mehr nötig.**
 1. `LOCAL_AUTH_BYPASS` **niemals** auf dem Server setzen.
 2. Regelmäßig: `sudo apt update && sudo apt upgrade -y`
 3. Das Datenbank-Passwort aus Teil 4 gehört in keine E-Mail und keinen Chat.
+
+---
+
+## PraxiOS 1.0: Restore-Test (jährlich, Protokoll führen!)
+
+Ziel: Nachweis, dass das Backup wirklich funktioniert. Dauer ~15 Minuten.
+Führe das Protokoll in `Verfahrensdokumentation.md` (Abschnitt 10) fort.
+
+```bash
+# 1) Backup erzeugen
+~/praxiswerk/scripts/backup.sh
+
+# 2) Neuestes Paket wählen + in Arbeitsverzeichnis entpacken
+ls -t ~/backups/praxios/*.gpg | head -1
+gpg --batch --yes --passphrase-file ~/.praxios-backup.secret \
+  -d $(ls -t ~/backups/praxios/*.gpg | head -1) | tar xz -C /tmp && cd /tmp
+
+# 3) Auf TEST-Datenbank einspielen (NICHT die Produktiv-DB!)
+docker exec -i praxiswerk-db-1 mysql -uroot -ppraxiswerk \
+  -e "DROP DATABASE IF EXISTS praxiswerk_restoretest; CREATE DATABASE praxiswerk_restoretest;"
+cat /tmp/datenbank.sql | docker exec -i praxiswerk-db-1 mysql -uroot -ppraxiswerk praxiswerk_restoretest
+
+# 4) App kurz auf die Test-DB zeigen lassen (zweite Instanz, Port 3101)
+cd ~/praxiswerk
+sudo docker run --rm -d --name praxios-restoretest \
+  --network praxiswerk_default \
+  -e DATABASE_URL=mysql://root:praxiswerk@db:3306/praxiswerk_restoretest \
+  -e APP_SECRET=$(grep APP_SECRET docker-compose.yml | awk '{print $2}') \
+  -e NODE_ENV=production -e PORT=3000 -p 3101:3000 praxiswerk-app
+
+# 5) Dokumente-Volume in ein Test-Volume kopieren
+docker volume create praxios-restoretest-docs
+docker run --rm -v praxios-restoretest-docs:/ziel -v /tmp:/quelle alpine \
+  sh -c 'tar xzf /quelle/dokumente.tar.gz -C /ziel'
+
+# 6) Prüfen im Browser: http://192.168.178.62:3101
+#    - Login mit den bekannten Zugangsdaten
+#    - eine Patientenakte öffnen (Stammdaten + Chronik sichtbar?)
+#    - ein Dokument (PDF) öffnen (Vorschau rendert?)
+#    - eine Rechnung öffnen + PDF-Vorschau
+
+# 7) Aufräumen + Protokoll eintragen
+sudo docker stop praxios-restoretest
+docker volume rm praxios-restoretest-docs
+docker exec -i praxiswerk-db-1 mysql -uroot -ppraxiswerk \
+  -e "DROP DATABASE praxiswerk_restoretest;"
+#    -> Ergebnis + Datum in Verfahrensdokumentation.md (Abschnitt 10) eintragen
+```

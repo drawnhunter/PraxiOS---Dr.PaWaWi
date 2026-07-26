@@ -81,6 +81,7 @@ export const RECHTE = {
   anamnese: "Anamnesebögen",
   austausch: "Austausch",
   abrechnung: "Abrechnung",
+  lager: "Lager",
 } as const;
 export type Recht = keyof typeof RECHTE;
 
@@ -88,10 +89,10 @@ export type Recht = keyof typeof RECHTE;
 export const STANDARD_GRUPPEN: { name: string; rechte: Recht[] }[] = [
   {
     name: "Med. Personal",
-    rechte: ["akte", "plaene", "dokumente", "kalender", "anamnese"],
+    rechte: ["akte", "plaene", "dokumente", "kalender", "anamnese", "lager"],
   },
   {
     name: "Kaufm. Personal",
-    rechte: ["akte", "dokumente", "kalender", "anamnese", "abrechnung"],
+    rechte: ["akte", "dokumente", "kalender", "anamnese", "abrechnung", "lager"],
   },
 ];

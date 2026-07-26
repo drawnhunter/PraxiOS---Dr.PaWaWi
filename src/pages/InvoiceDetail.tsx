@@ -41,6 +41,8 @@ import {
 import { ArrowLeft, Plus, Trash2, Truck } from "lucide-react";
 import { PdfButton } from "@/components/PdfButton";
 import { PdfVorschauButton } from "@/components/PdfVorschauButton";
+import { MailDialog } from "@/components/MailDialog";
+import { SerieSpeichernDialog } from "@/components/SerienDialog";
 import { XrechnungButton } from "@/components/XrechnungButton";
 import { Mahnwesen } from "@/components/Mahnwesen";
 
@@ -76,6 +78,7 @@ function addTage(iso: string, tage: number): string {
 }
 
 export default function InvoiceDetail() {
+  const [serieOffen, setSerieOffen] = useState(false);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const utils = trpc.useUtils();
@@ -341,8 +344,12 @@ export default function InvoiceDetail() {
         </div>
         <div className="flex items-center gap-2">
           <PdfVorschauButton art="invoice" id={r.id} titel={`Rechnung ${r.nummer ?? "Entwurf"}`} />
+          <MailDialog art="invoice" id={r.id} />
           <PdfButton art="invoice" id={r.id} />
           {r.status !== "entwurf" && <XrechnungButton id={r.id} />}
+          <Button variant="outline" size="sm" onClick={() => setSerieOffen(true)}>
+            Als Serie speichern
+          </Button>
           {r.status === "finalisiert" && (
             <>
               <Button
@@ -1008,6 +1015,13 @@ export default function InvoiceDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <SerieSpeichernDialog
+        invoiceId={r.id}
+        vorschlagTitel={`Serie ${r.kundeName}`}
+        offen={serieOffen}
+        onSchliessen={() => setSerieOffen(false)}
+      />
+
     </div>
   );
 }

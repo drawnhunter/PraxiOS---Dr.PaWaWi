@@ -48,6 +48,11 @@ CREATE TABLE `company_settings` (
   `age_recipient` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `age_secret` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `kalender_token` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smtp_host` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smtp_port` int NOT NULL DEFAULT '587',
+  `smtp_user` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smtp_passwort_enc` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smtp_absender` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,
   UNIQUE KEY `id` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30002;
@@ -296,6 +301,10 @@ CREATE TABLE `products` (
   `ek_preis_netto` decimal(12,2) DEFAULT NULL,
   `kategorie` enum('leistung','auslage') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'leistung',
   `import_namen` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `artikelnummer` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `barcode` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `mindestbestand` decimal(12,2) DEFAULT NULL,
+  `lager_aktiv` tinyint(1) NOT NULL DEFAULT '0',
   `ust_satz` int NOT NULL DEFAULT '19',
   `aktiv` tinyint(1) NOT NULL DEFAULT '1',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -630,6 +639,68 @@ CREATE TABLE `gruppen` (
   `rechte` text COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `mail_log`;
+CREATE TABLE `mail_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `beleg_art` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `beleg_id` bigint unsigned NOT NULL,
+  `empfaenger` varchar(320) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `betreff` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `erfolg` tinyint(1) NOT NULL,
+  `fehler` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `gesendet_am` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `incoming_invoices`;
+CREATE TABLE `incoming_invoices` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `lieferant_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `lieferant_kennung` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `nummer` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `rechnungsdatum` date NOT NULL,
+  `faelligkeitsdatum` date DEFAULT NULL,
+  `netto` decimal(12,2) NOT NULL,
+  `ust` decimal(12,2) NOT NULL,
+  `brutto` decimal(12,2) NOT NULL,
+  `waehrung` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'EUR',
+  `bezahlt_am` date DEFAULT NULL,
+  `positionen_json` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `original_xml` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `bemerkung` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `incoming_eindeutig` (`lieferant_name`,`nummer`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `lager_bewegungen`;
+CREATE TABLE `lager_bewegungen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `product_id` bigint unsigned NOT NULL,
+  `typ` enum('zugang','abgang','korrektur','inventur') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `menge` decimal(12,2) NOT NULL,
+  `datum` date NOT NULL,
+  `bemerkung` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `lager_product_fk` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `invoice_series`;
+CREATE TABLE `invoice_series` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `customer_id` bigint unsigned NOT NULL,
+  `titel` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `intervall_tage` int NOT NULL DEFAULT '30',
+  `naechste_faellig` date NOT NULL,
+  `items_json` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `bemerkung` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `aktiv` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `series_customer_fk` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;

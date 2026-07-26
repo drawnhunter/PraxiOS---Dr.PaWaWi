@@ -1,5 +1,50 @@
 # Changelog — PraxiOS
 
+## [1.0.0] — 2026-07-26 — Erstes öffentliches Release 🎉
+
+**Dr.PaWaWi (PraxiOS) 1.0.0** — vereinigte Patientenakte, Therapiepläne,
+Kalender und Abrechnung. Vollständig getestet (49/49 Unit-Tests), produktiv
+im Einsatz.
+
+### Großer WAWIPROS-1.0-Port (aus dem Main-System übernommen)
+
+- **E-Mail-Versand (SMTP)**: Rechnungen/Gutschriften als PDF (+ XRechnung-XML)
+  direkt aus dem Beleg versenden; Zugangsdaten verschlüsselt (AES-256-GCM,
+  Key = APP_SECRET), Verbindungstest in den Einstellungen, Versandprotokoll
+  (`mail_log`) je Beleg
+- **Serien-Rechnungen**: wiederkehrende Vorlagen (aus bestehender Rechnung
+  oder neu), Fälligkeits-Anzeige, Entwurf per Klick (GoBD: Nummer erst bei
+  Finalisierung), Verwaltung im Dialog „Serien" in den Rechnungen
+- **E-Rechnung-Empfang**: XRechnung-XML und ZUGFeRD-PDF analysieren, buchen,
+  archivieren (Original-XML), Duplikatssperre, Zahlungsverfolgung
+  (Seite „E-Rechnung")
+- **Lager + Handy-Scan**: Bestand aus auditfesten Bewegungen (Zugang/Abgang/
+  Korrektur/Inventur), Mindestbestand-Warnung, Barcode/PZN-Suche per
+  Handy-Kamera (BarcodeDetector-API), Etiketten-Druck (Code128-PDF,
+  50x30/60x40/70x50), Dubletten- & Preisvergleich
+
+### Fixes & Härtung
+
+- **PDF-Overlap gefixt**: lange Leistungsdaten (z. B. „…(KW 28/29)")
+  überlappten die nächste Meta-Zeile — Zeilenhöhe wird jetzt gemessen
+- `settings.update` jetzt admin-only (Verwaltung); SMTP-Passwort niemals im
+  API-Response (nur „gesetzt"-Flag)
+- Nav filtert Menüpunkte nach Gruppen-Rechten; Gruppen-Name in der Seitenleiste
+- Restore-Test-Anleitung (jährliche Pflicht-Übung) und GoBD-
+  Verfahrensdokumentation als ausfüllbare Vorlage im Repo
+
+### Kumulativ seit 0.9.0 (Fusion)
+
+Patientenakte mit Chronik/Dokumenten/Kontakten/Anamnese-Creator, Therapiepläne
+mit Wochenraster (Drag&Drop, Serien, Tag-/Block-Duplikat/Verschieben,
+Status-Klick, Markieren), Wochenkalender (patienten-gruppiert, ICS-Abo),
+Therapie-Import (IMTZ + PraxisAkte-CSV), Plan→Rechnung direkt, GoBD-
+Nummernkreis „RK nn JJJJ", Abschnitte GOÄ/§ 10, Konditionen, Duplikatschutz
+Patient+KW, Unklarheiten-Report, Arzt-zu-Arzt-Austausch (age), Rollen-System,
+DSGVO-Löschkonzept, Backup verschlüsselt.
+
+
+
 Alle nennenswerten Änderungen. Schema: [Version] — Datum — Kurztitel.
 
 ## [0.9.8] — 2026-07-26 — PDF-Vorschau (handyfest) per pdf.js

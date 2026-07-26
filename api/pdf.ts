@@ -10,8 +10,8 @@ function fontPath(name: string): string {
   throw new Error(`Font nicht gefunden: ${name} (erwartet unter ${p})`);
 }
 
-const FONT_REGULAR = () => fontPath("DejaVuSans.ttf");
-const FONT_BOLD = () => fontPath("DejaVuSans-Bold.ttf");
+export const FONT_REGULAR = () => fontPath("DejaVuSans.ttf");
+export const FONT_BOLD = () => fontPath("DejaVuSans-Bold.ttf");
 
 // ── Formatierung (de-DE) ────────────────────────────────────────────────────
 const nf = new Intl.NumberFormat("de-DE", {
@@ -328,11 +328,14 @@ export function renderBelegPdf(beleg: PdfBeleg, design?: PdfDesign): Promise<Buf
     doc.fontSize(basisSchrift);
     meta.forEach(([label, wert]) => {
       doc.font(regular).fillColor(GRAY).text(label, MARGIN + 250, my, { width: 115 });
+      // Zeilenhöhe dynamisch messen — lange Werte (z. B. „06.07.–17.07.2026
+      // (KW 28/29)") umbrechen sonst in die nächste Meta-Zeile (Overlap-Bug)
+      const wertH = doc.font(bold).heightOfString(wert, { width: CONTENT_W - 368 });
       doc
         .font(bold)
         .fillColor(MODERN ? akzent : DARK)
         .text(wert, MARGIN + 368, my, { width: CONTENT_W - 368, align: "right" });
-      my += metaAbstand;
+      my += Math.max(metaAbstand, wertH + (K ? 2 : 3));
     });
 
     y = Math.max(y + 14 + kundenZeilen.length * zeilenAbstand, my) + (K ? 8 : 12);

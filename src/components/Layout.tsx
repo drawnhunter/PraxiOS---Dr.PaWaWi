@@ -7,6 +7,8 @@ import {
   Calendar,
   ClipboardList,
   FileSignature,
+  FileDown,
+  Package2,
   Share2,
   FileUp,
   Landmark,
@@ -21,29 +23,42 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/const";
+import type { Recht } from "@contracts/constants";
 import { useAuth } from "@/hooks/useAuth";
 
 // Dr.ReWaWi: Navigation auf den Abrechnungs-Workflow zugeschnitten.
 // (Angebote/Lieferscheine/Bestellungen/Lieferanten/Statistik sind weiterhin
 // über ihre URLs erreichbar, stehen aber nicht im Menü.)
-const NAV = [
+// recht: Menüpunkt nur mit diesem Gruppen-Recht sichtbar (admin = alles).
+// Serverseitig sind die Bereiche ohnehin pro Router abgesichert.
+const NAV: { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; recht?: Recht; adminNur?: boolean }[] = [
   { to: "/", label: "Übersicht", icon: LayoutDashboard, end: true },
-  { to: "/kalender", label: "Kalender", icon: Calendar },
-  { to: "/patienten", label: "Patienten", icon: Users },
-  { to: "/plaene", label: "Therapiepläne", icon: ClipboardList },
-  { to: "/anamnese", label: "Anamnesebögen", icon: FileSignature },
-  { to: "/austausch", label: "Austausch", icon: Share2 },
-  { to: "/therapie-import", label: "Abrechnung", icon: FileUp },
-  { to: "/rechnungen", label: "Rechnungen", icon: FileText },
-  { to: "/gutschriften", label: "Gutschriften", icon: Receipt },
-  { to: "/bank", label: "Bank", icon: Landmark },
-  { to: "/produkte", label: "Leistungen", icon: Package },
-  { to: "/einstellungen", label: "Einstellungen", icon: Settings },
+  { to: "/kalender", label: "Kalender", icon: Calendar, recht: "kalender" },
+  { to: "/patienten", label: "Patienten", icon: Users, recht: "akte" },
+  { to: "/plaene", label: "Therapiepläne", icon: ClipboardList, recht: "plaene" },
+  { to: "/anamnese", label: "Anamnesebögen", icon: FileSignature, recht: "anamnese" },
+  { to: "/austausch", label: "Austausch", icon: Share2, recht: "austausch" },
+  { to: "/therapie-import", label: "Abrechnung", icon: FileUp, recht: "abrechnung" },
+  { to: "/rechnungen", label: "Rechnungen", icon: FileText, recht: "abrechnung" },
+  { to: "/gutschriften", label: "Gutschriften", icon: Receipt, recht: "abrechnung" },
+  { to: "/e-rechnung", label: "E-Rechnung", icon: FileDown, recht: "abrechnung" },
+  { to: "/bank", label: "Bank", icon: Landmark, recht: "abrechnung" },
+  { to: "/produkte", label: "Leistungen", icon: Package, recht: "abrechnung" },
+  { to: "/lager", label: "Lager", icon: Package2, recht: "lager" },
+  { to: "/einstellungen", label: "Einstellungen", icon: Settings, adminNur: true },
 ];
 
 export default function Layout() {
   const { user, isLoading, logout } = useAuth({ redirectOnUnauthenticated: true });
   const [navOffen, setNavOffen] = useState(false);
+
+  const ich = trpc.auth.me.useQuery(undefined, { retry: false });
+  const meineRechte = ich.data?.rechte ?? [];
+  const sichtbar = NAV.filter(
+    (item) =>
+      (!item.adminNur || ich.data?.role === "admin") &&
+      (!item.recht || meineRechte.includes(item.recht)),
+  );
 
   // Akzentfarbe aus den Einstellungen aufs UI anwenden
   const einstellungen = trpc.settings.get.useQuery(undefined, { retry: false });
@@ -75,7 +90,7 @@ export default function Layout() {
         </button>
       </div>
       <nav className="px-3">
-        {NAV.map((item) => (
+        {sichtbar.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -99,6 +114,7 @@ export default function Layout() {
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 gap-2">
           <span className="truncate text-xs text-neutral-600" title={user.email ?? ""}>
             {user.name ?? "Benutzer"}
+            {ich.data?.gruppeName ? ` · ${ich.data.gruppeName}` : ""}
           </span>
           <button
             onClick={logout}

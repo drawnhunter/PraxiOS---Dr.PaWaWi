@@ -42,6 +42,12 @@ export const companySettings = mysqlTable("company_settings", {
   // Design
   akzentfarbe: varchar("akzentfarbe", { length: 30 }).notNull().default("petrol"),
   pdfLayout: varchar("pdf_layout", { length: 30 }).notNull().default("klassisch"),
+  // SMTP (E-Mail-Versand von Belegen, Passwort verschlüsselt abgelegt)
+  smtpHost: varchar("smtp_host", { length: 255 }),
+  smtpPort: int("smtp_port").notNull().default(587),
+  smtpUser: varchar("smtp_user", { length: 255 }),
+  smtpPasswortEnc: varchar("smtp_passwort_enc", { length: 500 }),
+  smtpAbsender: varchar("smtp_absender", { length: 255 }),
   // PraxiOS: Arzt-zu-Arzt-Austausch (age-Verschlüsselung)
   // Öffentlicher Schlüssel (wird an Kollegen gegeben)
   ageRecipient: varchar("age_recipient", { length: 100 }),
@@ -131,6 +137,11 @@ export const products = mysqlTable("products", {
   einheit: varchar("einheit", { length: 30 }).notNull().default("Stück"),
   preisNetto: decimal("preis_netto", { precision: 12, scale: 2 }).notNull(),
   ekPreisNetto: decimal("ek_preis_netto", { precision: 12, scale: 2 }),
+  // Lager (WAWIPROS 1.0-Port): Artikelnummer/Barcode/Mindestbestand/Aktiv-Flag
+  artikelnummer: varchar("artikelnummer", { length: 100 }),
+  barcode: varchar("barcode", { length: 100 }),
+  mindestbestand: decimal("mindestbestand", { precision: 12, scale: 2 }),
+  lagerAktiv: boolean("lager_aktiv").notNull().default(false),
   // Dr.ReWaWi: "leistung" = ärztliche Leistung (GOÄ, VK-Preis) /
   // "auslage" = Auslage § 10 GOÄ (wird zum EK-Preis durchgereicht)
   kategorie: mysqlEnum("kategorie", ["leistung", "auslage"]).notNull().default("leistung"),
@@ -827,6 +838,71 @@ export type AnamnesisBlock = typeof anamnesisBlocks.$inferSelect;
 export type AnamnesisForm = typeof anamnesisForms.$inferSelect;
 export type AnamnesisLink = typeof anamnesisLinks.$inferSelect;
 export type AnamnesisSubmission = typeof anamnesisSubmissions.$inferSelect;
+// ── WAWIPROS 1.0-Port: E-Mail-Protokoll, E-Rechnung-Empfang, Lager, Serien ──
+export const mailLog = mysqlTable("mail_log", {
+  id: serial("id").primaryKey(),
+  belegArt: varchar("beleg_art", { length: 30 }).notNull(),
+  belegId: bigint("beleg_id", { mode: "number", unsigned: true }).notNull(),
+  empfaenger: varchar("empfaenger", { length: 320 }).notNull(),
+  betreff: varchar("betreff", { length: 500 }).notNull(),
+  erfolg: boolean("erfolg").notNull(),
+  fehler: text("fehler"),
+  gesendetAm: timestamp("gesendet_am").notNull().defaultNow(),
+});
+
+export const incomingInvoices = mysqlTable(
+  "incoming_invoices",
+  {
+    id: serial("id").primaryKey(),
+    lieferantName: varchar("lieferant_name", { length: 255 }).notNull(),
+    lieferantKennung: varchar("lieferant_kennung", { length: 255 }),
+    nummer: varchar("nummer", { length: 100 }).notNull(),
+    rechnungsdatum: date("rechnungsdatum", { mode: "string" }).notNull(),
+    faelligkeitsdatum: date("faelligkeitsdatum", { mode: "string" }),
+    netto: decimal("netto", { precision: 12, scale: 2 }).notNull(),
+    ust: decimal("ust", { precision: 12, scale: 2 }).notNull(),
+    brutto: decimal("brutto", { precision: 12, scale: 2 }).notNull(),
+    waehrung: varchar("waehrung", { length: 10 }).notNull().default("EUR"),
+    bezahltAm: date("bezahlt_am", { mode: "string" }),
+    positionenJson: text("positionen_json"),
+    originalXml: text("original_xml"),
+    bemerkung: text("bemerkung"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("incoming_eindeutig").on(t.lieferantName, t.nummer)],
+);
+
+export const lagerBewegungen = mysqlTable("lager_bewegungen", {
+  id: serial("id").primaryKey(),
+  productId: bigint("product_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  typ: mysqlEnum("typ", ["zugang", "abgang", "korrektur", "inventur"]).notNull(),
+  menge: decimal("menge", { precision: 12, scale: 2 }).notNull(),
+  datum: date("datum", { mode: "string" }).notNull(),
+  bemerkung: varchar("bemerkung", { length: 500 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const invoiceSeries = mysqlTable("invoice_series", {
+  id: serial("id").primaryKey(),
+  customerId: bigint("customer_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  titel: varchar("titel", { length: 255 }).notNull(),
+  intervallTage: int("intervall_tage").notNull().default(30),
+  naechsteFaellig: date("naechste_faellig", { mode: "string" }).notNull(),
+  itemsJson: text("items_json").notNull(),
+  bemerkung: text("bemerkung"),
+  aktiv: boolean("aktiv").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type MailLog = typeof mailLog.$inferSelect;
+export type IncomingInvoice = typeof incomingInvoices.$inferSelect;
+export type LagerBewegung = typeof lagerBewegungen.$inferSelect;
+export type InvoiceSeries = typeof invoiceSeries.$inferSelect;
+
 export type Kollege = typeof kollegen.$inferSelect;
 export type AktenExport = typeof aktenExporte.$inferSelect;
 export type Gruppe = typeof gruppen.$inferSelect;

@@ -1,3 +1,4 @@
+import { SerienDialog } from "@/components/SerienDialog";
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { geld, datum } from "@/lib/format";
@@ -23,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, UserPlus } from "lucide-react";
+import { Plus, Repeat, UserPlus } from "lucide-react";
 
 export function statusBadge(status: InvoiceStatus) {
   const variant =
@@ -45,6 +46,7 @@ interface NeukundeForm {
 }
 
 export default function Invoices() {
+  const [serienOffen, setSerienOffen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("alle");
   const [neuDialog, setNeuDialog] = useState(false);
   const [modus, setModus] = useState<"bestehend" | "neu">("bestehend");
@@ -114,6 +116,9 @@ export default function Invoices() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold tracking-tight">Rechnungen</h1>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setSerienOffen(true)}>
+            <Repeat className="mr-1.5 h-4 w-4" /> Serien
+          </Button>
           <CsvButton
             dateiname="rechnungen.csv"
             zeilen={[
@@ -344,6 +349,7 @@ export default function Invoices() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <SerienDialog offen={serienOffen} onSchliessen={() => setSerienOffen(false)} />
     </div>
   );
 }

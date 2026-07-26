@@ -29,6 +29,7 @@ import {
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { PdfButton } from "@/components/PdfButton";
 import { PdfVorschauButton } from "@/components/PdfVorschauButton";
+import { MailDialog } from "@/components/MailDialog";
 
 interface EditItem {
   bezeichnung: string;
@@ -156,6 +157,7 @@ export default function CreditNoteDetail() {
         </div>
         <div className="flex items-center gap-2">
           <PdfVorschauButton art="credit" id={g.id} titel={`Gutschrift ${g.nummer ?? ""}`} />
+          <MailDialog art="credit" id={g.id} />
           <PdfButton art="credit" id={g.id} />
           {istEntwurf && (
             <AlertDialog>

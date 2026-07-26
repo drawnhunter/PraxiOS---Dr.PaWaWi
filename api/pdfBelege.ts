@@ -272,3 +272,34 @@ export async function ladeAngebotsBeleg(id: number): Promise<{ beleg: PdfBeleg; 
     },
   };
 }
+
+// ── Mahnung als PDF (WAWIPROS 1.0-Port, für E-Mail-Versand) ────────────────
+export async function ladeMahnungsBeleg(id: number): Promise<{ pdf: Buffer; dateiname: string }> {
+  const { renderMahnungPdf, MAHN_STUFEN } = await import("./pdf");
+  const m = await getDb().query.reminders.findFirst({
+    where: (t, { eq: e }) => e(t.id, id),
+    with: { invoice: true },
+  });
+  if (!m) throw new Error("Mahnung nicht gefunden.");
+  const r = m.invoice;
+  const firmaSnap = r.firmenSnapshot ? JSON.parse(r.firmenSnapshot) : null;
+  const firma = firmaSnap ?? (await ladeFirmaLive());
+  const bankSnap = r.bankSnapshot ? JSON.parse(r.bankSnapshot) : null;
+  const pdf = await renderMahnungPdf({
+    stufe: m.stufe,
+    datum: m.datum,
+    zahlungsfrist: m.zahlungsfrist,
+    offenCent: Math.round(Number(m.offenBetrag) * 100),
+    bruttoCent: Math.round(Number(r.brutto) * 100),
+    bezahltCent: Math.round(Number(r.bezahltBetrag) * 100),
+    rechnungNummer: r.nummer ?? `#${r.id}`,
+    rechnungDatum: r.rechnungsdatum,
+    firma,
+    bank: bankSnap ?? null,
+    kunde: {
+      name: r.kundeName, zusatz: r.kundeZusatz, strasse: r.kundeStrasse,
+      plz: r.kundePlz, ort: r.kundeOrt, land: r.kundeLand,
+    },
+  });
+  return { pdf, dateiname: `${MAHN_STUFEN[m.stufe] ?? "Mahnung"} ${r.nummer ?? r.id}.pdf` };
+}

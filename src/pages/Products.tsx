@@ -35,6 +35,10 @@ interface FormState {
   ekPreisNetto: string;
   kategorie: "leistung" | "auslage";
   importNamen: string;
+  artikelnummer: string;
+  barcode: string;
+  mindestbestand: string;
+  lagerAktiv: boolean;
   ustSatz: number;
 }
 
@@ -47,6 +51,10 @@ const leeresFormular: FormState = {
   ekPreisNetto: "",
   kategorie: "leistung",
   importNamen: "",
+  artikelnummer: "",
+  barcode: "",
+  mindestbestand: "",
+  lagerAktiv: false,
   ustSatz: 0,
 };
 
@@ -89,6 +97,10 @@ export default function Products() {
         : "",
       kategorie: p.kategorie,
       importNamen: p.importNamen ?? "",
+      artikelnummer: p.artikelnummer ?? "",
+      barcode: p.barcode ?? "",
+      mindestbestand: p.mindestbestand ? String(Number(p.mindestbestand)).replace(".", ",") : "",
+      lagerAktiv: p.lagerAktiv,
       ustSatz: p.ustSatz,
     });
     setDialogOffen(true);
@@ -103,6 +115,10 @@ export default function Products() {
       ekPreisNetto: form.ekPreisNetto ? parseGeldInput(form.ekPreisNetto) : null,
       kategorie: form.kategorie,
       importNamen: form.importNamen.trim() ? form.importNamen.trim() : null,
+      artikelnummer: form.artikelnummer.trim() || null,
+      barcode: form.barcode.trim() || null,
+      mindestbestand: form.mindestbestand.trim() ? form.mindestbestand.trim().replace(",", ".") : null,
+      lagerAktiv: form.lagerAktiv,
       ustSatz: form.ustSatz,
     };
     if (form.id) {
@@ -309,6 +325,41 @@ export default function Products() {
                 rows={2}
                 placeholder={"z. B.:\n250 ml Ringer\nRinger 250ml"}
               />
+            </div>
+            <div>
+              <Label>Artikelnummer (Lager)</Label>
+              <Input
+                value={form.artikelnummer}
+                onChange={(e) => setForm({ ...form, artikelnummer: e.target.value })}
+                placeholder="optional"
+              />
+            </div>
+            <div>
+              <Label>Barcode / PZN (Lager)</Label>
+              <Input
+                value={form.barcode}
+                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                placeholder="optional, für Scan"
+              />
+            </div>
+            <div>
+              <Label>Mindestbestand (Lager)</Label>
+              <Input
+                value={form.mindestbestand}
+                onChange={(e) => setForm({ ...form, mindestbestand: e.target.value })}
+                placeholder="z. B. 10"
+              />
+            </div>
+            <div className="flex items-end pb-1">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.lagerAktiv}
+                  onChange={(e) => setForm({ ...form, lagerAktiv: e.target.checked })}
+                  className="h-4 w-4 accent-[#0F766E]"
+                />
+                Im Lager führen
+              </label>
             </div>
           </div>
           {fehler && <p className="text-sm text-red-600">{fehler.message}</p>}

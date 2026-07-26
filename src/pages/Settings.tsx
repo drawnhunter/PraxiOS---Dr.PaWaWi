@@ -48,6 +48,11 @@ interface FirmenForm {
   debitorStartnummer: number;
   akzentfarbe: string;
   pdfLayout: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpAbsender: string;
+  smtpPasswort: string;
 }
 
 interface BankForm {
@@ -88,6 +93,11 @@ export default function SettingsPage() {
       plz: s.plz,
       ort: s.ort,
       land: s.land,
+      smtpHost: s.smtpHost ?? "",
+      smtpPort: s.smtpPort,
+      smtpUser: s.smtpUser ?? "",
+      smtpAbsender: s.smtpAbsender ?? "",
+      smtpPasswort: "",
       handelsregister: s.handelsregister ?? "",
       steuernummer: s.steuernummer ?? "",
       ustIdNr: s.ustIdNr ?? "",
@@ -108,6 +118,7 @@ export default function SettingsPage() {
     });
   }, [settings.data, firma]);
 
+  const smtpTest = trpc.mail.smtpTest.useMutation();
   const speichernFirma = trpc.settings.update.useMutation({
     onSuccess: () => {
       utils.settings.get.invalidate();
@@ -272,6 +283,11 @@ export default function SettingsPage() {
             onClick={() =>
               speichernFirma.mutate({
                 ...firma,
+                smtpHost: firma.smtpHost || null,
+                smtpPort: firma.smtpPort,
+                smtpUser: firma.smtpUser || null,
+                smtpAbsender: firma.smtpAbsender || null,
+                ...(firma.smtpPasswort ? { smtpPasswort: firma.smtpPasswort } : {}),
                 handelsregister: firma.handelsregister || null,
                 steuernummer: firma.steuernummer || null,
                 ustIdNr: firma.ustIdNr || null,
@@ -299,6 +315,80 @@ export default function SettingsPage() {
           Hinweis: Bereits finalisierte Belege behalten ihre damaligen Firmendaten
           (Snapshot) — Änderungen wirken nur auf neue Belege.
         </p>
+      </section>
+
+      {/* ── E-Mail (SMTP) ── */}
+      <section className="rounded-lg border border-neutral-200 bg-white p-5">
+        <h2 className="mb-1 text-sm font-medium text-neutral-700">E-Mail-Versand (SMTP)</h2>
+        <p className="mb-4 text-xs text-neutral-400">
+          Für den direkten Versand von Rechnungen und Gutschriften als PDF.
+          Zugangsdaten deines Mail-Providers; das Passwort wird verschlüsselt
+          gespeichert (AES-256-GCM). Speichern erfolgt oben über „Firmendaten speichern".
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="sm:col-span-2">
+            <Label>SMTP-Server</Label>
+            <Input
+              value={firma.smtpHost}
+              onChange={(e) => setFirma({ ...firma, smtpHost: e.target.value })}
+              placeholder="z. B. smtp.domain.de"
+            />
+          </div>
+          <div>
+            <Label>Port</Label>
+            <Input
+              type="number"
+              value={firma.smtpPort}
+              onChange={(e) => setFirma({ ...firma, smtpPort: Number(e.target.value) || 587 })}
+              placeholder="587 (STARTTLS) oder 465 (SSL)"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Label>Benutzername (meist die E-Mail-Adresse)</Label>
+            <Input
+              value={firma.smtpUser}
+              onChange={(e) => setFirma({ ...firma, smtpUser: e.target.value })}
+              placeholder="z. B. rechnung@deine-domain.de"
+            />
+          </div>
+          <div>
+            <Label>
+              Passwort{" "}
+              {settings.data?.smtpPasswortGesetzt && (
+                <span className="text-neutral-400">(gesetzt — leer lassen = behalten)</span>
+              )}
+            </Label>
+            <Input
+              type="password"
+              value={firma.smtpPasswort}
+              onChange={(e) => setFirma({ ...firma, smtpPasswort: e.target.value })}
+              autoComplete="new-password"
+              placeholder={settings.data?.smtpPasswortGesetzt ? "••••••••" : "Passwort des Postfachs"}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Label>Absendername (optional)</Label>
+            <Input
+              value={firma.smtpAbsender}
+              onChange={(e) => setFirma({ ...firma, smtpAbsender: e.target.value })}
+              placeholder="z. B. IMTZ GmbH — Buchhaltung"
+            />
+          </div>
+          <div className="flex items-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={smtpTest.isPending || !firma.smtpHost || !firma.smtpUser}
+              onClick={() => smtpTest.mutate()}
+            >
+              {smtpTest.isPending ? "Prüfe …" : "Verbindung testen"}
+            </Button>
+            {smtpTest.isSuccess && <span className="text-sm text-green-600">Verbindung ok ✓</span>}
+            {smtpTest.error && (
+              <span className="text-sm text-red-600">{smtpTest.error.message}</span>
+            )}
+          </div>
+        </div>
       </section>
 
       {/* ── Design ── */}

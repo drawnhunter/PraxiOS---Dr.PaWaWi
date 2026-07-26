@@ -27,6 +27,11 @@ import { calendarRouter } from "./calendarRouter";
 import { documentRouter } from "./documentRouter";
 import { anamneseRouter } from "./anamneseRouter";
 import { austauschRouter } from "./austauschRouter";
+import { mailRouter } from "./mailRouter";
+import { seriesRouter } from "./seriesRouter";
+import { einrechnungRouter } from "./einrechnungRouter";
+import { lagerRouter } from "./lagerRouter";
+import { labelRouter } from "./labelRouter";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -56,6 +61,11 @@ export const appRouter = createRouter({
   dokumente: documentRouter,
   anamnese: anamneseRouter,
   austausch: austauschRouter,
+  mail: mailRouter,
+  series: seriesRouter,
+  einrechnung: einrechnungRouter,
+  lager: lagerRouter,
+  labels: labelRouter,
   leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 

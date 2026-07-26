@@ -1,9 +1,11 @@
 import { z } from "zod";
 import {
+  adminQuery,
   authedQuery,
   createRouter,
 } from "./middleware";
 import { getDb } from "./queries/connection";
+import { verschluesseln } from "./lib/secrets";
 import { companySettings, numberSequences } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 
@@ -32,6 +34,12 @@ const settingsInput = z.object({
     .enum(["petrol", "neutral", "blau", "gruen", "bernstein", "violett", "rot"])
     .default("petrol"),
   pdfLayout: z.enum(["klassisch", "modern", "kompakt"]).default("klassisch"),
+  // SMTP (E-Mail-Versand); smtpPasswort wird nur gesetzt, wenn nicht leer
+  smtpHost: z.string().nullable().optional(),
+  smtpPort: z.number().int().min(1).max(65535).default(587),
+  smtpUser: z.string().nullable().optional(),
+  smtpAbsender: z.string().nullable().optional(),
+  smtpPasswort: z.string().max(200).optional(),
 });
 
 export const settingsRouter = createRouter({
@@ -41,15 +49,25 @@ export const settingsRouter = createRouter({
     });
     if (!row) return null;
     // age_secret verlässt den Server nie (geheimer Schlüssel für den Austausch)
-    const { ageSecret: _geheim, ...oeffentlich } = row;
-    return { ...oeffentlich, ageSecretVorhanden: !!row.ageSecret };
+    const { ageSecret: _geheim, smtpPasswortEnc: _smtp, ...oeffentlich } = row;
+    return {
+      ...oeffentlich,
+      ageSecretVorhanden: !!row.ageSecret,
+      smtpPasswortGesetzt: !!row.smtpPasswortEnc,
+    };
   }),
 
-  update: authedQuery.input(settingsInput).mutation(async ({ input }) => {
+  // PraxiOS: Einstellungen ändern = Verwaltung (admin/Leitung)
+  update: adminQuery.input(settingsInput).mutation(async ({ input }) => {
+    const { smtpPasswort, ...rest } = input;
+    // SMTP-Passwort wird nur ersetzt, wenn ein neues eingegeben wurde —
+    // und ausschließlich verschlüsselt abgelegt (AES-256-GCM, Key = APP_SECRET)
+    const werte: Record<string, unknown> = { ...rest };
+    if (smtpPasswort) werte.smtpPasswortEnc = verschluesseln(smtpPasswort);
     await getDb()
       .insert(companySettings)
-      .values({ id: 1, ...input })
-      .onDuplicateKeyUpdate({ set: { ...input } });
+      .values({ id: 1, ...werte } as never)
+      .onDuplicateKeyUpdate({ set: werte as never });
     return { ok: true };
   }),
 

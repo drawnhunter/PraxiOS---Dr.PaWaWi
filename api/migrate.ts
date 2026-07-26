@@ -31,6 +31,16 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "kalender_token", ddl: "ALTER TABLE company_settings ADD COLUMN kalender_token VARCHAR(64) NULL AFTER age_secret" },
   // PraxiOS: Rollen
   { tabelle: "users", spalte: "gruppe_id", ddl: "ALTER TABLE users ADD COLUMN gruppe_id BIGINT UNSIGNED NULL AFTER kalenderFarbe" },
+  // WAWIPROS 1.0-Port: SMTP + Lager
+  { tabelle: "company_settings", spalte: "smtp_host", ddl: "ALTER TABLE company_settings ADD COLUMN smtp_host VARCHAR(255) NULL AFTER kalender_token" },
+  { tabelle: "company_settings", spalte: "smtp_port", ddl: "ALTER TABLE company_settings ADD COLUMN smtp_port INT NOT NULL DEFAULT 587 AFTER smtp_host" },
+  { tabelle: "company_settings", spalte: "smtp_user", ddl: "ALTER TABLE company_settings ADD COLUMN smtp_user VARCHAR(255) NULL AFTER smtp_port" },
+  { tabelle: "company_settings", spalte: "smtp_passwort_enc", ddl: "ALTER TABLE company_settings ADD COLUMN smtp_passwort_enc VARCHAR(500) NULL AFTER smtp_user" },
+  { tabelle: "company_settings", spalte: "smtp_absender", ddl: "ALTER TABLE company_settings ADD COLUMN smtp_absender VARCHAR(255) NULL AFTER smtp_passwort_enc" },
+  { tabelle: "products", spalte: "artikelnummer", ddl: "ALTER TABLE products ADD COLUMN artikelnummer VARCHAR(100) NULL AFTER import_namen" },
+  { tabelle: "products", spalte: "barcode", ddl: "ALTER TABLE products ADD COLUMN barcode VARCHAR(100) NULL AFTER artikelnummer" },
+  { tabelle: "products", spalte: "mindestbestand", ddl: "ALTER TABLE products ADD COLUMN mindestbestand DECIMAL(12,2) NULL AFTER barcode" },
+  { tabelle: "products", spalte: "lager_aktiv", ddl: "ALTER TABLE products ADD COLUMN lager_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER mindestbestand" },
 ];
 
 // Spalten-Aenderungen (Enum-Erweiterungen, idempotent per SHOW COLUMNS)
@@ -264,6 +274,69 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       name VARCHAR(100) NOT NULL,
       rechte TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  // WAWIPROS 1.0-Port
+  {
+    tabelle: "mail_log",
+    ddl: `CREATE TABLE IF NOT EXISTS mail_log (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      beleg_art VARCHAR(30) NOT NULL,
+      beleg_id BIGINT UNSIGNED NOT NULL,
+      empfaenger VARCHAR(320) NOT NULL,
+      betreff VARCHAR(500) NOT NULL,
+      erfolg TINYINT(1) NOT NULL,
+      fehler TEXT NULL,
+      gesendet_am TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "incoming_invoices",
+    ddl: `CREATE TABLE IF NOT EXISTS incoming_invoices (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      lieferant_name VARCHAR(255) NOT NULL,
+      lieferant_kennung VARCHAR(255) NULL,
+      nummer VARCHAR(100) NOT NULL,
+      rechnungsdatum DATE NOT NULL,
+      faelligkeitsdatum DATE NULL,
+      netto DECIMAL(12,2) NOT NULL,
+      ust DECIMAL(12,2) NOT NULL,
+      brutto DECIMAL(12,2) NOT NULL,
+      waehrung VARCHAR(10) NOT NULL DEFAULT 'EUR',
+      bezahlt_am DATE NULL,
+      positionen_json TEXT NULL,
+      original_xml TEXT NULL,
+      bemerkung TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX incoming_eindeutig (lieferant_name, nummer)
+    )`,
+  },
+  {
+    tabelle: "lager_bewegungen",
+    ddl: `CREATE TABLE IF NOT EXISTS lager_bewegungen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      product_id BIGINT UNSIGNED NOT NULL,
+      typ ENUM('zugang','abgang','korrektur','inventur') NOT NULL,
+      menge DECIMAL(12,2) NOT NULL,
+      datum DATE NOT NULL,
+      bemerkung VARCHAR(500) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT lager_product_fk FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    )`,
+  },
+  {
+    tabelle: "invoice_series",
+    ddl: `CREATE TABLE IF NOT EXISTS invoice_series (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      customer_id BIGINT UNSIGNED NOT NULL,
+      titel VARCHAR(255) NOT NULL,
+      intervall_tage INT NOT NULL DEFAULT 30,
+      naechste_faellig DATE NOT NULL,
+      items_json TEXT NOT NULL,
+      bemerkung TEXT NULL,
+      aktiv TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT series_customer_fk FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
     )`,
   },
   // PraxiOS: Austausch
