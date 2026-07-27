@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router";
+import { NavLink, Outlet, useLocation } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { akzentAnwenden } from "@/lib/design";
 import {
@@ -19,6 +19,8 @@ import {
   Settings,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -51,6 +53,12 @@ const NAV: { to: string; label: string; icon: typeof LayoutDashboard; end?: bool
 export default function Layout() {
   const { user, isLoading, logout } = useAuth({ redirectOnUnauthenticated: true });
   const [navOffen, setNavOffen] = useState(false);
+  // Sidebar klappt im Therapieplan-Detail automatisch ein (Icon-Leiste)
+  const location = useLocation();
+  const istPlanDetail =
+    location.pathname.startsWith("/plaene/") && location.pathname !== "/plaene";
+  const [manuellZugeklappt, setManuellZugeklappt] = useState(false);
+  const zugeklappt = istPlanDetail || manuellZugeklappt;
 
   const ich = trpc.auth.me.useQuery(undefined, { retry: false });
   const meineRechte = ich.data?.rechte ?? [];
@@ -77,10 +85,25 @@ export default function Layout() {
   const navInhalt = (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-5">
-        <div>
-          <div className="text-sm font-semibold tracking-tight">Dr.PaWaWi</div>
-          <div className="text-xs text-neutral-500">Akte &amp; Abrechnung</div>
-        </div>
+        {!zugeklappt && (
+          <div>
+            <div className="text-sm font-semibold tracking-tight">Dr.PaWaWi</div>
+            <div className="text-xs text-neutral-500">Akte &amp; Abrechnung</div>
+          </div>
+        )}
+        {zugeklappt && (
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0F766E] text-xs font-bold text-white">
+            PW
+          </div>
+        )}
+        <button
+          onClick={() => setManuellZugeklappt(!manuellZugeklappt)}
+          aria-label={zugeklappt ? "Menü aufklappen" : "Menü einklappen"}
+          title={zugeklappt ? "Menü aufklappen" : "Menü einklappen"}
+          className="hidden rounded p-1.5 text-neutral-400 hover:bg-neutral-100 md:block"
+        >
+          {zugeklappt ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+        </button>
         <button
           onClick={() => setNavOffen(false)}
           aria-label="Menü schließen"
@@ -96,9 +119,11 @@ export default function Layout() {
             to={item.to}
             end={item.end}
             onClick={() => setNavOffen(false)}
+            title={zugeklappt ? item.label : undefined}
             className={({ isActive }) =>
               cn(
-                "mb-0.5 flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm transition-colors",
+                "mb-0.5 flex items-center rounded-md text-sm transition-colors",
+                zugeklappt ? "justify-center px-0 py-2.5" : "gap-2.5 px-3 py-2.5",
                 isActive
                   ? "bg-neutral-100 font-medium text-neutral-900"
                   : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
@@ -106,25 +131,37 @@ export default function Layout() {
             }
           >
             <item.icon className="h-4 w-4 shrink-0" />
-            {item.label}
+            {!zugeklappt && item.label}
           </NavLink>
         ))}
       </nav>
-      <div className="absolute bottom-4 left-0 w-full px-5">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 gap-2">
-          <span className="truncate text-xs text-neutral-600" title={user.email ?? ""}>
-            {user.name ?? "Benutzer"}
-            {ich.data?.gruppeName ? ` · ${ich.data.gruppeName}` : ""}
-          </span>
+      <div className={cn("absolute bottom-4 left-0 w-full", zugeklappt ? "px-2" : "px-5")}>
+        {zugeklappt ? (
           <button
             onClick={logout}
             title="Abmelden"
-            className="rounded p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
+            className="mx-auto block rounded p-1.5 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
           >
-            <LogOut className="h-3.5 w-3.5" />
+            <LogOut className="h-4 w-4" />
           </button>
-        </div>
-        <div className="text-[11px] text-neutral-400">{`Dr.PaWaWi v${APP_VERSION} · PraxiOS`}</div>
+        ) : (
+          <>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 gap-2">
+              <span className="truncate text-xs text-neutral-600" title={user.email ?? ""}>
+                {user.name ?? "Benutzer"}
+                {ich.data?.gruppeName ? ` · ${ich.data.gruppeName}` : ""}
+              </span>
+              <button
+                onClick={logout}
+                title="Abmelden"
+                className="rounded p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="text-[11px] text-neutral-400">{`Dr.PaWaWi v${APP_VERSION} · PraxiOS`}</div>
+          </>
+        )}
       </div>
     </>
   );
@@ -163,14 +200,15 @@ export default function Layout() {
       {/* Seitenleiste: mobil als Einblendung, ab md dauerhaft sichtbar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 border-r border-neutral-200 bg-white transition-transform duration-200 md:w-56 md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 border-r border-neutral-200 bg-white transition-all duration-200 md:translate-x-0",
+          zugeklappt ? "w-64 md:w-14" : "w-64 md:w-56",
           navOffen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         {navInhalt}
       </aside>
 
-      <main className="min-h-screen pt-14 md:ml-56 md:pt-0">
+      <main className={cn("min-h-screen pt-14 md:pt-0 transition-all duration-200", zugeklappt ? "md:ml-14" : "md:ml-56")}>
         <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
           <Outlet />
         </div>

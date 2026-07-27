@@ -7,6 +7,17 @@ import { datum } from "@/lib/format";
 import { blobHerunterladen } from "@/lib/downloads";
 import { ENTRY_STATUS, type EntryStatus } from "@contracts/constants";
 import { cn } from "@/lib/utils";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -148,9 +159,25 @@ export default function PlanDetail() {
   const [tagDuplikat, setTagDuplikat] = useState<string | null>(null);
   const [duplikatZiel, setDuplikatZiel] = useState("");
   const [duplikatModus, setDuplikatModus] = useState<"kopieren" | "verschieben">("kopieren");
-  // Markieren (Block-Aktionen) + Drag & Drop
+  // Markieren (Block-Aktionen)
   const [markiert, setMarkiert] = useState<Set<number>>(new Set());
-  const [dragTag, setDragTag] = useState<string | null>(null);
+  // dnd-kit: Touch-Sensor (Maus + Tablet + Handy), 6px Aktivierungsdistanz
+  const sensoren = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+  const handleDragEnd = (ev: DragEndEvent) => {
+    const { active, over } = ev;
+    if (!over) return;
+    const eintragId = Number(String(active.id).replace("eintrag-", ""));
+    const tag = String(over.id).replace("tag-", "");
+    if (!Number.isInteger(eintragId) || eintragId <= 0) return;
+    const eintrag = (plan.data?.entries ?? []).find((x) => x.id === eintragId);
+    if (!eintrag || eintrag.datum === tag) return;
+    speichernAlt.mutate(
+      { id: eintragId, data: { datum: tag } },
+      { onSuccess: () => zeigeErfolg(`Verschoben auf ${datum(tag)}.`) },
+    );
+  };
   const [bulkDialog, setBulkDialog] = useState<null | "duplizieren">(null);
   const [bulkZiel, setBulkZiel] = useState("");
 
@@ -162,6 +189,12 @@ export default function PlanDetail() {
       return neu;
     });
 
+  const planLoeschen = trpc.plaene.loeschen.useMutation({
+    onSuccess: () => navigate("/plaene"),
+  });
+  const planWiederherstellen = trpc.plaene.wiederherstellen.useMutation({
+    onSuccess: invalidate,
+  });
   const bulk = trpc.plaene.bulk.useMutation({
     onSuccess: (r, vars) => {
       invalidate();
@@ -421,8 +454,36 @@ export default function PlanDetail() {
           <Button variant="outline" onClick={() => setSerienOffen(true)}>
             <CalendarPlus className="mr-1.5 h-4 w-4" /> Serien-Termine
           </Button>
+          {p.status !== "abgerechnet" && !p.geloeschtAm && (
+            <Button
+              variant="outline"
+              className="text-red-600"
+              onClick={() => {
+                if (window.confirm("Plan in den Papierkorb legen? (48 h wiederherstellbar)")) {
+                  planLoeschen.mutate({ id: planId });
+                }
+              }}
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" /> Löschen
+            </Button>
+          )}
         </div>
       </div>
+      {p.geloeschtAm && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span>
+            Im Papierkorb seit {new Date(p.geloeschtAm).toLocaleString("de-DE")} —
+            innerhalb von 48 h wiederherstellbar.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => planWiederherstellen.mutate({ id: planId })}
+          >
+            Wiederherstellen
+          </Button>
+        </div>
+      )}
       {(p.status === "dokumentiert" || p.status === "abgerechnet") && (
         <p className="-mt-4 text-xs text-neutral-400">
           Der CSV-Export enthält nur stattgefundene Leistungen.
@@ -463,6 +524,7 @@ export default function PlanDetail() {
       )}
 
       {/* ── Wochenraster ── */}
+      <DndContext sensors={sensoren} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <div className="space-y-4">
         {wochen.map((w) => (
           <section
@@ -510,28 +572,7 @@ export default function PlanDetail() {
                         </button>
                       )}
                     </div>
-                    <div
-                      className={cn(
-                        "space-y-1 p-1.5 transition-colors",
-                        dragTag === tag && "rounded bg-primary/5 ring-1 ring-primary/30 ring-inset",
-                      )}
-                      onDragOver={(ev) => {
-                        ev.preventDefault();
-                        if (dragTag !== tag) setDragTag(tag);
-                      }}
-                      onDragLeave={() => setDragTag(null)}
-                      onDrop={(ev) => {
-                        ev.preventDefault();
-                        setDragTag(null);
-                        const id = Number(ev.dataTransfer.getData("text/entry-id"));
-                        if (Number.isInteger(id) && id > 0) {
-                          speichernAlt.mutate(
-                            { id, data: { datum: tag } },
-                            { onSuccess: () => zeigeErfolg(`Verschoben auf ${datum(tag)}.`) },
-                          );
-                        }
-                      }}
-                    >
+                    <TagDropZone tag={tag}>
                       {tagesEintraege.map((e) => (
                         <EintragsKarte
                           key={e.id}
@@ -548,10 +589,6 @@ export default function PlanDetail() {
                           onStatus={(status) =>
                             speichernAlt.mutate({ id: e.id, data: { status } })
                           }
-                          onDragStart={(ev) => {
-                            ev.dataTransfer.setData("text/entry-id", String(e.id));
-                            ev.dataTransfer.effectAllowed = "move";
-                          }}
                         />
                       ))}
                       {imZeitraum && (
@@ -563,7 +600,7 @@ export default function PlanDetail() {
                           <Plus className="h-3 w-3" /> Eintrag
                         </button>
                       )}
-                    </div>
+                    </TagDropZone>
                   </div>
                 );
               })}
@@ -571,6 +608,7 @@ export default function PlanDetail() {
           </section>
         ))}
       </div>
+      </DndContext>
 
       {/* ── Block-Aktionsleiste (markierte Einträge) ── */}
       {markiert.size > 0 && (
@@ -870,6 +908,22 @@ export default function PlanDetail() {
   );
 }
 
+// ── Drop-Zone pro Tag (dnd-kit) ───────────────────────────────────────────
+function TagDropZone({ tag, children }: { tag: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `tag-${tag}` });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "space-y-1 p-1.5 transition-colors",
+        isOver && "rounded bg-primary/5 ring-1 ring-primary/30 ring-inset",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 // ── Eintrags-Karte (Drag & Drop, Status-Klick, Markieren, Aktionen) ─────────
 function EintragsKarte({
   e,
@@ -879,7 +933,6 @@ function EintragsKarte({
   onDuplicate,
   onDelete,
   onStatus,
-  onDragStart,
 }: {
   e: PlanEintrag;
   markiert: boolean;
@@ -888,14 +941,21 @@ function EintragsKarte({
   onDuplicate: () => void;
   onDelete: () => void;
   onStatus: (s: EntryStatus) => void;
-  onDragStart: (ev: React.DragEvent) => void;
 }) {
+  const [statusOffen, setStatusOffen] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `eintrag-${e.id}`,
+    data: { id: e.id },
+  });
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform) }}
+      {...attributes}
+      {...listeners}
       className={cn(
         "w-full rounded border bg-white p-1.5 text-left text-xs transition-colors",
+        isDragging && "z-30 shadow-lg",
         markiert
           ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
           : "border-neutral-200 hover:bg-neutral-50",
@@ -906,7 +966,7 @@ function EintragsKarte({
       <div className="flex items-stretch gap-1.5">
         {/* Links: Status-Punkt (klickbar) + Markieren-Checkbox (gespiegelt) */}
         <div className="flex shrink-0 flex-col items-center justify-between py-0.5">
-          <Popover>
+          <Popover open={statusOffen} onOpenChange={setStatusOffen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
@@ -923,7 +983,10 @@ function EintragsKarte({
                 <button
                   key={s}
                   type="button"
-                  onClick={() => onStatus(s)}
+                  onClick={() => {
+                    onStatus(s);
+                    setStatusOffen(false);
+                  }}
                   className={cn(
                     "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-neutral-50",
                     e.status === s && "bg-neutral-50 font-semibold",

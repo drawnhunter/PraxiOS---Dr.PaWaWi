@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
 import { datumZuKw, heuteIso } from "./Kalender";
 
 /** Badge-Farben je Planstatus (geplant neutral, aktiv petrol, dokumentiert blau, abgerechnet dezent). */
@@ -79,8 +79,16 @@ export default function Plans() {
   });
 
   const utils = trpc.useUtils();
+  const istPapierkorb = statusFilter === "geloescht";
   const plaene = trpc.plaene.list.useQuery({
-    status: statusFilter === "alle" ? undefined : (statusFilter as PlanStatus),
+    status: istPapierkorb || statusFilter === "alle" ? undefined : (statusFilter as PlanStatus),
+    geloescht: istPapierkorb,
+  });
+  const loeschen = trpc.plaene.loeschen.useMutation({
+    onSuccess: () => utils.plaene.list.invalidate(),
+  });
+  const wiederherstellen = trpc.plaene.wiederherstellen.useMutation({
+    onSuccess: () => utils.plaene.list.invalidate(),
   });
   const patienten = trpc.customers.list.useQuery({});
 
@@ -148,6 +156,7 @@ export default function Plans() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="alle">Alle Status</SelectItem>
+            <SelectItem value="geloescht">Gelöschte (Papierkorb)</SelectItem>
             {(Object.keys(PLAN_STATUS) as PlanStatus[]).map((s) => (
               <SelectItem key={s} value={s}>
                 {PLAN_STATUS[s]}
@@ -166,13 +175,14 @@ export default function Plans() {
               <th className="px-4 py-2.5 font-medium">Patient</th>
               <th className="px-4 py-2.5 font-medium">Zeitraum</th>
               <th className="px-4 py-2.5 font-medium">Status</th>
+              <th className="px-4 py-2.5 text-right font-medium">Aktionen</th>
             </tr>
           </thead>
           <tbody>
             {gefiltert.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-neutral-400">
-                  Keine Therapiepläne gefunden.
+                <td colSpan={5} className="px-4 py-8 text-center text-neutral-400">
+                  {istPapierkorb ? "Papierkorb ist leer." : "Keine Therapiepläne gefunden."}
                 </td>
               </tr>
             )}
@@ -194,6 +204,38 @@ export default function Plans() {
                 </td>
                 <td className="px-4 py-2.5">
                   <PlanStatusBadge status={p.status} />
+                  {p.geloeschtAm && (
+                    <div className="mt-1 text-xs text-neutral-400">
+                      gelöscht {new Date(p.geloeschtAm).toLocaleString("de-DE")}
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  {p.geloeschtAm ? (
+                    p.restorable && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => wiederherstellen.mutate({ id: p.id })}
+                      >
+                        Wiederherstellen
+                      </Button>
+                    )
+                  ) : p.status !== "abgerechnet" ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600"
+                      title="In den Papierkorb legen (48 h wiederherstellbar)"
+                      onClick={() => {
+                        if (window.confirm(`Plan „${p.titel ?? `#${p.id}`}“ in den Papierkorb legen? (48 h wiederherstellbar)`)) {
+                          loeschen.mutate({ id: p.id });
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                 </td>
               </tr>
             ))}

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import {
   createRouter,
   rechtQuery,
@@ -73,14 +73,31 @@ export const planRouter = createRouter({
         .object({
           patientId: z.number().int().optional(),
           status: z.enum(["geplant", "aktiv", "dokumentiert", "abgerechnet"]).optional(),
+          geloescht: z.boolean().optional(),
         })
         .optional(),
     )
     .query(async ({ input }) => {
+      const db = getDb();
+      // Lazy-Purge: endgültige Löschung nach 48 h im Papierkorb
+      const ablauf = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      await db
+        .delete(therapyPlans)
+        .where(
+          and(
+            isNotNull(therapyPlans.geloeschtAm),
+            lt(therapyPlans.geloeschtAm, ablauf),
+          ),
+        );
+
       const bedingungen = [];
       if (input?.patientId) bedingungen.push(eq(therapyPlans.patientId, input.patientId));
       if (input?.status) bedingungen.push(eq(therapyPlans.status, input.status));
-      const db = getDb();
+      bedingungen.push(
+        input?.geloescht
+          ? isNotNull(therapyPlans.geloeschtAm)
+          : isNull(therapyPlans.geloeschtAm),
+      );
       const rows = await db
         .select({
           plan: therapyPlans,
@@ -93,6 +110,9 @@ export const planRouter = createRouter({
       return rows.map((r) => ({
         ...r.plan,
         patient: { name: r.patientName },
+        restorable:
+          r.plan.geloeschtAm !== null &&
+          r.plan.geloeschtAm.getTime() > Date.now() - 48 * 60 * 60 * 1000,
       }));
     }),
 
@@ -331,6 +351,68 @@ export const planRouter = createRouter({
         })),
       );
       return { ok: true, anzahl: eintraege.length };
+    }),
+
+  // ── Papierkorb: Soft-Delete + Wiederherstellen (48 h) ───────────────────
+  // Löschbar: geplant/aktiv/dokumentiert — abgerechnet NIEMALS (GoBD-Feld).
+  loeschen: rechtQuery("plaene")
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const plan = await db.query.therapyPlans.findFirst({
+        where: eq(therapyPlans.id, input.id),
+      });
+      if (!plan) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Therapieplan nicht gefunden." });
+      }
+      if (plan.status === "abgerechnet") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Abgerechnete Pläne können nicht gelöscht werden.",
+        });
+      }
+      if (plan.geloeschtAm) return { ok: true };
+      await db
+        .update(therapyPlans)
+        .set({ geloeschtAm: new Date() })
+        .where(eq(therapyPlans.id, input.id));
+      await schreibeTimeline({
+        patientId: plan.patientId,
+        typ: "status",
+        titel: `Therapieplan in den Papierkorb gelegt (${plan.titel ?? `#${plan.id}`})`,
+        beschreibung: "48 Stunden wiederherstellbar",
+        createdBy: ctx.user.id,
+      });
+      return { ok: true };
+    }),
+
+  wiederherstellen: rechtQuery("plaene")
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const plan = await db.query.therapyPlans.findFirst({
+        where: eq(therapyPlans.id, input.id),
+      });
+      if (!plan || !plan.geloeschtAm) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Plan nicht im Papierkorb." });
+      }
+      if (plan.geloeschtAm.getTime() <= Date.now() - 48 * 60 * 60 * 1000) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Die 48-Stunden-Frist ist abgelaufen — der Plan wurde endgültig gelöscht.",
+        });
+      }
+      await db
+        .update(therapyPlans)
+        .set({ geloeschtAm: null })
+        .where(eq(therapyPlans.id, input.id));
+      await schreibeTimeline({
+        patientId: plan.patientId,
+        typ: "status",
+        titel: `Therapieplan wiederhergestellt (${plan.titel ?? `#${plan.id}`})`,
+        createdBy: ctx.user.id,
+      });
+      return { ok: true };
     }),
 
   // ── Plan als dokumentiert markieren ─────────────────────────────────────

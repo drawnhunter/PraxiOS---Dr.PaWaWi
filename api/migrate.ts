@@ -41,6 +41,11 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "products", spalte: "barcode", ddl: "ALTER TABLE products ADD COLUMN barcode VARCHAR(100) NULL AFTER artikelnummer" },
   { tabelle: "products", spalte: "mindestbestand", ddl: "ALTER TABLE products ADD COLUMN mindestbestand DECIMAL(12,2) NULL AFTER barcode" },
   { tabelle: "products", spalte: "lager_aktiv", ddl: "ALTER TABLE products ADD COLUMN lager_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER mindestbestand" },
+  // 1.1.0: Papierkorb Therapiepläne
+  { tabelle: "therapy_plans", spalte: "geloescht_am", ddl: "ALTER TABLE therapy_plans ADD COLUMN geloescht_am TIMESTAMP NULL AFTER notizen" },
+  // 1.1.0: Mehrsprachige Bögen
+  { tabelle: "anamnesis_submissions", spalte: "sprache", ddl: "ALTER TABLE anamnesis_submissions ADD COLUMN sprache VARCHAR(8) NOT NULL DEFAULT 'de' AFTER patient_id" },
+  { tabelle: "anamnesis_submissions", spalte: "daten_de", ddl: "ALTER TABLE anamnesis_submissions ADD COLUMN daten_de TEXT NULL AFTER daten" },
 ];
 
 // Spalten-Aenderungen (Enum-Erweiterungen, idempotent per SHOW COLUMNS)
@@ -337,6 +342,17 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       aktiv TINYINT(1) NOT NULL DEFAULT 1,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT series_customer_fk FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    )`,
+  },
+  // 1.1.0: Übersetzungs-Cache
+  {
+    tabelle: "translation_cache",
+    ddl: `CREATE TABLE IF NOT EXISTS translation_cache (
+      hash VARCHAR(32) NOT NULL PRIMARY KEY,
+      quelle TEXT NOT NULL,
+      ziel_sprache VARCHAR(8) NOT NULL,
+      ziel TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
   },
   // PraxiOS: Austausch

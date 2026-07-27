@@ -464,6 +464,7 @@ CREATE TABLE `therapy_plans` (
   `rechnungsempfaenger_abweichend` tinyint(1) NOT NULL DEFAULT '0',
   `abweichender_empfaenger` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `notizen` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `geloescht_am` timestamp NULL DEFAULT NULL,
   `created_by` bigint unsigned DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -595,7 +596,9 @@ CREATE TABLE `anamnesis_submissions` (
   `link_id` bigint unsigned NOT NULL,
   `form_id` bigint unsigned NOT NULL,
   `patient_id` bigint unsigned NOT NULL,
+  `sprache` varchar(8) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'de',
   `daten` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `daten_de` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `unterschrift_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `datenschutz_zugestimmt` tinyint(1) NOT NULL DEFAULT '0',
   `document_id` bigint unsigned DEFAULT NULL,
@@ -701,6 +704,16 @@ CREATE TABLE `invoice_series` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   CONSTRAINT `series_customer_fk` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `translation_cache`;
+CREATE TABLE `translation_cache` (
+  `hash` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `quelle` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ziel_sprache` varchar(8) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ziel` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`hash`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;

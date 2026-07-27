@@ -629,6 +629,8 @@ export const therapyPlans = mysqlTable(
       .default(false),
     abweichenderEmpfaenger: text("abweichender_empfaenger"),
     notizen: text("notizen"),
+    // Papierkorb: Soft-Delete (48 h Wiederherstellung), abgerechnet nie löschbar
+    geloeschtAm: timestamp("geloescht_am"),
     createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
       () => users.id,
       { onDelete: "set null" },
@@ -822,7 +824,9 @@ export const anamnesisSubmissions = mysqlTable(
     patientId: bigint("patient_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => customers.id, { onDelete: "cascade" }),
-    daten: text("daten").notNull(), // JSON: Kopfbogen + Antworten je Block
+    sprache: varchar("sprache", { length: 8 }).notNull().default("de"),
+    daten: text("daten").notNull(), // JSON: Kopfbogen + Antworten (Original, Patientensprache)
+    datenDe: text("daten_de"), // JSON: deutsche Rückübersetzung (bei sprache != de)
     unterschriftName: varchar("unterschrift_name", { length: 255 }).notNull(),
     datenschutzZugestimmt: boolean("datenschutz_zugestimmt").notNull().default(false),
     documentId: bigint("document_id", { mode: "number", unsigned: true }).references(
@@ -833,6 +837,15 @@ export const anamnesisSubmissions = mysqlTable(
   },
   (t) => [index("anamnesis_sub_patient_idx").on(t.patientId)],
 );
+
+// Übersetzungs-Cache (LibreTranslate, persistent)
+export const translationCache = mysqlTable("translation_cache", {
+  hash: varchar("hash", { length: 32 }).primaryKey(),
+  quelle: text("quelle").notNull(),
+  zielSprache: varchar("ziel_sprache", { length: 8 }).notNull(),
+  ziel: text("ziel").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
 
 export type AnamnesisBlock = typeof anamnesisBlocks.$inferSelect;
 export type AnamnesisForm = typeof anamnesisForms.$inferSelect;

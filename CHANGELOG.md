@@ -1,5 +1,33 @@
 # Changelog — PraxiOS
 
+## [1.1.0] — 2026-07-26 — Mehrsprachige Bögen, Papierkorb, Touch-DnD, Sidebar
+
+### Mehrsprachige Anamnesebögen (on-premise)
+
+- **Sprachwahl mit Flaggen** beim Öffnen des Links (de, en, tr, ar, ru, uk, sk);
+  Bogen komplett in der Patientensprache (UI-Chrom handgepflegt + Inhalte
+  maschinell übersetzt), inkl. RTL für Arabisch
+- **LibreTranslate als Sidecar-Container** (nur intern, keine Daten nach
+  außen); Übersetzungen persistent gecacht (`translation_cache`)
+- **Einreichung doppelt**: Original in Patientensprache + deutsche
+  Rückübersetzung (kategoriale Antworten deterministisch zurückgemappt,
+  Freitext via MT); zwei PDFs in der Akte (Original + „DE-Übersetzung"),
+  `sprache` + `datenDe` in der Einreichung
+
+### Papierkorb für Therapiepläne
+
+- Soft-Delete (`geloescht_am`) für geplant/aktiv/dokumentiert — **abgerechnet
+  niemals** (GoBD); Filter „Gelöschte" in der Plan-Liste, **48 h
+  Wiederherstellen**, danach endgültige Löschung (lazy purge, Kaskade)
+
+### Interaktion & Komfort
+
+- **Drag & Drop auf dnd-kit** (PointerSensor, 6 px Aktivierungsdistanz) —
+  funktioniert jetzt auch auf **Tablet/Handy**, nicht nur Maus
+- **Sidebar klappt im Plan-Detail automatisch** auf Icon-Leiste (Toggle
+  PanelLeft oben; Mobile unverändert)
+- Status-Popover an Eintrags-Karten **schließt nach Statuswahl von selbst**
+
 ## [1.0.0] — 2026-07-26 — Erstes öffentliches Release 🎉
 
 **Dr.PaWaWi (PraxiOS) 1.0.0** — vereinigte Patientenakte, Therapiepläne,

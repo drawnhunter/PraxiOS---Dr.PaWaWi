@@ -24,7 +24,9 @@ import {
 } from "@db/schema";
 import {
   BLOCK_TYPEN,
+  HAEUFIGKEIT_STUFEN,
   KOPFBOGEN_FELDER,
+  SPRACHEN,
   type FormBlock,
   type OeffentlicherBogen,
   type SubmissionDaten,
@@ -68,6 +70,66 @@ function parseBlocks(form: { schemaJson: string }): FormBlock[] {
   } catch {
     return [];
   }
+}
+
+/** Basis-Bogen (unübersetzt, deutsch) für den öffentlichen Zugang laden. */
+async function ladeOeffentlichenBogen(token: string): Promise<OeffentlicherBogen> {
+  const db = getDb();
+  const link = await db.query.anamnesisLinks.findFirst({
+    where: eq(anamnesisLinks.token, token),
+  });
+  if (!link) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Dieser Link ist ungültig." });
+  }
+  let status = link.status;
+  if (status === "offen" && link.laeuftAbAm < new Date()) {
+    await db
+      .update(anamnesisLinks)
+      .set({ status: "abgelaufen" })
+      .where(eq(anamnesisLinks.id, link.id));
+    status = "abgelaufen";
+  }
+  const form = await db.query.anamnesisForms.findFirst({
+    where: eq(anamnesisForms.id, link.formId),
+  });
+  if (!form) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Bogen nicht gefunden." });
+  }
+  const praxis = await db.query.companySettings.findFirst({
+    where: eq(companySettings.id, 1),
+  });
+
+  let vorbefuellung: OeffentlicherBogen["vorbefuellung"] = null;
+  if (link.patientId) {
+    const p = await db.query.customers.findFirst({
+      where: eq(customers.id, link.patientId),
+    });
+    if (p) {
+      const komma = p.name.indexOf(",");
+      vorbefuellung = {
+        nachname: komma >= 0 ? p.name.slice(0, komma).trim() : p.name,
+        vorname: komma >= 0 ? p.name.slice(komma + 1).trim() : "",
+        geburtsdatum: p.geburtsdatum ?? undefined,
+        strasse: p.strasse || undefined,
+        plz: p.plz || undefined,
+        ort: p.ort || undefined,
+        telefon: p.telefon ?? undefined,
+        email: p.email ?? undefined,
+        krankenkasse: p.krankenkasse ?? undefined,
+      };
+    }
+  }
+
+  return {
+    formTitel: form.titel,
+    formBeschreibung: form.beschreibung,
+    bloecke: parseBlocks(form),
+    praxisName: praxis?.name ?? null,
+    vorbefuellung,
+    linkStatus: status,
+    eingereichtAm: link.eingereichtAm?.toISOString() ?? null,
+    sprache: "de",
+  };
 }
 
 const fmtDe = (d: Date) =>
@@ -235,64 +297,88 @@ export const anamneseRouter = createRouter({
     }),
 
   // ── Öffentlich (ohne Login): Bogen abrufen + einreichen ───────────────────
-  bogenByToken: publicQuery
-    .input(z.object({ token: z.string().min(10) }))
+  /** Verfügbare Sprachen für die Auswahl im öffentlichen Bogen. */
+  sprachen: publicQuery.query(async () => {
+    const { translateVerfuegbar } = await import("./lib/translate");
+    return { sprachen: SPRACHEN, mtVerfuegbar: await translateVerfuegbar() };
+  }),
+
+  /** Bogen in einer Zielsprache (übersetzt via LibreTranslate, gecacht). */
+  bogenInSprache: publicQuery
+    .input(z.object({ token: z.string().min(10), sprache: z.string().length(2) }))
     .query(async ({ input }): Promise<OeffentlicherBogen> => {
       const db = getDb();
       const link = await db.query.anamnesisLinks.findFirst({
         where: eq(anamnesisLinks.token, input.token),
       });
-      if (!link) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Dieser Link ist ungültig." });
-      }
-      let status = link.status;
-      if (status === "offen" && link.laeuftAbAm < new Date()) {
-        await db
-          .update(anamnesisLinks)
-          .set({ status: "abgelaufen" })
-          .where(eq(anamnesisLinks.id, link.id));
-        status = "abgelaufen";
-      }
+      if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Dieser Link ist ungültig." });
       const form = await db.query.anamnesisForms.findFirst({
         where: eq(anamnesisForms.id, link.formId),
       });
-      if (!form) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Bogen nicht gefunden." });
-      }
-      const praxis = await db.query.companySettings.findFirst({
-        where: eq(companySettings.id, 1),
-      });
+      if (!form) throw new TRPCError({ code: "NOT_FOUND", message: "Bogen nicht gefunden." });
 
-      let vorbefuellung: OeffentlicherBogen["vorbefuellung"] = null;
-      if (link.patientId) {
-        const p = await db.query.customers.findFirst({
-          where: eq(customers.id, link.patientId),
-        });
-        if (p) {
-          const komma = p.name.indexOf(",");
-          vorbefuellung = {
-            nachname: komma >= 0 ? p.name.slice(0, komma).trim() : p.name,
-            vorname: komma >= 0 ? p.name.slice(komma + 1).trim() : "",
-            geburtsdatum: p.geburtsdatum ?? undefined,
-            strasse: p.strasse || undefined,
-            plz: p.plz || undefined,
-            ort: p.ort || undefined,
-            telefon: p.telefon ?? undefined,
-            email: p.email ?? undefined,
-            krankenkasse: p.krankenkasse ?? undefined,
-          };
-        }
+      const basis = await ladeOeffentlichenBogen(input.token);
+      if (input.sprache === "de") return { ...basis, sprache: "de" };
+
+      // Alle übersetzbaren Texte sammeln (Titel, Fragen, Beschreibung, Labels)
+      const texte: string[] = [basis.formTitel];
+      if (basis.formBeschreibung) texte.push(basis.formBeschreibung);
+      const kopfLabels = KOPFBOGEN_FELDER.map((f) => f.label);
+      texte.push(...kopfLabels);
+      for (const b of basis.bloecke) {
+        texte.push(b.titel);
+        for (const f of b.config.fragen ?? []) texte.push(f);
+        if (b.config.frage) texte.push(b.config.frage);
+        if (b.config.vonLabel) texte.push(b.config.vonLabel);
+        if (b.config.bisLabel) texte.push(b.config.bisLabel);
       }
+      texte.push(...HAEUFIGKEIT_STUFEN);
+
+      const { uebersetzeBatch } = await import("./lib/translate");
+      const ue = await uebersetzeBatch(texte, input.sprache, "de");
+      const m = new Map(texte.map((t, i) => [t, ue[i]]));
+
+      let i = 0;
+      const naechste = () => ue[i++];
+      const t = (orig: string) => m.get(orig) ?? orig;
+      const formTitel = naechste();
+      const formBeschreibung = basis.formBeschreibung ? naechste() : null;
+      const kopfbogenLabels: OeffentlicherBogen["kopfbogenLabels"] = {};
+      for (const feld of KOPFBOGEN_FELDER) kopfbogenLabels[feld.key] = t(feld.label);
+
+      const rueckMap: Record<string, string> = {};
+      for (const [orig, ziel] of m) if (orig !== ziel) rueckMap[ziel] = orig;
+
+      const bloecke = basis.bloecke.map((b) => ({
+        ...b,
+        titel: t(b.titel),
+        config: {
+          ...b.config,
+          fragen: b.config.fragen?.map((f) => t(f)),
+          frage: b.config.frage ? t(b.config.frage) : undefined,
+          vonLabel: b.config.vonLabel ? t(b.config.vonLabel) : undefined,
+          bisLabel: b.config.bisLabel ? t(b.config.bisLabel) : undefined,
+        },
+      }));
+      const haeufigkeitStufen = HAEUFIGKEIT_STUFEN.map((s) => t(s));
 
       return {
-        formTitel: form.titel,
-        formBeschreibung: form.beschreibung,
-        bloecke: parseBlocks(form),
-        praxisName: praxis?.name ?? null,
-        vorbefuellung,
-        linkStatus: status,
-        eingereichtAm: link.eingereichtAm?.toISOString() ?? null,
+        ...basis,
+        formTitel,
+        formBeschreibung,
+        bloecke,
+        kopfbogenLabels,
+        haeufigkeitStufen,
+        rueckMap,
+        sprache: input.sprache,
       };
+    }),
+
+  bogenByToken: publicQuery
+    .input(z.object({ token: z.string().min(10) }))
+    .query(async ({ input }): Promise<OeffentlicherBogen> => {
+      const basis = await ladeOeffentlichenBogen(input.token);
+      return { ...basis, sprache: "de" };
     }),
 
   einreichen: publicQuery
@@ -314,6 +400,7 @@ export const anamneseRouter = createRouter({
         ).max(80),
         unterschriftName: z.string().trim().min(2).max(255),
         datenschutzZugestimmt: z.literal(true),
+        sprache: z.string().length(2).default("de"),
       }),
     )
     .mutation(async ({ input }) => {
@@ -406,25 +493,55 @@ export const anamneseRouter = createRouter({
         antworten: input.antworten as SubmissionDaten["antworten"],
       };
 
-      // Ausgefüllten Bogen als PDF erzeugen + ablegen
       const praxis = await db.query.companySettings.findFirst({
         where: eq(companySettings.id, 1),
       });
-      const pdf = await renderBogenPdf({
+      const formBloecke = parseBlocks(form);
+      const zielVerzeichnis = path.join(env.uploadDir, String(patient.id));
+      mkdirSync(zielVerzeichnis, { recursive: true });
+      const sprachName = SPRACHEN.find((s) => s.code === input.sprache)?.name ?? input.sprache;
+
+      // ── Deutsche Arbeitsversion (datenDe + PDF) ─────────────────────────
+      let datenDe: SubmissionDaten = daten;
+      if (input.sprache !== "de") {
+        datenDe = await rueckUebersetzeAntworten(formBloecke, daten, input.sprache);
+      }
+      const pdfDe = await renderBogenPdf({
         formTitel: form.titel,
         beschreibung: form.beschreibung,
-        bloecke: parseBlocks(form),
+        bloecke: formBloecke,
         praxisName: praxis?.name ?? null,
-        kopfbogen: daten.kopfbogen,
-        antworten: daten.antworten,
+        kopfbogen: datenDe.kopfbogen,
+        antworten: datenDe.antworten,
         unterschriftName: input.unterschriftName,
         datum: fmtDe(new Date()),
       });
-      const zielVerzeichnis = path.join(env.uploadDir, String(patient.id));
-      mkdirSync(zielVerzeichnis, { recursive: true });
-      const dateiname = `${form.titel.replace(/[^\wäöüÄÖÜß-]+/g, "_")}_${patient.name.split(",")[0].trim()}_${fmtDe(new Date()).replace(/\./g, "-")}.pdf`;
-      const dateipfad = `${patient.id}/${Date.now()}-${crypto.randomBytes(4).toString("hex")}.pdf`;
-      await writeFile(path.join(env.uploadDir, dateipfad), pdf);
+      const dateinameDe = `${form.titel.replace(/[^\wäöüÄÖÜß-]+/g, "_")}_${patient.name.split(",")[0].trim()}_${fmtDe(new Date()).replace(/\./g, "-")}${input.sprache !== "de" ? "_DE-Uebersetzung" : ""}.pdf`;
+      const dateipfadDe = `${patient.id}/${Date.now()}-${crypto.randomBytes(4).toString("hex")}.pdf`;
+      await writeFile(path.join(env.uploadDir, dateipfadDe), pdfDe);
+
+      // ── Original-PDF in Patientensprache (bei sprache != de) ────────────
+      let pdfOriginal: Buffer | null = null;
+      let dateinameOriginal: string | null = null;
+      let dateipfadOriginal: string | null = null;
+      if (input.sprache !== "de") {
+        const ue = await uebersetzeForm(form, input.sprache);
+        pdfOriginal = await renderBogenPdf({
+          formTitel: ue.formTitel,
+          beschreibung: ue.formBeschreibung,
+          bloecke: ue.bloecke,
+          praxisName: praxis?.name ?? null,
+          kopfbogen: daten.kopfbogen,
+          antworten: daten.antworten,
+          unterschriftName: input.unterschriftName,
+          datum: fmtDe(new Date()),
+          kopfbogenLabels: ue.kopfbogenLabels,
+          haeufigkeitStufen: ue.haeufigkeitStufen,
+        });
+        dateinameOriginal = `${form.titel.replace(/[^\wäöüÄÖÜß-]+/g, "_")}_${patient.name.split(",")[0].trim()}_${fmtDe(new Date()).replace(/\./g, "-")}_Original-${input.sprache.toUpperCase()}.pdf`;
+        dateipfadOriginal = `${patient.id}/${Date.now()}-${crypto.randomBytes(4).toString("hex")}.pdf`;
+        await writeFile(path.join(env.uploadDir, dateipfadOriginal), pdfOriginal);
+      }
 
       const ergebnis = await db.transaction(async (tx) => {
         const [doc] = await tx
@@ -432,20 +549,33 @@ export const anamneseRouter = createRouter({
           .values({
             patientId: patient!.id,
             kategorie: "anamnesebogen",
-            dateiname,
-            dateipfad,
+            dateiname: dateinameDe,
+            dateipfad: dateipfadDe,
             mimeType: "application/pdf",
-            groesse: pdf.length,
-            notiz: `Anamnesebogen online eingereicht (${input.unterschriftName})`,
+            groesse: pdfDe.length,
+            notiz: `Anamnesebogen online eingereicht (${input.unterschriftName})${input.sprache !== "de" ? ` — deutsche Übersetzung aus ${sprachName}` : ""}`,
           })
           .$returningId();
+        if (pdfOriginal && dateinameOriginal && dateipfadOriginal) {
+          await tx.insert(documents).values({
+            patientId: patient!.id,
+            kategorie: "anamnesebogen",
+            dateiname: dateinameOriginal,
+            dateipfad: dateipfadOriginal,
+            mimeType: "application/pdf",
+            groesse: pdfOriginal.length,
+            notiz: `Anamnesebogen online eingereicht (${input.unterschriftName}) — Original (${sprachName})`,
+          });
+        }
         const [sub] = await tx
           .insert(anamnesisSubmissions)
           .values({
             linkId: link.id,
             formId: form.id,
             patientId: patient!.id,
+            sprache: input.sprache,
             daten: JSON.stringify(daten),
+            datenDe: input.sprache !== "de" ? JSON.stringify(datenDe) : null,
             unterschriftName: input.unterschriftName,
             datenschutzZugestimmt: true,
             documentId: doc.id,
@@ -462,9 +592,103 @@ export const anamneseRouter = createRouter({
         patientId: patient.id,
         typ: "dokument",
         titel: `Anamnesebogen online eingereicht: ${form.titel}`,
-        beschreibung: `Bestätigt durch ${input.unterschriftName}`,
+        beschreibung: `Bestätigt durch ${input.unterschriftName}${input.sprache !== "de" ? ` · Sprache: ${sprachName}` : ""}`,
       });
 
       return { ok: true, ...ergebnis };
     }),
 });
+
+// ── Übersetzungs-Helfer (Form-Texte + Rückübersetzung kategorialer Antworten) ─
+async function uebersetzeForm(form: { titel: string; beschreibung: string | null; schemaJson: string }, sprache: string) {
+  const bloecke = parseBlocks(form);
+  const texte: string[] = [form.titel];
+  if (form.beschreibung) texte.push(form.beschreibung);
+  const kopfLabels = KOPFBOGEN_FELDER.map((f) => f.label);
+  texte.push(...kopfLabels);
+  for (const b of bloecke) {
+    texte.push(b.titel);
+    for (const f of b.config.fragen ?? []) texte.push(f);
+    if (b.config.frage) texte.push(b.config.frage);
+    if (b.config.vonLabel) texte.push(b.config.vonLabel);
+    if (b.config.bisLabel) texte.push(b.config.bisLabel);
+  }
+  texte.push(...HAEUFIGKEIT_STUFEN);
+  const { uebersetzeBatch } = await import("./lib/translate");
+  const ue = await uebersetzeBatch(texte, sprache, "de");
+  const m = new Map(texte.map((t, i) => [t, ue[i]]));
+  const t = (orig: string) => m.get(orig) ?? orig;
+
+  let i = 0;
+  const naechste = () => ue[i++];
+  const formTitel = naechste();
+  const formBeschreibung = form.beschreibung ? naechste() : null;
+  const kopfbogenLabels: OeffentlicherBogen["kopfbogenLabels"] = {};
+  for (const feld of KOPFBOGEN_FELDER) kopfbogenLabels[feld.key] = t(feld.label);
+  return {
+    formTitel,
+    formBeschreibung,
+    bloecke: bloecke.map((b) => ({
+      ...b,
+      titel: t(b.titel),
+      config: {
+        ...b.config,
+        fragen: b.config.fragen?.map((f) => t(f)),
+        frage: b.config.frage ? t(b.config.frage) : undefined,
+        vonLabel: b.config.vonLabel ? t(b.config.vonLabel) : undefined,
+        bisLabel: b.config.bisLabel ? t(b.config.bisLabel) : undefined,
+      },
+    })),
+    kopfbogenLabels,
+    haeufigkeitStufen: HAEUFIGKEIT_STUFEN.map((s) => t(s)),
+    rueckMap: new Map([...m].filter(([o, z]) => o !== z).map(([o, z]) => [z, o] as [string, string])),
+  };
+}
+
+/** Antworten aus Patientensprache zurück ins Deutsche mappen (kategorial via
+ * Rueckwärts-Map, Freitext via MT). */
+export async function rueckUebersetzeAntworten(
+  formBloecke: FormBlock[],
+  daten: SubmissionDaten,
+  sprache: string,
+): Promise<SubmissionDaten> {
+  const ue = await uebersetzeForm(
+    { titel: "x", beschreibung: null, schemaJson: JSON.stringify(formBloecke) },
+    sprache,
+  );
+  const rueck = ue.rueckMap;
+  const { uebersetzeBatch } = await import("./lib/translate");
+
+  const freitexte: { i: number; text: string }[] = [];
+  const antworten = daten.antworten.map((a, i) => {
+    const block = formBloecke[i];
+    const titelDe = block?.titel ?? a.titel;
+    if (a.typ === "checkboxen" && Array.isArray(a.wert)) {
+      return {
+        ...a,
+        titel: titelDe,
+        wert: a.wert.map((w) => rueck.get(w) ?? w),
+      };
+    }
+    if ((a.typ === "textfeld" || a.typ === "textfeld_schreibfeld") && typeof a.wert === "string" && a.wert.trim()) {
+      freitexte.push({ i, text: a.wert });
+      return { ...a, titel: titelDe };
+    }
+    if (a.typ === "haeufigkeit" && typeof a.wert === "object" && a.wert !== null && !Array.isArray(a.wert)) {
+      const mapped: Record<string, string> = {};
+      for (const [frage, stufe] of Object.entries(a.wert as Record<string, string>) ) {
+        mapped[rueck.get(frage) ?? frage] = rueck.get(stufe) ?? stufe;
+      }
+      return { ...a, titel: titelDe, wert: mapped };
+    }
+    return { ...a, titel: titelDe };
+  });
+
+  if (freitexte.length > 0) {
+    const ue2 = await uebersetzeBatch(freitexte.map((f) => f.text), "de", sprache);
+    freitexte.forEach((f, j) => {
+      antworten[f.i] = { ...antworten[f.i], wert: ue2[j] ?? f.text };
+    });
+  }
+  return { kopfbogen: daten.kopfbogen, antworten };
+}

@@ -34,6 +34,9 @@ export interface BogenPdfInput {
   antworten?: SubmissionDaten["antworten"];
   unterschriftName?: string;
   datum?: string; // TT.MM.JJJJ
+  // Übersetzungs-Overrides (bei Patientensprache statt Deutsch)
+  kopfbogenLabels?: Partial<Record<KopfbogenKey, string>>;
+  haeufigkeitStufen?: string[];
 }
 
 export function renderBogenPdf(input: BogenPdfInput): Promise<Buffer> {
@@ -79,7 +82,7 @@ export function renderBogenPdf(input: BogenPdfInput): Promise<Buffer> {
       const x = MARGIN + spalte * feldW;
       sichereSeite(18);
       doc.font(regular).fontSize(7.5).fillColor(GRAU).text(
-        feld.label + (feld.pflicht ? " *" : ""),
+        (input.kopfbogenLabels?.[feld.key] ?? feld.label) + (feld.pflicht ? " *" : ""),
         x,
         y,
         { width: feldW - 12 },
@@ -162,7 +165,7 @@ export function renderBogenPdf(input: BogenPdfInput): Promise<Buffer> {
         const kopfW = W * 0.42;
         const stufW = (W - kopfW) / HAEUFIGKEIT_STUFEN.length;
         sichereSeite(16);
-        HAEUFIGKEIT_STUFEN.forEach((stufe, si) => {
+        (input.haeufigkeitStufen ?? [...HAEUFIGKEIT_STUFEN]).forEach((stufe, si) => {
           doc.font(regular).fontSize(6.8).fillColor(GRAU).text(
             stufe,
             MARGIN + kopfW + si * stufW,
@@ -177,7 +180,8 @@ export function renderBogenPdf(input: BogenPdfInput): Promise<Buffer> {
           const gewahlt = typeof antwort === "object" && antwort !== null && !Array.isArray(antwort)
             ? (antwort as Record<string, string>)[frage]
             : undefined;
-          HAEUFIGKEIT_STUFEN.forEach((stufe, si) => {
+          const stufen = input.haeufigkeitStufen ?? [...HAEUFIGKEIT_STUFEN];
+          stufen.forEach((stufe, si) => {
             const x = MARGIN + kopfW + si * stufW + stufW / 2 - 5;
             kreis(doc, x + 5, y + 6, gewahlt === stufe);
           });
