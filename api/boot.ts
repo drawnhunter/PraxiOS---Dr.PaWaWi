@@ -243,6 +243,10 @@ if (env.isProduction) {
     if (n > 0) console.log(`[seed] Leistungskatalog: ${n} Einträge`);
     const g = await seedGruppen();
     if (g > 0) console.log(`[seed] Gruppen: ${g} Standard-Gruppen`);
+
+    // Terminerinnerungen (E-Mail, alle 30 min)
+    const { starteErinnerungsScheduler } = await import("./terminErinnerung");
+    starteErinnerungsScheduler();
   } catch (e) {
     console.error("[migrate/seed] fehlgeschlagen:", e);
   }

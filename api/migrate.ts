@@ -43,6 +43,15 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "products", spalte: "lager_aktiv", ddl: "ALTER TABLE products ADD COLUMN lager_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER mindestbestand" },
   // 1.1.0: Papierkorb Therapiepläne
   { tabelle: "therapy_plans", spalte: "geloescht_am", ddl: "ALTER TABLE therapy_plans ADD COLUMN geloescht_am TIMESTAMP NULL AFTER notizen" },
+  // 1.1.1: GOÄ-Mapping am Produkt
+  { tabelle: "products", spalte: "goae_ziffer", ddl: "ALTER TABLE products ADD COLUMN goae_ziffer VARCHAR(20) NULL AFTER lager_aktiv" },
+  { tabelle: "products", spalte: "goae_art", ddl: "ALTER TABLE products ADD COLUMN goae_art ENUM('direkt','analog','§2') NULL AFTER goae_ziffer" },
+  // 1.1.1: GOÄ-Mapping am Produkt
+  { tabelle: "products", spalte: "goae_ziffer", ddl: "ALTER TABLE products ADD COLUMN goae_ziffer VARCHAR(20) NULL AFTER lager_aktiv" },
+  { tabelle: "products", spalte: "goae_art", ddl: "ALTER TABLE products ADD COLUMN goae_art ENUM('direkt','analog','§2') NULL AFTER goae_ziffer" },
+  // 1.1.1: Terminerinnerungen
+  { tabelle: "company_settings", spalte: "erinnerung_aktiv", ddl: "ALTER TABLE company_settings ADD COLUMN erinnerung_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER kalender_token" },
+  { tabelle: "company_settings", spalte: "erinnerung_tage_vorher", ddl: "ALTER TABLE company_settings ADD COLUMN erinnerung_tage_vorher INT NOT NULL DEFAULT 1 AFTER erinnerung_aktiv" },
   // 1.1.0: Mehrsprachige Bögen
   { tabelle: "anamnesis_submissions", spalte: "sprache", ddl: "ALTER TABLE anamnesis_submissions ADD COLUMN sprache VARCHAR(8) NOT NULL DEFAULT 'de' AFTER patient_id" },
   { tabelle: "anamnesis_submissions", spalte: "daten_de", ddl: "ALTER TABLE anamnesis_submissions ADD COLUMN daten_de TEXT NULL AFTER daten" },
@@ -342,6 +351,17 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       aktiv TINYINT(1) NOT NULL DEFAULT 1,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT series_customer_fk FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    )`,
+  },
+  // 1.1.1: Terminerinnerungen
+  {
+    tabelle: "termin_erinnerungen",
+    ddl: `CREATE TABLE IF NOT EXISTS termin_erinnerungen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      entry_id BIGINT UNSIGNED NOT NULL,
+      gesendet_an VARCHAR(320) NOT NULL,
+      gesendet_am TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX termin_erinnerung_eindeutig (entry_id)
     )`,
   },
   // 1.1.0: Übersetzungs-Cache

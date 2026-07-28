@@ -1,5 +1,21 @@
 # Changelog — PraxiOS
 
+## [1.1.1] — 2026-07-28 — Terminerinnerungen + GOÄ lokal
+
+- **Terminerinnerungen per E-Mail**: automatischer Versand an Patienten mit
+  E-Mail-Adresse X Tage vor dem Termin (1–7 einstellbar, nur Status „geplant",
+  genau einmal je Eintrag, Tabelle `termin_erinnerungen` als Duplikatschutz);
+  Scheduler alle 30 min, manueller „Jetzt prüfen"-Test, SMTP aus den
+  Einstellungen
+- **GOÄ lokal (Praxis-Mapping)**: `goae_ziffer` + `goae_art`
+  (direkt/analog „entspr."/§ 2) am Produkt; GOÄ-Bezug wandert automatisch in
+  die Rechnungs-Beschreibung („Mo, 06.07.2026 · GOÄ 272"); Badge in der
+  Produktliste, Datalist-Helfer im Formular
+- **Kuratierte GOÄ-Basisbibliothek** (`db/goaeBibliothek.ts`, ~24 Einträge):
+  eigenes Praxiswissen — Ziffern-Referenzen (Fakten aus der gemeinfreien
+  Verordnung) mit eigenen Kurztexten und Analog-/Anwendungshinweisen aus der
+  Abrechnungspraxis. Explizit KEIN amtlicher Katalogtext (Rechtskante beachtet)
+
 ## [1.1.0] — 2026-07-26 — Mehrsprachige Bögen, Papierkorb, Touch-DnD, Sidebar
 
 ### Mehrsprachige Anamnesebögen (on-premise)

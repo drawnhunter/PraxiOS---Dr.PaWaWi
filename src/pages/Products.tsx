@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Search } from "lucide-react";
 import ImportDialog from "@/components/ImportDialog";
+import { GOAE_BIBLIOTHEK } from "@db/goaeBibliothek";
 
 interface FormState {
   id?: number;
@@ -39,6 +40,8 @@ interface FormState {
   barcode: string;
   mindestbestand: string;
   lagerAktiv: boolean;
+  goaeZiffer: string;
+  goaeArt: string;
   ustSatz: number;
 }
 
@@ -55,6 +58,8 @@ const leeresFormular: FormState = {
   barcode: "",
   mindestbestand: "",
   lagerAktiv: false,
+  goaeZiffer: "",
+  goaeArt: "",
   ustSatz: 0,
 };
 
@@ -101,6 +106,8 @@ export default function Products() {
       barcode: p.barcode ?? "",
       mindestbestand: p.mindestbestand ? String(Number(p.mindestbestand)).replace(".", ",") : "",
       lagerAktiv: p.lagerAktiv,
+      goaeZiffer: p.goaeZiffer ?? "",
+      goaeArt: p.goaeArt ?? "",
       ustSatz: p.ustSatz,
     });
     setDialogOffen(true);
@@ -119,6 +126,8 @@ export default function Products() {
       barcode: form.barcode.trim() || null,
       mindestbestand: form.mindestbestand.trim() ? form.mindestbestand.trim().replace(",", ".") : null,
       lagerAktiv: form.lagerAktiv,
+      goaeZiffer: form.goaeZiffer.trim() || null,
+      goaeArt: (form.goaeArt || null) as "direkt" | "analog" | "§2" | null,
       ustSatz: form.ustSatz,
     };
     if (form.id) {
@@ -194,6 +203,11 @@ export default function Products() {
                     {p.name} {!p.aktiv && <Badge variant="secondary">inaktiv</Badge>}{" "}
                     {p.kategorie === "auslage" && (
                       <Badge variant="outline" className="border-sky-400 text-sky-700">§ 10 Auslage</Badge>
+                    )}{" "}
+                    {p.goaeZiffer && (
+                      <Badge variant="outline" className="border-[#0F766E] text-[#0F766E]">
+                        GOÄ {p.goaeZiffer}
+                      </Badge>
                     )}
                   </div>
                   {p.beschreibung && (
@@ -262,6 +276,39 @@ export default function Products() {
                 <SelectContent>
                   <SelectItem value="leistung">1. Ärztliche Leistung (GOÄ, VK)</SelectItem>
                   <SelectItem value="auslage">2. Auslage § 10 GOÄ (EK)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>GOÄ-Ziffer (Referenz)</Label>
+              <Input
+                value={form.goaeZiffer}
+                onChange={(e) => setForm({ ...form, goaeZiffer: e.target.value })}
+                placeholder="z. B. 272 oder § 2"
+                list="goae-bibliothek"
+              />
+              <datalist id="goae-bibliothek">
+                {GOAE_BIBLIOTHEK.map((g) => (
+                  <option key={g.ziffer} value={g.ziffer}>
+                    {g.ziffer} — {g.kurztext}
+                  </option>
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <Label>GOÄ-Art</Label>
+              <Select
+                value={form.goaeArt || "keine"}
+                onValueChange={(v) => setForm({ ...form, goaeArt: v === "keine" ? "" : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="keine">—</SelectItem>
+                  <SelectItem value="direkt">direkt</SelectItem>
+                  <SelectItem value="analog">analog (entspr.)</SelectItem>
+                  <SelectItem value="§2">§ 2 (Honorarvereinbarung)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

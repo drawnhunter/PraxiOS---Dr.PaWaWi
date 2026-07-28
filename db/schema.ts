@@ -51,6 +51,9 @@ export const companySettings = mysqlTable("company_settings", {
   // PraxiOS: Arzt-zu-Arzt-Austausch (age-Verschlüsselung)
   // Öffentlicher Schlüssel (wird an Kollegen gegeben)
   ageRecipient: varchar("age_recipient", { length: 100 }),
+  // Terminerinnerungen per E-Mail an Patienten
+  erinnerungAktiv: boolean("erinnerung_aktiv").notNull().default(false),
+  erinnerungTageVorher: int("erinnerung_tage_vorher").notNull().default(1),
   // Shared-Secret für den ICS-Kalender-Feed (/api/ics/<token>.ics)
   kalenderToken: varchar("kalender_token", { length: 64 }),
   // Geheimer Schlüssel — verlässt den Server NIE (wird in der API nicht ausgeliefert)
@@ -142,6 +145,10 @@ export const products = mysqlTable("products", {
   barcode: varchar("barcode", { length: 100 }),
   mindestbestand: decimal("mindestbestand", { precision: 12, scale: 2 }),
   lagerAktiv: boolean("lager_aktiv").notNull().default(false),
+  // GOÄ-Bezug (Praxis-Mapping, kein amtlicher Katalogtext):
+  // ziffer = Ziffern-Referenz (Fakt), art = direkt | analog (entspr.) | § 2
+  goaeZiffer: varchar("goae_ziffer", { length: 20 }),
+  goaeArt: mysqlEnum("goae_art", ["direkt", "analog", "§2"]),
   // Dr.ReWaWi: "leistung" = ärztliche Leistung (GOÄ, VK-Preis) /
   // "auslage" = Auslage § 10 GOÄ (wird zum EK-Preis durchgereicht)
   kategorie: mysqlEnum("kategorie", ["leistung", "auslage"]).notNull().default("leistung"),
@@ -845,6 +852,14 @@ export const translationCache = mysqlTable("translation_cache", {
   zielSprache: varchar("ziel_sprache", { length: 8 }).notNull(),
   ziel: text("ziel").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Gesendete Terminerinnerungen (Duplikatsschutz je Eintrag)
+export const terminErinnerungen = mysqlTable("termin_erinnerungen", {
+  id: serial("id").primaryKey(),
+  entryId: bigint("entry_id", { mode: "number", unsigned: true }).notNull(),
+  gesendetAn: varchar("gesendet_an", { length: 320 }).notNull(),
+  gesendetAm: timestamp("gesendet_am").notNull().defaultNow(),
 });
 
 export type AnamnesisBlock = typeof anamnesisBlocks.$inferSelect;

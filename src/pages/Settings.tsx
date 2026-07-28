@@ -53,6 +53,8 @@ interface FirmenForm {
   smtpUser: string;
   smtpAbsender: string;
   smtpPasswort: string;
+  erinnerungAktiv: boolean;
+  erinnerungTageVorher: number;
 }
 
 interface BankForm {
@@ -98,6 +100,8 @@ export default function SettingsPage() {
       smtpUser: s.smtpUser ?? "",
       smtpAbsender: s.smtpAbsender ?? "",
       smtpPasswort: "",
+      erinnerungAktiv: s.erinnerungAktiv ?? false,
+      erinnerungTageVorher: s.erinnerungTageVorher,
       handelsregister: s.handelsregister ?? "",
       steuernummer: s.steuernummer ?? "",
       ustIdNr: s.ustIdNr ?? "",
@@ -119,6 +123,7 @@ export default function SettingsPage() {
   }, [settings.data, firma]);
 
   const smtpTest = trpc.mail.smtpTest.useMutation();
+  const pruefeErinnerung = trpc.settings.erinnerungPruefen.useMutation();
   const speichernFirma = trpc.settings.update.useMutation({
     onSuccess: () => {
       utils.settings.get.invalidate();
@@ -287,6 +292,8 @@ export default function SettingsPage() {
                 smtpPort: firma.smtpPort,
                 smtpUser: firma.smtpUser || null,
                 smtpAbsender: firma.smtpAbsender || null,
+                erinnerungAktiv: firma.erinnerungAktiv,
+                erinnerungTageVorher: firma.erinnerungTageVorher,
                 ...(firma.smtpPasswort ? { smtpPasswort: firma.smtpPasswort } : {}),
                 handelsregister: firma.handelsregister || null,
                 steuernummer: firma.steuernummer || null,
@@ -388,6 +395,61 @@ export default function SettingsPage() {
               <span className="text-sm text-red-600">{smtpTest.error.message}</span>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* ── Terminerinnerungen ── */}
+      <section className="rounded-lg border border-neutral-200 bg-white p-5">
+        <h2 className="mb-1 text-sm font-medium text-neutral-700">Terminerinnerungen (E-Mail)</h2>
+        <p className="mb-4 text-xs text-neutral-400">
+          Patienten mit hinterlegter E-Mail-Adresse bekommen vor ihrem Termin
+          automatisch eine Erinnerung (genau einmal je Termin, nur Status
+          „geplant"). Voraussetzung: eingerichtetes SMTP oben.
+        </p>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={firma.erinnerungAktiv}
+              onChange={(e) => setFirma({ ...firma, erinnerungAktiv: e.target.checked })}
+              className="h-4 w-4 accent-[#0F766E]"
+            />
+            Terminerinnerungen aktivieren
+          </label>
+          <div className="flex items-center gap-2 text-sm">
+            <span>Erinnern</span>
+            <Select
+              value={String(firma.erinnerungTageVorher)}
+              onValueChange={(v) => setFirma({ ...firma, erinnerungTageVorher: Number(v) })}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3, 4, 5, 6, 7].map((t) => (
+                  <SelectItem key={t} value={String(t)}>
+                    {t} {t === 1 ? "Tag" : "Tage"} vorher
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pruefeErinnerung.isPending || !firma.erinnerungAktiv}
+            onClick={() => pruefeErinnerung.mutate()}
+          >
+            {pruefeErinnerung.isPending ? "Prüfe …" : "Jetzt prüfen"}
+          </Button>
+          {pruefeErinnerung.data && (
+            <span className="text-sm text-green-700">
+              {pruefeErinnerung.data.gesendet} gesendet, {pruefeErinnerung.data.uebersprungen} übersprungen
+            </span>
+          )}
+          {pruefeErinnerung.error && (
+            <span className="text-sm text-red-600">{pruefeErinnerung.error.message}</span>
+          )}
         </div>
       </section>
 

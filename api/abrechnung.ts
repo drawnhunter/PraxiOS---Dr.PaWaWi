@@ -149,6 +149,7 @@ export async function erstelleEntwurfAusEintraegen(
       einzelpreis: string;
       ustSatz: number;
       kategorie: "leistung" | "auslage";
+      goaeBezug: string | null;
     }
   >();
   const nichtUebernommen: AbrechnungsErgebnis["nichtUebernommen"] = [];
@@ -191,6 +192,9 @@ export async function erstelleEntwurfAusEintraegen(
         einzelpreis: preis,
         ustSatz: produkt.ustSatz,
         kategorie: produkt.kategorie,
+        goaeBezug: produkt.goaeZiffer
+          ? `GOÄ ${produkt.goaeZiffer}${produkt.goaeArt === "analog" ? " (entspr.)" : produkt.goaeArt === "§2" ? " (§ 2)" : ""}`
+          : null,
       });
     }
   }
@@ -233,7 +237,7 @@ export async function erstelleEntwurfAusEintraegen(
     }
     items.push({
       bezeichnung: p.bezeichnung,
-      beschreibung: tagKurz(p.datum),
+      beschreibung: tagKurz(p.datum) + (p.goaeBezug ? ` · ${p.goaeBezug}` : ""),
       menge: String(Math.round(p.mengeZahl * 1000) / 1000),
       einheit: p.einheit,
       einzelpreis: p.einzelpreis,

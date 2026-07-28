@@ -40,6 +40,8 @@ const settingsInput = z.object({
   smtpUser: z.string().nullable().optional(),
   smtpAbsender: z.string().nullable().optional(),
   smtpPasswort: z.string().max(200).optional(),
+  erinnerungAktiv: z.boolean().optional(),
+  erinnerungTageVorher: z.number().int().min(1).max(7).optional(),
 });
 
 export const settingsRouter = createRouter({
@@ -69,6 +71,11 @@ export const settingsRouter = createRouter({
       .values({ id: 1, ...werte } as never)
       .onDuplicateKeyUpdate({ set: werte as never });
     return { ok: true };
+  }),
+
+  erinnerungPruefen: authedQuery.mutation(async () => {
+    const { erinnerungJetztPruefen } = await import("./terminErinnerung");
+    return erinnerungJetztPruefen();
   }),
 
   sequences: authedQuery.query(async () => {

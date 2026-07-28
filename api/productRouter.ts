@@ -20,6 +20,8 @@ const productInput = z.object({
   barcode: z.string().max(100).nullable().optional(),
   mindestbestand: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
   lagerAktiv: z.boolean().optional(),
+  goaeZiffer: z.string().max(20).nullable().optional(),
+  goaeArt: z.enum(["direkt", "analog", "§2"]).nullable().optional(),
   ustSatz: z.number().int().refine((v) => [19, 7, 0].includes(v), "Nur 19 %, 7 % oder 0 %"),
 });
 

@@ -47,6 +47,8 @@ CREATE TABLE `company_settings` (
   `pdf_layout` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'klassisch',
   `age_recipient` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `age_secret` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `erinnerung_aktiv` tinyint(1) NOT NULL DEFAULT '0',
+  `erinnerung_tage_vorher` int NOT NULL DEFAULT '1',
   `kalender_token` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `smtp_host` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `smtp_port` int NOT NULL DEFAULT '587',
@@ -305,6 +307,8 @@ CREATE TABLE `products` (
   `barcode` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `mindestbestand` decimal(12,2) DEFAULT NULL,
   `lager_aktiv` tinyint(1) NOT NULL DEFAULT '0',
+  `goae_ziffer` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `goae_art` enum('direkt','analog','§2') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `ust_satz` int NOT NULL DEFAULT '19',
   `aktiv` tinyint(1) NOT NULL DEFAULT '1',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -714,6 +718,16 @@ CREATE TABLE `translation_cache` (
   `ziel` text COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`hash`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `termin_erinnerungen`;
+CREATE TABLE `termin_erinnerungen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `entry_id` bigint unsigned NOT NULL,
+  `gesendet_an` varchar(320) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `gesendet_am` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `termin_erinnerung_eindeutig` (`entry_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;
