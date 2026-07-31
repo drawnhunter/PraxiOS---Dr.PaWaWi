@@ -162,6 +162,21 @@ app.get("/api/dokumente/:id/datei", async (c) => {
   });
 });
 
+// ── Zahlungsziele-ICS (Token-Auth) ─────────────────────────────────────────
+app.get("/ics/zahlungsziele.ics", async (c) => {
+  const token = c.req.query("token") ?? "";
+  const db = getDb();
+  const einst = await db.query.companySettings.findFirst({
+    where: eq(companySettings.id, 1),
+  });
+  if (!einst?.icsToken || einst.icsToken !== token) return c.text("Ungültiges Token.", 403);
+  const { baueZahlungszieleIcs } = await import("./lib/ics");
+  const ics = await baueZahlungszieleIcs();
+  return new Response(ics, {
+    headers: { "Content-Type": "text/calendar; charset=utf-8", "Cache-Control": "no-cache" },
+  });
+});
+
 // ── ICS-Kalender-Feed (Token-Auth, kein Login — für Google/Outlook-Abo) ────
 app.get("/api/ics/:token.ics", async (c) => {
   const token = c.req.param("token");
@@ -243,6 +258,8 @@ if (env.isProduction) {
     if (n > 0) console.log(`[seed] Leistungskatalog: ${n} Einträge`);
     const g = await seedGruppen();
     if (g > 0) console.log(`[seed] Gruppen: ${g} Standard-Gruppen`);
+    const { seedKontierung } = await import("./kontierungRouter");
+    await seedKontierung();
 
     // Terminerinnerungen (E-Mail, alle 30 min)
     const { starteErinnerungsScheduler } = await import("./terminErinnerung");

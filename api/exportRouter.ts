@@ -5,7 +5,7 @@ import {
   rechtQuery,
 } from "./middleware";
 import { getDb } from "./queries/connection";
-import { invoices, creditNotes, customers, companySettings } from "@db/schema";
+import { invoices, creditNotes, customers, companySettings, incomingInvoices, postEingang } from "@db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { erzeugeXrechnung } from "./xrechnung";
 import { ladeFirmaLive } from "./pdfBelege";
@@ -98,7 +98,7 @@ export const exportRouter = createRouter({
       });
       if (!s) throw new Error("Firmen-Einstellungen fehlen.");
 
-      const [rechnungen, gutschriften, kunden] = await Promise.all([
+      const [rechnungen, gutschriften, kunden, eingaengeRaw] = await Promise.all([
         db.query.invoices.findMany({
           where: and(
             eq(invoices.status, "finalisiert"),
@@ -116,11 +116,33 @@ export const exportRouter = createRouter({
           with: { items: true, invoice: true },
         }),
         db.query.customers.findMany(),
+        db
+          .select({
+            id: incomingInvoices.id,
+            lieferantName: incomingInvoices.lieferantName,
+            nummer: incomingInvoices.nummer,
+            rechnungsdatum: incomingInvoices.rechnungsdatum,
+            netto: incomingInvoices.netto,
+            ust: incomingInvoices.ust,
+            brutto: incomingInvoices.brutto,
+            konto: incomingInvoices.konto,
+            gegenkonto: incomingInvoices.gegenkonto,
+            postLieferantId: postEingang.absenderLieferantId,
+          })
+          .from(incomingInvoices)
+          .leftJoin(postEingang, eq(incomingInvoices.id, postEingang.incomingInvoiceId))
+          .where(
+            and(
+              gte(incomingInvoices.rechnungsdatum, input.von),
+              lte(incomingInvoices.rechnungsdatum, input.bis),
+            ),
+          ),
       ]);
+      const eingaenge = eingaengeRaw;
 
       const hinweise: string[] = [];
-      if (rechnungen.length === 0 && gutschriften.length === 0) {
-        throw new Error("Keine finalisierten Rechnungen oder Gutschriften im Zeitraum.");
+      if (rechnungen.length === 0 && gutschriften.length === 0 && eingaenge.length === 0) {
+        throw new Error("Keine finalisierten Rechnungen, Gutschriften oder Eingangsrechnungen im Zeitraum.");
       }
 
       // ── Debitornummern vergeben (einmalig, persistent) ──────────────────
@@ -174,6 +196,37 @@ export const exportRouter = createRouter({
             ustSatz: u.satz,
           });
         }
+      }
+
+      // ── Eingangsrechnungen: Soll Aufwandskonto an Kreditor (BU 9 = 19 % VSt,
+      // 8 = 7 % VSt). Kreditor = Startnummer + Lieferanten-ID, sonst Sammelkonto.
+      const sammelKreditor = s.datevKontenrahmen === "SKR04" ? "3300" : "1600";
+      const standardAufwand =
+        s.aufwandskontoDefault ?? (s.datevKontenrahmen === "SKR04" ? "6305" : "4900");
+      for (const e of eingaenge) {
+        const netto = Number(e.netto);
+        const ust = Number(e.ust);
+        const satz = netto > 0 ? Math.round((ust / netto) * 100) : 0;
+        const bu = ust <= 0 ? "" : satz === 19 ? "9" : satz === 7 ? "8" : "";
+        const kreditor = e.postLieferantId
+          ? String(s.kreditorStartnummer + e.postLieferantId)
+          : sammelKreditor;
+        buchungen.push({
+          debitornummer: 0,
+          belegdatum: e.rechnungsdatum,
+          belegfeld1: e.nummer,
+          buchungstext: `Eingangsrechnung ${e.nummer} ${e.lieferantName}`.slice(0, 60),
+          betragCent: Math.round(Number(e.brutto) * 100),
+          ustSatz: 0,
+          direkt: {
+            konto: e.konto ?? standardAufwand,
+            gegenkonto: e.gegenkonto ?? kreditor,
+            bu,
+          },
+        });
+      }
+      if (eingaenge.length > 0) {
+        hinweise.push(`${eingaenge.length} Eingangsrechnung(en) mit exportiert.`);
       }
 
       buchungen.sort((a, b) => a.belegdatum.localeCompare(b.belegdatum));

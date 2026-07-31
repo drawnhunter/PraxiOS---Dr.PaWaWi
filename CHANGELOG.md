@@ -1,5 +1,46 @@
 # Changelog — PraxiOS
 
+## [1.2.0] — 2026-08-01 — ReWaWi-1.2-Port: Post Manager, OCR, Magic Import, Kontierung
+
+### Neue Menüleiste (ReWaWi-1.2-Stil)
+- **Gruppen-Sidebar** (Praxis / Abrechnung / Stammdaten + oben/unten), Gruppen
+  einklappbar (gemerkt), Rechte-Filter blendet leere Gruppen aus; Logo-Stil
+  „Dr.**PaWaWi**", Abmelde-Button unten im Rahmen, Icon-Leiste im Plan-Detail
+  bleibt erhalten
+
+### Post Manager + lokale OCR
+- **Post Manager**: Eingang für gescannte Belege (PDF/JPG/PNG, unveränderbar in
+  der DB, GoBD) — Formular (Absender, Rechnungsnummer, Betrag, Fälligkeit,
+  Wiedervorlage, Konto/Gegenkonto, Kategorie), per Klick als Eingangsrechnung
+  buchen (Duplikat-Prüfung), sonstige Dokumente mit Wiedervorlage ablegen
+- **OCR-Vorschlag**: Belege lokal erkennen (**Tesseract + deutschem Sprachpaket
+  im Docker-Image** — keine Cloud): Betrag, IBAN, Rechnungsnummer, Daten und
+  Fälligkeit als Vorschlag mit Konfidenz, Absender-Match gegen Lieferanten
+
+### Magic Import (eine Upload-Tür für alles)
+- Neue Seite „Import" (Drag&Drop, bis 10 Dateien): XRechnung-XML und ZUGFeRD-PDF
+  werden direkt gebucht, Scans gehen in den Post Manager, SumUp-CSVs werden
+  erkannt und gelotst — **IMTZ-Therapieplan-XLSX wird erkannt und zum
+  Therapie-Import gelotst**
+
+### Zahlungsziele & Kontierung
+- **Zahlungsziele**: offene Eingangsrechnungen + Post-Fristen + Wiedervorlagen
+  (überfällig markiert) als Liste und Monatskalender; **ICS-Abo**
+  (`/ics/zahlungsziele.ics?token=…`, Token neu erzeugbar)
+- **Kontierung**: Kontenrahmen **SKR03 + SKR04** als Basisdaten (MIT-Dataset,
+  beim Start vorbefüllt), **Kategorien** als Schnellauswahl mit Konto-Mapping
+  (Verwaltung in Einstellungen → DATEV & Kontierung)
+- **DATEV-Export Eingangsseite**: Eingangsrechnungen wandern in den
+  Buchungsstapel (Soll Aufwandskonto an Kreditor, Vorsteuer-BU 9/8; Kreditor =
+  Startnummer + Lieferanten-ID, sonst Sammelkonto; Felder Kreditor-Startnummer
+  und Standard-Aufwandskonto in den Einstellungen)
+
+### Technisch
+- Dockerfile bringt `tesseract-ocr` (+ deu) und `poppler-utils` mit
+- Neue Tabellen: post_eingang, kategorien, kontenrahmen, email_konten (für die
+  kommende IMAP-Runde); Spalten incoming_invoices.konto/gegenkonto, settings
+  ics_token/kreditor_startnummer/aufwandskonto_default
+
 ## [1.1.1] — 2026-07-28 — Terminerinnerungen + GOÄ lokal
 
 - **Terminerinnerungen per E-Mail**: automatischer Versand an Patienten mit

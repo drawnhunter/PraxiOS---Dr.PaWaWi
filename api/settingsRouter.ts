@@ -6,6 +6,7 @@ import {
 } from "./middleware";
 import { getDb } from "./queries/connection";
 import { verschluesseln } from "./lib/secrets";
+import crypto from "node:crypto";
 import { companySettings, numberSequences } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 
@@ -30,6 +31,8 @@ const settingsInput = z.object({
   erloeskonto7: z.string().default("8300"),
   erloeskonto0: z.string().default("8120"),
   debitorStartnummer: z.number().int().min(1).default(10000),
+  kreditorStartnummer: z.number().int().min(1).default(70000),
+  aufwandskontoDefault: z.string().max(10).nullable().optional(),
   akzentfarbe: z
     .enum(["petrol", "neutral", "blau", "gruen", "bernstein", "violett", "rot"])
     .default("petrol"),
@@ -71,6 +74,23 @@ export const settingsRouter = createRouter({
       .values({ id: 1, ...werte } as never)
       .onDuplicateKeyUpdate({ set: werte as never });
     return { ok: true };
+  }),
+
+  icsStatus: authedQuery.query(async () => {
+    const db = getDb();
+    const row = await db.query.companySettings.findFirst({
+      where: eq(companySettings.id, 1),
+    });
+    if (row?.icsToken) return { token: row.icsToken };
+    const token = crypto.randomBytes(24).toString("base64url");
+    await db.update(companySettings).set({ icsToken: token }).where(eq(companySettings.id, 1));
+    return { token };
+  }),
+
+  icsNeu: adminQuery.mutation(async () => {
+    const token = crypto.randomBytes(24).toString("base64url");
+    await getDb().update(companySettings).set({ icsToken: token }).where(eq(companySettings.id, 1));
+    return { token };
   }),
 
   erinnerungPruefen: authedQuery.mutation(async () => {

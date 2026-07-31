@@ -1,5 +1,11 @@
 FROM node:24-slim
 
+# Lokale OCR (Post Manager): Tesseract mit deutschem Sprachpaket + pdftoppm —
+# Belegdaten verlassen den Server nie (keine Cloud-KI).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-deu poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY . .

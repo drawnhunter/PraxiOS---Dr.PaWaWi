@@ -43,6 +43,9 @@ CREATE TABLE `company_settings` (
   `erloeskonto_7` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '8300',
   `erloeskonto_0` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '8120',
   `debitor_startnummer` int NOT NULL DEFAULT '10000',
+  `kreditor_startnummer` int NOT NULL DEFAULT '70000',
+  `aufwandskonto_default` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ics_token` varchar(48) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `akzentfarbe` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'neutral',
   `pdf_layout` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'klassisch',
   `age_recipient` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -673,6 +676,8 @@ CREATE TABLE `incoming_invoices` (
   `ust` decimal(12,2) NOT NULL,
   `brutto` decimal(12,2) NOT NULL,
   `waehrung` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'EUR',
+  `konto` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `gegenkonto` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `bezahlt_am` date DEFAULT NULL,
   `positionen_json` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `original_xml` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -728,6 +733,80 @@ CREATE TABLE `termin_erinnerungen` (
   `gesendet_am` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `termin_erinnerung_eindeutig` (`entry_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `kontenrahmen`;
+CREATE TABLE `kontenrahmen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `rahmen` enum('SKR03','SKR04') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `konto` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `bezeichnung` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `klasse` int NOT NULL,
+  `gruppe` varchar(120) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `kontenrahmen_eindeutig` (`rahmen`,`konto`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `kategorien`;
+CREATE TABLE `kategorien` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `konto` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ust_satz` int NOT NULL DEFAULT '19',
+  `sortierung` int NOT NULL DEFAULT '0',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `email_konten`;
+CREATE TABLE `email_konten` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `host` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `port` int NOT NULL DEFAULT '993',
+  `tls` tinyint(1) NOT NULL DEFAULT '1',
+  `benutzer` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `passwort_enc` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ordner` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'INBOX',
+  `route` enum('rechnung','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'rechnung',
+  `intervall_minuten` int NOT NULL DEFAULT '10',
+  `aktiv` tinyint(1) NOT NULL DEFAULT '1',
+  `letzter_abruf` timestamp NULL DEFAULT NULL,
+  `letzter_fehler` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `post_eingang`;
+CREATE TABLE `post_eingang` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `typ` enum('rechnung','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'rechnung',
+  `status` enum('neu','gebucht','abgelegt') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'neu',
+  `originalname` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `mime` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `groesse` int NOT NULL,
+  `datei_inhalt` mediumtext COLLATE utf8mb4_unicode_ci NOT NULL,
+  `absender_lieferant_id` bigint unsigned DEFAULT NULL,
+  `absender_freitext` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `stichwort` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `rechnungsnummer` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `betrag` decimal(12,2) DEFAULT NULL,
+  `ust_satz` int NOT NULL DEFAULT '19',
+  `rechnungsdatum` date DEFAULT NULL,
+  `faellig_am` date DEFAULT NULL,
+  `wiedervorlage_am` date DEFAULT NULL,
+  `konto` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `gegenkonto` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `kategorie_id` bigint unsigned DEFAULT NULL,
+  `quelle` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'upload',
+  `notizen` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `incoming_invoice_id` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `pe_lieferant_fk` FOREIGN KEY (`absender_lieferant_id`) REFERENCES `suppliers` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `pe_kategorie_fk` FOREIGN KEY (`kategorie_id`) REFERENCES `kategorien` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `pe_invoice_fk` FOREIGN KEY (`incoming_invoice_id`) REFERENCES `incoming_invoices` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;

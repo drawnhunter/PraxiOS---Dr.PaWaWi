@@ -23,6 +23,7 @@ import {
 import { Plus } from "lucide-react";
 import { DatevExport } from "@/components/DatevExport";
 import { Benutzerverwaltung } from "@/components/Benutzerverwaltung";
+import { KategorienVerwaltung } from "@/components/KategorienVerwaltung";
 import { AKZENTFARBEN, PDF_LAYOUTS, akzentAnwenden } from "@/lib/design";
 
 interface FirmenForm {
@@ -40,6 +41,8 @@ interface FirmenForm {
   standardZahlungsziel: number;
   fussText: string;
   datevBeraternummer: string;
+  kreditorStartnummer: number;
+  aufwandskontoDefault: string;
   datevMandantennummer: string;
   datevKontenrahmen: string;
   erloeskonto19: string;
@@ -111,6 +114,8 @@ export default function SettingsPage() {
       standardZahlungsziel: s.standardZahlungsziel,
       fussText: s.fussText ?? "",
       datevBeraternummer: s.datevBeraternummer ?? "",
+      kreditorStartnummer: s.kreditorStartnummer,
+      aufwandskontoDefault: s.aufwandskontoDefault ?? "",
       datevMandantennummer: s.datevMandantennummer ?? "",
       datevKontenrahmen: s.datevKontenrahmen,
       erloeskonto19: s.erloeskonto19,
@@ -302,6 +307,8 @@ export default function SettingsPage() {
                 telefon: firma.telefon || null,
                 webseite: firma.webseite || null,
                 fussText: firma.fussText || null,
+                kreditorStartnummer: firma.kreditorStartnummer,
+                aufwandskontoDefault: firma.aufwandskontoDefault || null,
                 datevBeraternummer: firma.datevBeraternummer || null,
                 datevMandantennummer: firma.datevMandantennummer || null,
                 datevKontenrahmen: firma.datevKontenrahmen as "SKR03" | "SKR04",
@@ -450,6 +457,44 @@ export default function SettingsPage() {
           {pruefeErinnerung.error && (
             <span className="text-sm text-red-600">{pruefeErinnerung.error.message}</span>
           )}
+        </div>
+      </section>
+
+      {/* ── DATEV & Kontierung ── */}
+      <section className="rounded-lg border border-neutral-200 bg-white p-5">
+        <h2 className="mb-1 text-sm font-medium text-neutral-700">DATEV &amp; Kontierung</h2>
+        <p className="mb-4 text-xs text-neutral-400">
+          Kontenrahmen (SKR03/SKR04), Debitor-/Kreditor-Startnummern und das
+          Standard-Aufwandskonto für Eingangsrechnungen ohne eigene Kontierung.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <Label>Debitor-Startnummer</Label>
+            <Input
+              type="number"
+              value={firma.debitorStartnummer}
+              onChange={(e) => setFirma({ ...firma, debitorStartnummer: Number(e.target.value) || 10000 })}
+            />
+          </div>
+          <div>
+            <Label>Kreditor-Startnummer</Label>
+            <Input
+              type="number"
+              value={firma.kreditorStartnummer}
+              onChange={(e) => setFirma({ ...firma, kreditorStartnummer: Number(e.target.value) || 70000 })}
+            />
+          </div>
+          <div>
+            <Label>Standard-Aufwandskonto</Label>
+            <Input
+              value={firma.aufwandskontoDefault}
+              onChange={(e) => setFirma({ ...firma, aufwandskontoDefault: e.target.value })}
+              placeholder="z. B. 4900 (SKR03) / 6305 (SKR04)"
+            />
+          </div>
+        </div>
+        <div className="mt-5 border-t border-neutral-100 pt-4">
+          <KategorienVerwaltung />
         </div>
       </section>
 

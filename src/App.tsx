@@ -12,6 +12,9 @@ import Bogen from "@/pages/Bogen";
 import Austausch from "@/pages/Austausch";
 import IncomingInvoices from "@/pages/IncomingInvoices";
 import Lager from "@/pages/Lager";
+import Posteingang from "@/pages/Posteingang";
+import Import from "@/pages/Import";
+import Zahlungsziele from "@/pages/Zahlungsziele";
 import Statistics from "@/pages/Statistics";
 import BankImport from "@/pages/BankImport";
 import InvoiceImport from "@/pages/InvoiceImport";
@@ -47,6 +50,9 @@ export default function App() {
         <Route path="/austausch" element={<Austausch />} />
         <Route path="/e-rechnung" element={<IncomingInvoices />} />
         <Route path="/lager" element={<Lager />} />
+        <Route path="/posteingang" element={<Posteingang />} />
+        <Route path="/import" element={<Import />} />
+        <Route path="/zahlungsziele" element={<Zahlungsziele />} />
         <Route path="/therapie-import" element={<TherapyImport />} />
         <Route path="/uebersicht" element={<Dashboard />} />
         <Route path="/statistik" element={<Statistics />} />

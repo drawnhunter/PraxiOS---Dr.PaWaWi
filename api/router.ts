@@ -32,6 +32,9 @@ import { seriesRouter } from "./seriesRouter";
 import { einrechnungRouter } from "./einrechnungRouter";
 import { lagerRouter } from "./lagerRouter";
 import { labelRouter } from "./labelRouter";
+import { posteingangRouter } from "./posteingangRouter";
+import { magicImportRouter } from "./magicImportRouter";
+import { kontierungRouter } from "./kontierungRouter";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -66,6 +69,9 @@ export const appRouter = createRouter({
   einrechnung: einrechnungRouter,
   lager: lagerRouter,
   labels: labelRouter,
+  posteingang: posteingangRouter,
+  magicImport: magicImportRouter,
+  kontierung: kontierungRouter,
   leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 

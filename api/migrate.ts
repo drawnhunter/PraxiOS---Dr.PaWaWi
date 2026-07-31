@@ -28,7 +28,6 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   // PraxiOS: Austausch (age)
   { tabelle: "company_settings", spalte: "age_recipient", ddl: "ALTER TABLE company_settings ADD COLUMN age_recipient VARCHAR(100) NULL AFTER pdf_layout" },
   { tabelle: "company_settings", spalte: "age_secret", ddl: "ALTER TABLE company_settings ADD COLUMN age_secret VARCHAR(100) NULL AFTER age_recipient" },
-  { tabelle: "company_settings", spalte: "kalender_token", ddl: "ALTER TABLE company_settings ADD COLUMN kalender_token VARCHAR(64) NULL AFTER age_secret" },
   // PraxiOS: Rollen
   { tabelle: "users", spalte: "gruppe_id", ddl: "ALTER TABLE users ADD COLUMN gruppe_id BIGINT UNSIGNED NULL AFTER kalenderFarbe" },
   // WAWIPROS 1.0-Port: SMTP + Lager
@@ -43,28 +42,21 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "products", spalte: "lager_aktiv", ddl: "ALTER TABLE products ADD COLUMN lager_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER mindestbestand" },
   // 1.1.0: Papierkorb Therapiepläne
   { tabelle: "therapy_plans", spalte: "geloescht_am", ddl: "ALTER TABLE therapy_plans ADD COLUMN geloescht_am TIMESTAMP NULL AFTER notizen" },
-  // 1.1.1: GOÄ-Mapping am Produkt
-  { tabelle: "products", spalte: "goae_ziffer", ddl: "ALTER TABLE products ADD COLUMN goae_ziffer VARCHAR(20) NULL AFTER lager_aktiv" },
-  { tabelle: "products", spalte: "goae_art", ddl: "ALTER TABLE products ADD COLUMN goae_art ENUM('direkt','analog','§2') NULL AFTER goae_ziffer" },
+  // 1.1.0: Mehrsprachige Bögen
+  { tabelle: "anamnesis_submissions", spalte: "sprache", ddl: "ALTER TABLE anamnesis_submissions ADD COLUMN sprache VARCHAR(8) NOT NULL DEFAULT 'de' AFTER patient_id" },
+  { tabelle: "anamnesis_submissions", spalte: "daten_de", ddl: "ALTER TABLE anamnesis_submissions ADD COLUMN daten_de TEXT NULL AFTER daten" },
   // 1.1.1: GOÄ-Mapping am Produkt
   { tabelle: "products", spalte: "goae_ziffer", ddl: "ALTER TABLE products ADD COLUMN goae_ziffer VARCHAR(20) NULL AFTER lager_aktiv" },
   { tabelle: "products", spalte: "goae_art", ddl: "ALTER TABLE products ADD COLUMN goae_art ENUM('direkt','analog','§2') NULL AFTER goae_ziffer" },
   // 1.1.1: Terminerinnerungen
   { tabelle: "company_settings", spalte: "erinnerung_aktiv", ddl: "ALTER TABLE company_settings ADD COLUMN erinnerung_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER kalender_token" },
   { tabelle: "company_settings", spalte: "erinnerung_tage_vorher", ddl: "ALTER TABLE company_settings ADD COLUMN erinnerung_tage_vorher INT NOT NULL DEFAULT 1 AFTER erinnerung_aktiv" },
-  // 1.1.0: Mehrsprachige Bögen
-  { tabelle: "anamnesis_submissions", spalte: "sprache", ddl: "ALTER TABLE anamnesis_submissions ADD COLUMN sprache VARCHAR(8) NOT NULL DEFAULT 'de' AFTER patient_id" },
-  { tabelle: "anamnesis_submissions", spalte: "daten_de", ddl: "ALTER TABLE anamnesis_submissions ADD COLUMN daten_de TEXT NULL AFTER daten" },
-];
-
-// Spalten-Aenderungen (Enum-Erweiterungen, idempotent per SHOW COLUMNS)
-const SPALTEN_AENDERUNGEN: { tabelle: string; spalte: string; ddl: string; pruefWert: string }[] = [
-  {
-    tabelle: "documents",
-    spalte: "kategorie",
-    ddl: "ALTER TABLE documents MODIFY COLUMN kategorie ENUM('befund','arztbrief','rezept','einverstaendnis','anamnesebogen','sonstiges') NOT NULL DEFAULT 'sonstiges'",
-    pruefWert: "anamnesebogen",
-  },
+  // 1.2.0-Port (ReWaWi): Kontierung + ICS
+  { tabelle: "company_settings", spalte: "kreditor_startnummer", ddl: "ALTER TABLE company_settings ADD COLUMN kreditor_startnummer INT NOT NULL DEFAULT 70000 AFTER debitor_startnummer" },
+  { tabelle: "company_settings", spalte: "aufwandskonto_default", ddl: "ALTER TABLE company_settings ADD COLUMN aufwandskonto_default VARCHAR(10) NULL AFTER kreditor_startnummer" },
+  { tabelle: "company_settings", spalte: "ics_token", ddl: "ALTER TABLE company_settings ADD COLUMN ics_token VARCHAR(48) NULL AFTER aufwandskonto_default" },
+  { tabelle: "incoming_invoices", spalte: "konto", ddl: "ALTER TABLE incoming_invoices ADD COLUMN konto VARCHAR(10) NULL AFTER waehrung" },
+  { tabelle: "incoming_invoices", spalte: "gegenkonto", ddl: "ALTER TABLE incoming_invoices ADD COLUMN gegenkonto VARCHAR(10) NULL AFTER konto" },
 ];
 
 const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
@@ -175,7 +167,7 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       patient_id BIGINT UNSIGNED NOT NULL,
       plan_id BIGINT UNSIGNED NULL,
-      kategorie ENUM('befund','arztbrief','rezept','einverstaendnis','sonstiges') NOT NULL DEFAULT 'sonstiges',
+      kategorie ENUM('befund','arztbrief','rezept','einverstaendnis','anamnesebogen','sonstiges') NOT NULL DEFAULT 'sonstiges',
       dateiname VARCHAR(255) NOT NULL,
       dateipfad VARCHAR(500) NOT NULL,
       mime_type VARCHAR(100) NULL,
@@ -280,101 +272,6 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       CONSTRAINT sub_doc_fk FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL
     )`,
   },
-  // PraxiOS: Rollen
-  {
-    tabelle: "gruppen",
-    ddl: `CREATE TABLE IF NOT EXISTS gruppen (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(100) NOT NULL,
-      rechte TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`,
-  },
-  // WAWIPROS 1.0-Port
-  {
-    tabelle: "mail_log",
-    ddl: `CREATE TABLE IF NOT EXISTS mail_log (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      beleg_art VARCHAR(30) NOT NULL,
-      beleg_id BIGINT UNSIGNED NOT NULL,
-      empfaenger VARCHAR(320) NOT NULL,
-      betreff VARCHAR(500) NOT NULL,
-      erfolg TINYINT(1) NOT NULL,
-      fehler TEXT NULL,
-      gesendet_am TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`,
-  },
-  {
-    tabelle: "incoming_invoices",
-    ddl: `CREATE TABLE IF NOT EXISTS incoming_invoices (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      lieferant_name VARCHAR(255) NOT NULL,
-      lieferant_kennung VARCHAR(255) NULL,
-      nummer VARCHAR(100) NOT NULL,
-      rechnungsdatum DATE NOT NULL,
-      faelligkeitsdatum DATE NULL,
-      netto DECIMAL(12,2) NOT NULL,
-      ust DECIMAL(12,2) NOT NULL,
-      brutto DECIMAL(12,2) NOT NULL,
-      waehrung VARCHAR(10) NOT NULL DEFAULT 'EUR',
-      bezahlt_am DATE NULL,
-      positionen_json TEXT NULL,
-      original_xml TEXT NULL,
-      bemerkung TEXT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE INDEX incoming_eindeutig (lieferant_name, nummer)
-    )`,
-  },
-  {
-    tabelle: "lager_bewegungen",
-    ddl: `CREATE TABLE IF NOT EXISTS lager_bewegungen (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      product_id BIGINT UNSIGNED NOT NULL,
-      typ ENUM('zugang','abgang','korrektur','inventur') NOT NULL,
-      menge DECIMAL(12,2) NOT NULL,
-      datum DATE NOT NULL,
-      bemerkung VARCHAR(500) NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT lager_product_fk FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-    )`,
-  },
-  {
-    tabelle: "invoice_series",
-    ddl: `CREATE TABLE IF NOT EXISTS invoice_series (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      customer_id BIGINT UNSIGNED NOT NULL,
-      titel VARCHAR(255) NOT NULL,
-      intervall_tage INT NOT NULL DEFAULT 30,
-      naechste_faellig DATE NOT NULL,
-      items_json TEXT NOT NULL,
-      bemerkung TEXT NULL,
-      aktiv TINYINT(1) NOT NULL DEFAULT 1,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT series_customer_fk FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-    )`,
-  },
-  // 1.1.1: Terminerinnerungen
-  {
-    tabelle: "termin_erinnerungen",
-    ddl: `CREATE TABLE IF NOT EXISTS termin_erinnerungen (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      entry_id BIGINT UNSIGNED NOT NULL,
-      gesendet_an VARCHAR(320) NOT NULL,
-      gesendet_am TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE INDEX termin_erinnerung_eindeutig (entry_id)
-    )`,
-  },
-  // 1.1.0: Übersetzungs-Cache
-  {
-    tabelle: "translation_cache",
-    ddl: `CREATE TABLE IF NOT EXISTS translation_cache (
-      hash VARCHAR(32) NOT NULL PRIMARY KEY,
-      quelle TEXT NOT NULL,
-      ziel_sprache VARCHAR(8) NOT NULL,
-      ziel TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`,
-  },
   // PraxiOS: Austausch
   {
     tabelle: "kollegen",
@@ -400,11 +297,117 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
   },
+  // PraxiOS: Rollen
+  {
+    tabelle: "gruppen",
+    ddl: `CREATE TABLE IF NOT EXISTS gruppen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      rechte TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  // 1.1.1: Terminerinnerungen
+  {
+    tabelle: "termin_erinnerungen",
+    ddl: `CREATE TABLE IF NOT EXISTS termin_erinnerungen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      entry_id BIGINT UNSIGNED NOT NULL,
+      gesendet_an VARCHAR(320) NOT NULL,
+      gesendet_am TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX termin_erinnerung_eindeutig (entry_id)
+    )`,
+  },
+  // 1.2.0-Port (ReWaWi)
+  {
+    tabelle: "kontenrahmen",
+    ddl: `CREATE TABLE IF NOT EXISTS kontenrahmen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      rahmen ENUM('SKR03','SKR04') NOT NULL,
+      konto VARCHAR(10) NOT NULL,
+      bezeichnung VARCHAR(255) NOT NULL,
+      klasse INT NOT NULL,
+      gruppe VARCHAR(120) NULL,
+      UNIQUE INDEX kontenrahmen_eindeutig (rahmen, konto)
+    )`,
+  },
+  {
+    tabelle: "kategorien",
+    ddl: `CREATE TABLE IF NOT EXISTS kategorien (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      konto VARCHAR(10) NULL,
+      ust_satz INT NOT NULL DEFAULT 19,
+      sortierung INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "email_konten",
+    ddl: `CREATE TABLE IF NOT EXISTS email_konten (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      host VARCHAR(255) NOT NULL,
+      port INT NOT NULL DEFAULT 993,
+      tls TINYINT(1) NOT NULL DEFAULT 1,
+      benutzer VARCHAR(255) NOT NULL,
+      passwort_enc VARCHAR(500) NOT NULL,
+      ordner VARCHAR(100) NOT NULL DEFAULT 'INBOX',
+      route ENUM('rechnung','sonstiges') NOT NULL DEFAULT 'rechnung',
+      intervall_minuten INT NOT NULL DEFAULT 10,
+      aktiv TINYINT(1) NOT NULL DEFAULT 1,
+      letzter_abruf TIMESTAMP NULL,
+      letzter_fehler VARCHAR(500) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "post_eingang",
+    ddl: `CREATE TABLE IF NOT EXISTS post_eingang (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      typ ENUM('rechnung','sonstiges') NOT NULL DEFAULT 'rechnung',
+      status ENUM('neu','gebucht','abgelegt') NOT NULL DEFAULT 'neu',
+      originalname VARCHAR(255) NOT NULL,
+      mime VARCHAR(100) NOT NULL,
+      groesse INT NOT NULL,
+      datei_inhalt MEDIUMTEXT NOT NULL,
+      absender_lieferant_id BIGINT UNSIGNED NULL,
+      absender_freitext VARCHAR(255) NULL,
+      stichwort VARCHAR(255) NULL,
+      rechnungsnummer VARCHAR(100) NULL,
+      betrag DECIMAL(12,2) NULL,
+      ust_satz INT NOT NULL DEFAULT 19,
+      rechnungsdatum DATE NULL,
+      faellig_am DATE NULL,
+      wiedervorlage_am DATE NULL,
+      konto VARCHAR(10) NULL,
+      gegenkonto VARCHAR(10) NULL,
+      kategorie_id BIGINT UNSIGNED NULL,
+      quelle VARCHAR(120) NOT NULL DEFAULT 'upload',
+      notizen TEXT NULL,
+      incoming_invoice_id BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT pe_lieferant_fk FOREIGN KEY (absender_lieferant_id) REFERENCES suppliers(id) ON DELETE SET NULL,
+      CONSTRAINT pe_kategorie_fk FOREIGN KEY (kategorie_id) REFERENCES kategorien(id) ON DELETE SET NULL,
+      CONSTRAINT pe_invoice_fk FOREIGN KEY (incoming_invoice_id) REFERENCES incoming_invoices(id) ON DELETE SET NULL
+    )`,
+  },
 ];
 
 const NEUE_INDIZES: { tabelle: string; index: string; ddl: string }[] = [
   { tabelle: "users", index: "users_username_unique", ddl: "ALTER TABLE users ADD UNIQUE INDEX users_username_unique (username)" },
   { tabelle: "customers", index: "customers_patienten_nr_unique", ddl: "ALTER TABLE customers ADD UNIQUE INDEX customers_patienten_nr_unique (patienten_nr)" },
+];
+
+// Spalten-Aenderungen (Enum-Erweiterungen, idempotent per information_schema)
+const SPALTEN_AENDERUNGEN: { tabelle: string; spalte: string; ddl: string; pruefWert: string }[] = [
+  {
+    tabelle: "documents",
+    spalte: "kategorie",
+    ddl: "ALTER TABLE documents MODIFY COLUMN kategorie ENUM('befund','arztbrief','rezept','einverstaendnis','anamnesebogen','sonstiges') NOT NULL DEFAULT 'sonstiges'",
+    pruefWert: "anamnesebogen",
+  },
 ];
 
 export async function migriereFehlendeSpalten(): Promise<void> {

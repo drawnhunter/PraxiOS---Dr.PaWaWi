@@ -13,6 +13,7 @@ import {
   index,
   unique,
   uniqueIndex,
+  mediumtext,
 } from "drizzle-orm/mysql-core";
 
 // ── Firmen-Einstellungen (Singleton, id = 1) ────────────────────────────────
@@ -39,6 +40,10 @@ export const companySettings = mysqlTable("company_settings", {
   erloeskonto7: varchar("erloeskonto_7", { length: 10 }).notNull().default("8300"),
   erloeskonto0: varchar("erloeskonto_0", { length: 10 }).notNull().default("8120"),
   debitorStartnummer: int("debitor_startnummer").notNull().default(10000),
+  kreditorStartnummer: int("kreditor_startnummer").notNull().default(70000),
+  aufwandskontoDefault: varchar("aufwandskonto_default", { length: 10 }),
+  // ICS-Abo für Zahlungsziele-Kalender (geheime URL)
+  icsToken: varchar("ics_token", { length: 48 }),
   // Design
   akzentfarbe: varchar("akzentfarbe", { length: 30 }).notNull().default("petrol"),
   pdfLayout: varchar("pdf_layout", { length: 30 }).notNull().default("klassisch"),
@@ -891,6 +896,9 @@ export const incomingInvoices = mysqlTable(
     ust: decimal("ust", { precision: 12, scale: 2 }).notNull(),
     brutto: decimal("brutto", { precision: 12, scale: 2 }).notNull(),
     waehrung: varchar("waehrung", { length: 10 }).notNull().default("EUR"),
+    // Kontierung (DATEV Eingangsseite): Aufwandskonto + Gegenkonto (Kreditor)
+    konto: varchar("konto", { length: 10 }),
+    gegenkonto: varchar("gegenkonto", { length: 10 }),
     bezahltAm: date("bezahlt_am", { mode: "string" }),
     positionenJson: text("positionen_json"),
     originalXml: text("original_xml"),
@@ -934,3 +942,89 @@ export type InvoiceSeries = typeof invoiceSeries.$inferSelect;
 export type Kollege = typeof kollegen.$inferSelect;
 export type AktenExport = typeof aktenExporte.$inferSelect;
 export type Gruppe = typeof gruppen.$inferSelect;
+
+// ── Kontenrahmen SKR03/SKR04 (Basisdaten MIT-lizenziert, seed via skr-data) ──
+export const kontenrahmen = mysqlTable(
+  "kontenrahmen",
+  {
+    id: serial("id").primaryKey(),
+    rahmen: mysqlEnum("rahmen", ["SKR03", "SKR04"]).notNull(),
+    konto: varchar("konto", { length: 10 }).notNull(),
+    bezeichnung: varchar("bezeichnung", { length: 255 }).notNull(),
+    klasse: int("klasse").notNull(),
+    gruppe: varchar("gruppe", { length: 120 }),
+  },
+  (t) => [uniqueIndex("kontenrahmen_eindeutig").on(t.rahmen, t.konto)],
+);
+
+// ── Kategorien: Schnellauswahl mit Konto-Mapping für den Post Manager ───────
+export const kategorien = mysqlTable("kategorien", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  konto: varchar("konto", { length: 10 }),
+  ustSatz: int("ust_satz").notNull().default(19),
+  sortierung: int("sortierung").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── E-Mail-Konten (IMAP-Eingang, v1.3-Geplant; Passwort verschlüsselt) ──────
+export const emailKonten = mysqlTable("email_konten", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  host: varchar("host", { length: 255 }).notNull(),
+  port: int("port").notNull().default(993),
+  tls: boolean("tls").notNull().default(true),
+  benutzer: varchar("benutzer", { length: 255 }).notNull(),
+  passwortEnc: varchar("passwort_enc", { length: 500 }).notNull(),
+  ordner: varchar("ordner", { length: 100 }).notNull().default("INBOX"),
+  route: mysqlEnum("route", ["rechnung", "sonstiges"]).notNull().default("rechnung"),
+  intervallMinuten: int("intervall_minuten").notNull().default(10),
+  aktiv: boolean("aktiv").notNull().default(true),
+  letzterAbruf: timestamp("letzter_abruf"),
+  letzterFehler: varchar("letzter_fehler", { length: 500 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Posteingang (Post Manager): gescannte Belege & Dokumente ────────────────
+// Der Beleg (base64 in MEDIUMTEXT) liegt unveränderbar in der DB — mysqldump
+// deckt ihn mit ab (GoBD).
+export const postEingang = mysqlTable("post_eingang", {
+  id: serial("id").primaryKey(),
+  typ: mysqlEnum("typ", ["rechnung", "sonstiges"]).notNull().default("rechnung"),
+  status: mysqlEnum("status", ["neu", "gebucht", "abgelegt"]).notNull().default("neu"),
+  originalname: varchar("originalname", { length: 255 }).notNull(),
+  mime: varchar("mime", { length: 100 }).notNull(),
+  groesse: int("groesse").notNull(),
+  dateiInhalt: mediumtext("datei_inhalt").notNull(), // base64
+  absenderLieferantId: bigint("absender_lieferant_id", { mode: "number", unsigned: true }).references(
+    () => suppliers.id,
+    { onDelete: "set null" },
+  ),
+  absenderFreitext: varchar("absender_freitext", { length: 255 }),
+  stichwort: varchar("stichwort", { length: 255 }),
+  rechnungsnummer: varchar("rechnungsnummer", { length: 100 }),
+  betrag: decimal("betrag", { precision: 12, scale: 2 }),
+  ustSatz: int("ust_satz").notNull().default(19),
+  rechnungsdatum: date("rechnungsdatum", { mode: "string" }),
+  faelligAm: date("faellig_am", { mode: "string" }),
+  wiedervorlageAm: date("wiedervorlage_am", { mode: "string" }),
+  konto: varchar("konto", { length: 10 }),
+  gegenkonto: varchar("gegenkonto", { length: 10 }),
+  kategorieId: bigint("kategorie_id", { mode: "number", unsigned: true }).references(
+    () => kategorien.id,
+    { onDelete: "set null" },
+  ),
+  quelle: varchar("quelle", { length: 120 }).notNull().default("upload"),
+  notizen: text("notizen"),
+  incomingInvoiceId: bigint("incoming_invoice_id", { mode: "number", unsigned: true }).references(
+    () => incomingInvoices.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+export type Kontenrahmen = typeof kontenrahmen.$inferSelect;
+export type Kategorie = typeof kategorien.$inferSelect;
+export type EmailKonto = typeof emailKonten.$inferSelect;
+export type PostEingang = typeof postEingang.$inferSelect;
