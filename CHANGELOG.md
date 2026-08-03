@@ -30,6 +30,14 @@
   („Abzüglich Abschlagszahlung (Therapiedepot)") und die Restsumme ausgewiesen.
   Doppel-Verrechnung ist gesperrt; Storno/Lieferschein/X-Rechnung/Mahnwesen
   greifen bei Proforma bewusst nicht
+- **Vorkasse im Entwurf anhängen** (Praxis-Workflow: Plan → Rechnung → Depot
+  verrechnen): Im Rechnungsentwurf erscheint eine „Vorkasse / Therapiedepot"-
+  Zeile mit allen offenen (finalisierten, noch nicht verrechneten) Vorkassen
+  des Patienten — Auswahl genügt, der bezahlte Betrag wird sofort in den Summen
+  und später auf dem PDF abgezogen; beim Finalisieren wird der Abschlag auf den
+  aktuellen Zahlungsstand gezogen und gegen Doppel-Verknüpfung geprüft.
+  Verknüpfung im Entwurf jederzeit lösbar; stornierte Rechnungen geben ihre
+  Vorkasse wieder frei
 
 ### Anamnesebögen: Muster + verbesserter Importer
 - **„Muster: Dr.-X-Bogen"**: Unser echter Praxis-Anamnesebogen (inkl. DSGVO-

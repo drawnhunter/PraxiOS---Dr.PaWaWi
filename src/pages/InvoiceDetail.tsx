@@ -176,6 +176,11 @@ export default function InvoiceDetail() {
     onSuccess: (res) => navigate(`/gutschriften/${res.id}`),
   });
   const umwandeln = trpc.invoices.inRechnungUmwandeln.useMutation();
+  const vorkasseSetzen = trpc.invoices.vorkasseSetzen.useMutation({ onSuccess: inval });
+  const vorkassen = trpc.invoices.offeneVorkassen.useQuery(
+    { customerId: r?.customerId ?? 0 },
+    { enabled: !!r && r.status === "entwurf" && r.typ !== "proforma" },
+  );
 
   if (rechnung.isLoading || !kopf) {
     return <p className="text-sm text-neutral-500">Lade …</p>;
@@ -954,18 +959,18 @@ export default function InvoiceDetail() {
               <span>Gesamt</span>
               <span className="tabular-nums">{geld(totals.bruttoCent / 100)}</span>
             </div>
+            {Number(r.abschlagBetrag ?? 0) > 0 && (
+              <div className="flex justify-between text-teal-700">
+                <span>Abzügl. Abschlagszahlung (Therapiedepot)</span>
+                <span className="tabular-nums">– {geld(r.abschlagBetrag!)}</span>
+              </div>
+            )}
             {r.status !== "entwurf" && (
               <>
                 <div className="flex justify-between text-neutral-600">
                   <span>Bezahlt{ r.bezahltAm ? ` am ${datum(r.bezahltAm)}` : ""}</span>
                   <span className="tabular-nums">{geld(r.bezahltBetrag)}</span>
                 </div>
-                {Number(r.abschlagBetrag ?? 0) > 0 && (
-                  <div className="flex justify-between text-teal-700">
-                    <span>Abzügl. Abschlagszahlung (Therapiedepot)</span>
-                    <span className="tabular-nums">– {geld(r.abschlagBetrag!)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between font-medium">
                   <span>Offen</span>
                   <span className="tabular-nums">
@@ -983,6 +988,64 @@ export default function InvoiceDetail() {
       </div>
 
       {fehler && <p className="mb-4 text-sm text-red-600">{fehler}</p>}
+
+      {/* ── Vorkasse / Therapiedepot im Entwurf anhängen ── */}
+      {istEntwurf && r.typ !== "proforma" && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-teal-200 bg-teal-50/60 px-4 py-3">
+          <span className="text-sm font-medium text-teal-900">
+            Vorkasse / Therapiedepot
+          </span>
+          {r.proformaVonId ? (
+            <>
+              <Badge variant="outline" className="border-teal-400 bg-white text-teal-800">
+                Proforma #{r.proformaVonId} verknüpft — Abzug{" "}
+                {geld(r.abschlagBetrag ?? "0")}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-red-600"
+                disabled={vorkasseSetzen.isPending}
+                onClick={() => vorkasseSetzen.mutate({ id: r.id, proformaId: null })}
+              >
+                Verknüpfung lösen
+              </Button>
+            </>
+          ) : (vorkassen.data ?? []).length > 0 ? (
+            <>
+              <Select
+                onValueChange={(v) =>
+                  vorkasseSetzen.mutate({ id: r.id, proformaId: Number(v) })
+                }
+                disabled={vorkasseSetzen.isPending}
+              >
+                <SelectTrigger className="w-96 bg-white">
+                  <SelectValue placeholder="Vorkasse auswählen …" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(vorkassen.data ?? []).map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      Proforma #{p.id} · {datum(p.rechnungsdatum)} · bezahlt{" "}
+                      {geld(p.bezahltBetrag)} von {geld(p.brutto)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-teal-700">
+                Der bezahlte Betrag wird auf der Schlussrechnung automatisch abgezogen.
+              </span>
+            </>
+          ) : (
+            <span className="text-xs text-neutral-500">
+              Keine offene Vorkasse für diesen Patienten — bei Bedarf zuerst über
+              „Neue Rechnung → Proforma / Vorkasse" anlegen.
+            </span>
+          )}
+          {vorkasseSetzen.error && (
+            <span className="text-sm text-red-600">{vorkasseSetzen.error.message}</span>
+          )}
+        </div>
+      )}
 
       {istEntwurf && (
         <div className="flex items-center justify-end gap-2">

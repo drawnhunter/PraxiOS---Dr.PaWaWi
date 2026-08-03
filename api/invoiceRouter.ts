@@ -14,7 +14,7 @@ import {
   companySettings,
   bankAccounts,
 } from "@db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, ne, inArray } from "drizzle-orm";
 import {
   computeTotals,
   centToDecimal,
@@ -261,6 +261,32 @@ export const invoiceRouter = createRouter({
         return { nummer: `Proforma #${rechnung.id}` };
       }
 
+      // Verknüpfte Vorkasse: Abschlag auf den aktuellen Zahlungsstand ziehen
+      // und Doppel-Verrechnung (falls parallel verknüpft) verhindern.
+      let abschlagSet: { abschlagBetrag: string } | Record<string, never> = {};
+      if (rechnung.proformaVonId) {
+        const p = await db.query.invoices.findFirst({
+          where: eq(invoices.id, rechnung.proformaVonId),
+        });
+        if (!p || p.status !== "finalisiert") {
+          throw new Error("Die verknüpfte Vorkasse ist nicht mehr finalisiert.");
+        }
+        const vergeben = await db.query.invoices.findFirst({
+          where: and(
+            eq(invoices.proformaVonId, p.id),
+            ne(invoices.status, "storniert"),
+            ne(invoices.id, rechnung.id),
+          ),
+          columns: { id: true, nummer: true },
+        });
+        if (vergeben) {
+          throw new Error(
+            `Die Vorkasse wurde zwischenzeitlich mit Rechnung ${vergeben.nummer ?? `#${vergeben.id}`} verknüpft — bitte im Entwurf neu wählen.`,
+          );
+        }
+        abschlagSet = { abschlagBetrag: p.bezahltBetrag };
+      }
+
       const nummer = await db.transaction(async (tx) => {
         const n = await nextNumber(tx, "invoice", jahr);
         const nr = formatInvoiceNumber(jahr, n);
@@ -280,6 +306,7 @@ export const invoiceRouter = createRouter({
             firmenSnapshot,
             bankSnapshot,
             ...bezahltSet,
+            ...abschlagSet,
           })
           .where(eq(invoices.id, input.id));
         return nr;
@@ -307,7 +334,7 @@ export const invoiceRouter = createRouter({
         throw new Error("Die Proforma muss zuerst finalisiert werden.");
       }
       const bereitsUmgewandelt = await db.query.invoices.findFirst({
-        where: eq(invoices.proformaVonId, proforma.id),
+        where: and(eq(invoices.proformaVonId, proforma.id), ne(invoices.status, "storniert")),
         columns: { id: true, nummer: true },
       });
       if (bereitsUmgewandelt) {
@@ -370,6 +397,92 @@ export const invoiceRouter = createRouter({
         return id;
       });
       return { id: neueId };
+    }),
+
+  /** Offene (bezahlbare, noch nicht verrechnete) Vorkassen eines Patienten.
+   *  Grundlage für „Vorkasse im Rechnungsentwurf anhängen". */
+  offeneVorkassen: rechtQuery("abrechnung")
+    .input(z.object({ customerId: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const rows = await db.query.invoices.findMany({
+        where: and(
+          eq(invoices.customerId, input.customerId),
+          eq(invoices.typ, "proforma"),
+          eq(invoices.status, "finalisiert"),
+        ),
+        orderBy: [desc(invoices.rechnungsdatum)],
+      });
+      if (rows.length === 0) return [];
+      // Bereits verrechnete (Verknüpfung auf einer nicht-stornierten Rechnung) ausblenden
+      const verknuepfungen = await db.query.invoices.findMany({
+        where: and(
+          inArray(
+            invoices.proformaVonId,
+            rows.map((r) => r.id),
+          ),
+          ne(invoices.status, "storniert"),
+        ),
+        columns: { proformaVonId: true },
+      });
+      const verrechnet = new Set(verknuepfungen.map((v) => v.proformaVonId));
+      return rows.filter((r) => !verrechnet.has(r.id));
+    }),
+
+  /** Vorkasse im Entwurf anhängen/ablösen — setzt proformaVonId + Abschlag
+   *  (Abschlag = bisher auf die Vorkasse gezahlter Betrag). */
+  vorkasseSetzen: rechtQuery("abrechnung")
+    .input(z.object({ id: z.number(), proformaId: z.number().nullable() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const r = await db.query.invoices.findFirst({
+        where: eq(invoices.id, input.id),
+      });
+      if (!r) throw new Error("Rechnung nicht gefunden.");
+      if (r.status !== "entwurf") {
+        throw new Error("Nur Entwürfe können geändert werden (GoBD).");
+      }
+      if (r.typ === "proforma") {
+        throw new Error("Eine Proforma kann selbst keine Vorkasse verrechnen.");
+      }
+
+      if (input.proformaId === null) {
+        await db
+          .update(invoices)
+          .set({ proformaVonId: null, abschlagBetrag: null })
+          .where(eq(invoices.id, input.id));
+        return { ok: true };
+      }
+
+      const p = await db.query.invoices.findFirst({
+        where: eq(invoices.id, input.proformaId),
+      });
+      if (!p || p.typ !== "proforma") throw new Error("Vorkasse nicht gefunden.");
+      if (p.status !== "finalisiert") {
+        throw new Error("Die Vorkasse muss erst finalisiert (ausgestellt) sein.");
+      }
+      if (p.customerId !== r.customerId) {
+        throw new Error("Die Vorkasse gehört zu einem anderen Patienten.");
+      }
+      const vergeben = await db.query.invoices.findFirst({
+        where: and(
+          eq(invoices.proformaVonId, p.id),
+          ne(invoices.status, "storniert"),
+          ne(invoices.id, r.id),
+        ),
+        columns: { id: true, nummer: true },
+      });
+      if (vergeben) {
+        throw new Error(
+          `Diese Vorkasse ist bereits mit Rechnung ${vergeben.nummer ?? `#${vergeben.id}`} verknüpft.`,
+        );
+      }
+
+      await db
+        .update(invoices)
+        .set({ proformaVonId: p.id, abschlagBetrag: p.bezahltBetrag })
+        .where(eq(invoices.id, input.id));
+      return { ok: true };
     }),
 
   /** Zahlungseingang verbuchen. */
