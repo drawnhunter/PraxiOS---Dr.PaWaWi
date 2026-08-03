@@ -3,6 +3,32 @@ import { renderRezeptPdf } from "./rezeptPdf";
 import { DRX_BOGEN } from "@db/anamneseDrx";
 import { z } from "zod";
 import { BLOCK_TYPEN } from "@contracts/anamnese";
+import * as fs from "fs";
+import * as path from "path";
+
+// ── Regressions-Wache: pdfkit bricht im ESM-Server-Bundle, wenn der
+// Konstruktor keinen eigenen Font bekommt (lädt sonst Helvetica via __dirname).
+// Die Unit-Tests laufen ungebündelt und würden das NICHT fangen — daher
+// Quellcode-Scan aller PDF-Module.
+describe("pdfkit ESM-Bundle-Wache", () => {
+  it("jeder PDFDocument-Konstruktor setzt font:", () => {
+    const apiDir = path.join(process.cwd(), "api");
+    const dateien = fs
+      .readdirSync(apiDir)
+      .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
+    const verletzungen: string[] = [];
+    for (const f of dateien) {
+      const zeilen = fs.readFileSync(path.join(apiDir, f), "utf8").split("\n");
+      zeilen.forEach((z, i) => {
+        if (z.includes("new PDFDocument(")) {
+          const fenster = zeilen.slice(i, i + 10).join("\n");
+          if (!/font\s*:/.test(fenster)) verletzungen.push(`${f}:${i + 1}`);
+        }
+      });
+    }
+    expect(verletzungen).toEqual([]);
+  });
+});
 
 const praxis = {
   name: "Praxis Dr. X",

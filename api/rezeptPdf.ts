@@ -86,7 +86,14 @@ function signaturBlock(
 }
 
 export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
-  const doc = new PDFDocument({ size: "A4", margin: MARGIN, info: { Title: "Verordnung" } });
+  const doc = new PDFDocument({
+    size: "A4",
+    margin: MARGIN,
+    // Pflicht: eigener Font als Default — sonst lädt pdfkit beim Konstruktor
+    // die eingebaute Helvetica via __dirname (gibt's im ESM-Bundle nicht!)
+    font: fontPath("DejaVuSans.ttf"),
+    info: { Title: "Verordnung" },
+  });
   doc.registerFont("Regular", fontPath("DejaVuSans.ttf"));
   doc.registerFont("Bold", fontPath("DejaVuSans-Bold.ttf"));
   doc.registerFont("Italic", fontPath("DejaVuSans-Oblique.ttf"));
