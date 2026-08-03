@@ -3,11 +3,15 @@
 ## [1.3.0] — 2026-08-03 — Rezepte & Atteste, Proforma/Vorkasse, Bogen-Import, Muster-Dr.-X
 
 ### Privat-Rezepte & Atteste (Prio 1/3 der Praxis-Taskliste)
-- **Neuer Tab „Rezepte & Atteste"** in der Patientenakte: **Privatrezept**
-  (mehrere Verordnungszeilen mit Stärke, Menge/Packung, Dosierung + Hinweis),
-  **Arbeitsunfähigkeitsbescheinigung** (Zeitraum von/bis einschließlich) und
-  **freies Attest** — als sauberes A4-PDF mit Praxis-Kopf, „Rp."-Block und
-  Unterschriftsbereich
+- **Eigene Menü-Seite „Rezepte & Atteste"** (Gruppe Praxis): Patient suchen &
+  aussuchen → direkt ins Rezept- oder Attest-Fenster; Liste der zuletzt
+  erstellten Belege praxisweit zum Wiederaufnehmen. Derselbe Bereich liegt
+  zusätzlich als Tab in der Patientenakte
+- **Privatrezept** (mehrere Verordnungszeilen mit Stärke, Menge/Packung,
+  Dosierung + Hinweis — **mit Vorschlägen aus der eigenen Produktliste** oder
+  frei eingegeben), **Arbeitsunfähigkeitsbescheinigung** (Zeitraum von/bis
+  einschließlich) und **freies Attest** — als sauberes A4-PDF mit Praxis-Kopf,
+  „Rp."-Block und Unterschriftsbereich
 - **Digitale Unterschrift**: In den Einstellungen kann ein Unterschriftsbild
   (PNG/JPG, z. B. mit dem Handy fotografiert) hinterlegt werden — es wird auf
   jedes Rezept/Attest gestempelt; ohne Bild erscheint die klassische

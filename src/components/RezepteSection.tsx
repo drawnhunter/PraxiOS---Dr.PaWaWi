@@ -53,6 +53,9 @@ export function RezepteSection({ patientId }: { patientId: number }) {
   const [loescheId, setLoescheId] = useState<number | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
 
+  // Katalog-Vorschläge für Verordnungen (eigene Produktliste, z. B. Infusionen)
+  const produkte = trpc.products.list.useQuery(undefined, { enabled: dialog === "rezept" });
+
   // Rezept-Formular
   const [meds, setMeds] = useState<MedZeile[]>([{ name: "", staerke: "", menge: "", dosierung: "" }]);
   const [hinweis, setHinweis] = useState("");
@@ -195,6 +198,11 @@ export function RezepteSection({ patientId }: { patientId: number }) {
           <DialogHeader>
             <DialogTitle>Privatrezept erstellen</DialogTitle>
           </DialogHeader>
+          <datalist id="med-vorschlaege">
+            {(produkte.data ?? []).map((p) => (
+              <option key={p.id} value={p.name} />
+            ))}
+          </datalist>
           <div className="space-y-4">
             {meds.map((m, i) => (
               <div key={i} className="rounded-lg border border-neutral-200 p-3">
@@ -216,7 +224,12 @@ export function RezepteSection({ patientId }: { patientId: number }) {
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <div className="sm:col-span-2">
                     <Label>Medikament / Wirkstoff *</Label>
-                    <Input value={m.name} onChange={(e) => setMed(i, "name", e.target.value)} />
+                    <Input
+                      list="med-vorschlaege"
+                      placeholder="frei eingeben oder Katalog-Vorschlag wählen"
+                      value={m.name}
+                      onChange={(e) => setMed(i, "name", e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label>Stärke</Label>

@@ -8,6 +8,7 @@ import PatientDetail from "@/pages/PatientDetail";
 import Plans from "@/pages/Plans";
 import PlanDetail from "@/pages/PlanDetail";
 import Anamnese from "@/pages/Anamnese";
+import Rezepte from "@/pages/Rezepte";
 import Bogen from "@/pages/Bogen";
 import Austausch from "@/pages/Austausch";
 import IncomingInvoices from "@/pages/IncomingInvoices";
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/plaene" element={<Plans />} />
         <Route path="/plaene/:id" element={<PlanDetail />} />
         <Route path="/anamnese" element={<Anamnese />} />
+        <Route path="/rezepte" element={<Rezepte />} />
         <Route path="/austausch" element={<Austausch />} />
         <Route path="/e-rechnung" element={<IncomingInvoices />} />
         <Route path="/lager" element={<Lager />} />

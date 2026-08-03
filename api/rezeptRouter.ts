@@ -70,6 +70,20 @@ export const rezeptRouter = createRouter({
       });
     }),
 
+  // Zuletzt erstellte Rezepte/Atteste praxisweit (für die eigene Menü-Seite)
+  letzte: rechtQuery("dokumente")
+    .input(z.object({ limit: z.number().int().min(1).max(50).default(15) }).optional())
+    .query(async ({ input }) => {
+      return getDb().query.rezepte.findMany({
+        orderBy: [desc(rezepte.createdAt)],
+        limit: input?.limit ?? 15,
+        with: {
+          patient: { columns: { id: true, name: true } },
+          ersteller: { columns: { id: true, name: true, username: true } },
+        },
+      });
+    }),
+
   erstellen: rechtQuery("dokumente")
     .input(erstellenInput)
     .mutation(async ({ ctx, input }) => {
