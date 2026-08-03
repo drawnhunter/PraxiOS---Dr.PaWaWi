@@ -59,6 +59,10 @@ export interface PdfBeleg {
   grund?: string | null;
   pdfNotiz?: string | null;
   bezahltCent?: number;
+  /** Proforma/Vorkasse: abweichender Titel, keine GoBD-Nummer. */
+  istProforma?: boolean;
+  /** Therapiedepot: bereits geleistete Abschlagszahlung (wird abgezogen). */
+  abschlagCent?: number;
   firma: {
     name: string;
     strasse: string;
@@ -156,7 +160,7 @@ export function renderBelegPdf(beleg: PdfBeleg, design?: PdfDesign): Promise<Buf
       bufferPages: true,
       font: FONT_REGULAR(),
       info: {
-        Title: `${beleg.art === "rechnung" ? "Rechnung" : "Gutschrift"} ${beleg.nummer}`,
+        Title: `${beleg.istProforma ? "Proforma" : beleg.art === "rechnung" ? "Rechnung" : "Gutschrift"} ${beleg.nummer}`,
         Author: beleg.firma.name,
       },
     });
@@ -272,11 +276,11 @@ export function renderBelegPdf(beleg: PdfBeleg, design?: PdfDesign): Promise<Buf
     });
 
     const meta: [string, string][] = (() => {
-      const titel = BELEG_TITEL[beleg.art];
+      const titel = beleg.istProforma ? "Proforma / Vorkasse" : BELEG_TITEL[beleg.art];
       if (beleg.art === "rechnung") {
         return [
           [`${titel}:`, beleg.nummer],
-          ["Rechnungsdatum:", fmtDatum(beleg.datum)],
+          [beleg.istProforma ? "Datum:" : "Rechnungsdatum:", fmtDatum(beleg.datum)],
           ...(beleg.leistungsdatum
             ? [["Leistungsdatum:", beleg.leistungsdatum] as [string, string]]
             : []),
@@ -526,15 +530,20 @@ export function renderBelegPdf(beleg: PdfBeleg, design?: PdfDesign): Promise<Buf
         ),
         [gesamtLabel, fmtGeld(totals.bruttoCent), true],
       ];
-      if (beleg.art === "rechnung" && (beleg.bezahltCent ?? 0) > 0) {
-        summen.push(["Bezahlter Betrag", fmtGeld(beleg.bezahltCent!), false]);
-        summen.push([
-          "Zu zahlender Betrag EUR",
-          fmtGeld(totals.bruttoCent - beleg.bezahltCent!),
-          true,
-        ]);
-      } else if (beleg.art === "rechnung") {
-        summen.push(["Zu zahlender Betrag EUR", fmtGeld(totals.bruttoCent), true]);
+      if (beleg.art === "rechnung") {
+        if ((beleg.bezahltCent ?? 0) > 0) {
+          summen.push(["Bezahlter Betrag", fmtGeld(beleg.bezahltCent!), false]);
+        }
+        if ((beleg.abschlagCent ?? 0) > 0) {
+          summen.push([
+            "Abzüglich Abschlagszahlung",
+            `– ${fmtGeld(beleg.abschlagCent!)}`,
+            false,
+          ]);
+        }
+        const offen =
+          totals.bruttoCent - (beleg.bezahltCent ?? 0) - (beleg.abschlagCent ?? 0);
+        summen.push(["Zu zahlender Betrag EUR", fmtGeld(Math.max(offen, 0)), true]);
       }
 
       doc.fontSize(basisSchrift);
@@ -560,6 +569,21 @@ export function renderBelegPdf(beleg: PdfBeleg, design?: PdfDesign): Promise<Buf
             .stroke();
         }
       });
+
+      // Depot-Herkunft als Fußnote unter dem Summenblock
+      if (beleg.art === "rechnung" && (beleg.abschlagCent ?? 0) > 0) {
+        doc
+          .font(regular)
+          .fontSize(K ? 7.5 : 8.5)
+          .fillColor(GRAY)
+          .text(
+            "Bereits geleistete Abschlagszahlung (Therapiedepot) aus der Proforma/Vorkasse.",
+            summenX,
+            y + 2,
+            { width: PAGE_W - MARGIN - summenX },
+          );
+        y += K ? 12 : 14;
+      }
 
       // PraxiOS: Pflicht-Hinweis bei komplett steuerfreien Heilbehandlungen
       // (alle Positionen 0 % USt) — § 4 Nr. 14a UStG
@@ -696,7 +720,7 @@ export function renderBelegPdf(beleg: PdfBeleg, design?: PdfDesign): Promise<Buf
 
     // ── Fußzeile auf allen Seiten ───────────────────────────────────────────
     const range = doc.bufferedPageRange();
-    const belegTitel = `${BELEG_TITEL[beleg.art]} ${beleg.nummer}`;
+    const belegTitel = `${beleg.istProforma ? "Proforma / Vorkasse" : BELEG_TITEL[beleg.art]} ${beleg.nummer}`;
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
       // Fußzeile liegt unterhalb des normalen Textbereichs — Auto-Umbruch aus

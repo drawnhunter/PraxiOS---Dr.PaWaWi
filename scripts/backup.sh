@@ -15,7 +15,19 @@ set -euo pipefail
 PROJEKT="${PROJEKT:-praxiswerk}"                 # Docker-Compose-Projektname
 DB_CONTAINER="${DB_CONTAINER:-${PROJEKT}-db-1}"
 DB_NAME="${DB_NAME:-praxiswerk}"
-DB_PASS="${DB_PASS:-praxiswerk}"                 # ggf. an docker-compose.yml angleichen
+DB_PASS="${DB_PASS:-}"
+
+# DB-Passwort aus der .env des Projekts lesen (dort steht es seit 1.3.0 —
+# die docker-compose.yml enthält bewusst keine Secret-Werte mehr).
+SKRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJEKT_DIR="$(dirname "$SKRIPT_DIR")"
+if [[ -z "$DB_PASS" && -f "$PROJEKT_DIR/.env" ]]; then
+  DB_PASS="$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' "$PROJEKT_DIR/.env" | head -1)"
+fi
+[[ -n "$DB_PASS" ]] || {
+  echo "FEHLER: DB-Passwort nicht gefunden (MYSQL_ROOT_PASSWORD in $PROJEKT_DIR/.env setzen oder DB_PASS übergeben)."
+  exit 1
+}
 ZIEL="${BACKUP_ZIEL:-$HOME/backups/praxios}"
 SECRET_FILE="${SECRET_FILE:-$HOME/.praxios-backup.secret}"
 BEHALT_TAGE="${BEHALT_TAGE:-30}"

@@ -38,7 +38,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Trash2, Truck } from "lucide-react";
+import { ArrowLeft, ArrowRightCircle, Plus, Trash2, Truck } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { PdfButton } from "@/components/PdfButton";
 import { PdfVorschauButton } from "@/components/PdfVorschauButton";
 import { MailDialog } from "@/components/MailDialog";
@@ -174,6 +175,7 @@ export default function InvoiceDetail() {
   const storno = trpc.invoices.createCreditNote.useMutation({
     onSuccess: (res) => navigate(`/gutschriften/${res.id}`),
   });
+  const umwandeln = trpc.invoices.inRechnungUmwandeln.useMutation();
 
   if (rechnung.isLoading || !kopf) {
     return <p className="text-sm text-neutral-500">Lade …</p>;
@@ -328,7 +330,9 @@ export default function InvoiceDetail() {
     });
   };
 
-  const offenCent = Math.round((Number(r.brutto) - Number(r.bezahltBetrag)) * 100);
+  const offenCent = Math.round(
+    (Number(r.brutto) - Number(r.bezahltBetrag) - Number(r.abschlagBetrag ?? 0)) * 100,
+  );
 
   return (
     <div>
@@ -338,28 +342,52 @@ export default function InvoiceDetail() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <h1 className="text-xl font-semibold tracking-tight">
-            {r.nummer ?? `Rechnungsentwurf #${r.id}`}
+            {r.nummer ??
+              (r.typ === "proforma" ? `Proforma #${r.id}` : `Rechnungsentwurf #${r.id}`)}
           </h1>
+          {r.typ === "proforma" && (
+            <Badge variant="outline" className="border-teal-300 text-teal-700">
+              Vorkasse / Proforma
+            </Badge>
+          )}
           {statusBadge(r.status)}
         </div>
         <div className="flex items-center gap-2">
           <PdfVorschauButton art="invoice" id={r.id} titel={`Rechnung ${r.nummer ?? "Entwurf"}`} />
           <MailDialog art="invoice" id={r.id} />
           <PdfButton art="invoice" id={r.id} />
-          {r.status !== "entwurf" && <XrechnungButton id={r.id} />}
+          {r.status !== "entwurf" && r.typ !== "proforma" && <XrechnungButton id={r.id} />}
           <Button variant="outline" size="sm" onClick={() => setSerieOffen(true)}>
             Als Serie speichern
           </Button>
+          {r.status === "finalisiert" && r.typ === "proforma" && (
+            <Button
+              size="sm"
+              disabled={umwandeln.isPending}
+              title="Schlussrechnung als Entwurf erzeugen — die gezahlte Vorkasse wird automatisch als Abschlag abgezogen"
+              onClick={() =>
+                umwandeln.mutate(
+                  { id: r.id },
+                  { onSuccess: (res) => navigate(`/rechnungen/${res.id}`) },
+                )
+              }
+            >
+              <ArrowRightCircle className="mr-1.5 h-4 w-4" />
+              {umwandeln.isPending ? "Wandle um …" : "In Rechnung umwandeln"}
+            </Button>
+          )}
           {r.status === "finalisiert" && (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={lieferscheinErstellen.isPending}
-                onClick={() => lieferscheinErstellen.mutate({ invoiceId: r.id })}
-              >
-                <Truck className="mr-1.5 h-4 w-4" /> Lieferschein
-              </Button>
+              {r.typ !== "proforma" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={lieferscheinErstellen.isPending}
+                  onClick={() => lieferscheinErstellen.mutate({ invoiceId: r.id })}
+                >
+                  <Truck className="mr-1.5 h-4 w-4" /> Lieferschein
+                </Button>
+              )}
               {offenCent > 0 ? (
                 <Button
                   size="sm"
@@ -379,6 +407,7 @@ export default function InvoiceDetail() {
                   Zahlung zurücksetzen
                 </Button>
               )}
+              {r.typ !== "proforma" && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive" size="sm">
@@ -403,6 +432,7 @@ export default function InvoiceDetail() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+              )}
             </>
           )}
           {istEntwurf && (
@@ -416,8 +446,10 @@ export default function InvoiceDetail() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Entwurf löschen?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Nur möglich, solange die Rechnung nicht finalisiert ist. Es wurde
-                    noch keine Belegnummer vergeben — der Nummernkreis bleibt lückenlos.
+                    Nur möglich, solange der Beleg nicht finalisiert ist.
+                    {r.typ === "proforma"
+                      ? " Eine Proforma bekommt niemals eine Belegnummer."
+                      : " Es wurde noch keine Belegnummer vergeben — der Nummernkreis bleibt lückenlos."}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -459,7 +491,9 @@ export default function InvoiceDetail() {
         </div>
       )}
 
-      {r.status === "finalisiert" && offenCent > 0 && <Mahnwesen rechnungId={r.id} />}
+      {r.status === "finalisiert" && r.typ !== "proforma" && offenCent > 0 && (
+        <Mahnwesen rechnungId={r.id} />
+      )}
 
       {/* ── Kopfdaten ── */}
       <div className="mb-6 rounded-lg border border-neutral-200 bg-white p-5">
@@ -926,10 +960,20 @@ export default function InvoiceDetail() {
                   <span>Bezahlt{ r.bezahltAm ? ` am ${datum(r.bezahltAm)}` : ""}</span>
                   <span className="tabular-nums">{geld(r.bezahltBetrag)}</span>
                 </div>
+                {Number(r.abschlagBetrag ?? 0) > 0 && (
+                  <div className="flex justify-between text-teal-700">
+                    <span>Abzügl. Abschlagszahlung (Therapiedepot)</span>
+                    <span className="tabular-nums">– {geld(r.abschlagBetrag!)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-medium">
                   <span>Offen</span>
                   <span className="tabular-nums">
-                    {geld((totals.bruttoCent - Math.round(Number(r.bezahltBetrag) * 100)) / 100)}
+                    {geld(
+                      (totals.bruttoCent -
+                        Math.round(Number(r.bezahltBetrag) * 100) -
+                        Math.round(Number(r.abschlagBetrag ?? 0) * 100)) / 100,
+                    )}
                   </span>
                 </div>
               </>
@@ -948,16 +992,18 @@ export default function InvoiceDetail() {
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button disabled={items.filter((i) => i.bezeichnung.trim()).length === 0}>
-                Finalisieren &amp; Nummer vergeben
+                {r.typ === "proforma" ? "Proforma ausstellen" : "Finalisieren & Nummer vergeben"}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Rechnung finalisieren?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  {r.typ === "proforma" ? "Proforma ausstellen?" : "Rechnung finalisieren?"}
+                </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Der Entwurf wird gespeichert, die nächste Rechnungsnummer vergeben und
-                  der Beleg eingefroren. Danach ist er GoBD-konform nicht mehr
-                  veränderbar — Korrekturen nur noch per Gutschrift/Storno.
+                  {r.typ === "proforma"
+                    ? "Der Entwurf wird gespeichert und eingefroren. Es wird keine Rechnungsnummer vergeben — eine Proforma/Vorkasse ist kein GoBD-Beleg. Nach Zahlungseingang wandelst du sie über „In Rechnung umwandeln“ in die Schlussrechnung um."
+                    : "Der Entwurf wird gespeichert, die nächste Rechnungsnummer vergeben und der Beleg eingefroren. Danach ist er GoBD-konform nicht mehr veränderbar — Korrekturen nur noch per Gutschrift/Storno."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

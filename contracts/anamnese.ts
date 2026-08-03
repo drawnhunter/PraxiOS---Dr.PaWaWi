@@ -9,6 +9,8 @@ export const BLOCK_TYPEN = [
   "textfeld_schreibfeld",
   "skala_1_10",
   "haeufigkeit",
+  "jaNein",
+  "infotext",
 ] as const;
 export type BlockTyp = (typeof BLOCK_TYPEN)[number];
 
@@ -18,6 +20,8 @@ export const BLOCK_TYP_LABEL: Record<BlockTyp, string> = {
   textfeld_schreibfeld: "Textfeld mit Schreibfeld",
   skala_1_10: "Skala 1–10",
   haeufigkeit: "Häufigkeitsskala",
+  jaNein: "Ja/Nein-Fragen",
+  infotext: "Erklärungstext (mit Zustimmung)",
 };
 
 export const HAEUFIGKEIT_STUFEN = [
@@ -30,7 +34,7 @@ export const HAEUFIGKEIT_STUFEN = [
 
 /** Konfiguration je Blocktyp (als JSON in anamnesis_blocks.config). */
 export interface BlockConfig {
-  /** checkboxen: Fragen + Spaltenzahl (1|2). */
+  /** checkboxen & jaNein: Fragen; checkboxen zusätzlich Spaltenzahl (1|2). */
   fragen?: string[];
   spalten?: 1 | 2;
   /** textfeld / textfeld_schreibfeld / skala_1_10: die eine Frage. */
@@ -40,6 +44,14 @@ export interface BlockConfig {
   /** skala_1_10: Endpunkt-Beschriftungen. */
   vonLabel?: string;
   bisLabel?: string;
+  /** jaNein: optionale Notiz-Frage unter der Liste („Welche / seit wann?"). */
+  notizFrage?: string;
+  /** infotext: der Erklärungstext (Absätze). */
+  text?: string;
+  /** infotext: Label der Zustimmungs-Checkbox (leer = keine Checkbox). */
+  checkboxLabel?: string;
+  /** infotext: Checkbox ist Pflicht (default true, wenn Label gesetzt). */
+  pflicht?: boolean;
 }
 
 /** Ein Block im Bogen (Referenz zum Katalog ODER Inline-Definition). */

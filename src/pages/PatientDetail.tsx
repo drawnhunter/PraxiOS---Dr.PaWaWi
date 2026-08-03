@@ -30,6 +30,7 @@ import { PatientForm } from "@/components/PatientForm";
 import { TimelineList } from "@/components/TimelineList";
 import { KontakteSection } from "@/components/KontakteSection";
 import { DokumentenAblage } from "@/components/DokumentenAblage";
+import { RezepteSection } from "@/components/RezepteSection";
 
 function Zeile({ label, wert }: { label: string; wert: string | null | undefined }) {
   return (
@@ -229,6 +230,7 @@ export default function PatientDetailPage() {
           <TabsTrigger value="kontakte">Kontakte</TabsTrigger>
           <TabsTrigger value="plaene">Therapiepläne</TabsTrigger>
           <TabsTrigger value="rechnungen">Rechnungen</TabsTrigger>
+          <TabsTrigger value="rezepte">Rezepte &amp; Atteste</TabsTrigger>
           <TabsTrigger value="austausch">Austausch</TabsTrigger>
         </TabsList>
 
@@ -345,6 +347,10 @@ export default function PatientDetailPage() {
               </div>
             )}
           </section>
+        </TabsContent>
+
+        <TabsContent value="rezepte">
+          <RezepteSection patientId={patientId} />
         </TabsContent>
 
         <TabsContent value="austausch">

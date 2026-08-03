@@ -90,7 +90,12 @@ export const invoiceRouter = createRouter({
 
   /** Neuen Entwurf anlegen — Kundenadresse wird als Snapshot kopiert. */
   createDraft: rechtQuery("abrechnung")
-    .input(z.object({ customerId: z.number() }))
+    .input(
+      z.object({
+        customerId: z.number(),
+        typ: z.enum(["standard", "proforma"]).default("standard"),
+      }),
+    )
     .mutation(async ({ input }) => {
       const db = getDb();
       const kunde = await db.query.customers.findFirst({
@@ -118,6 +123,7 @@ export const invoiceRouter = createRouter({
         .insert(invoices)
         .values({
           customerId: kunde.id,
+          typ: input.typ,
           rechnungsdatum: fmt(heute),
           faelligkeitsdatum: fmt(faellig),
           bankAccountId: standardBank?.id ?? null,
@@ -233,6 +239,28 @@ export const invoiceRouter = createRouter({
           })
         : null;
 
+      // Proforma/Vorkasse: kein GoBD-Beleg → keine Nummer aus dem Kreis,
+      // aber trotzdem Snapshots einfrieren und unveränderbar machen.
+      if (rechnung.typ === "proforma") {
+        const bezahltSet = rechnung.bereitsBezahlt
+          ? {
+              bezahltBetrag: rechnung.brutto,
+              bezahltAm: rechnung.rechnungsdatum,
+            }
+          : {};
+        await db
+          .update(invoices)
+          .set({
+            status: "finalisiert",
+            finalizedAt: new Date(),
+            firmenSnapshot,
+            bankSnapshot,
+            ...bezahltSet,
+          })
+          .where(eq(invoices.id, input.id));
+        return { nummer: `Proforma #${rechnung.id}` };
+      }
+
       const nummer = await db.transaction(async (tx) => {
         const n = await nextNumber(tx, "invoice", jahr);
         const nr = formatInvoiceNumber(jahr, n);
@@ -258,6 +286,90 @@ export const invoiceRouter = createRouter({
       });
 
       return { nummer };
+    }),
+
+  /** Proforma/Vorkasse in die Schlussrechnung umwandeln (Therapiedepot).
+   *  Kopiert Positionen + Kunden-Snapshot in einen neuen Standard-Entwurf und
+   *  hinterlegt die bereits gezahlte Vorkasse als Abschlag. */
+  inRechnungUmwandeln: rechtQuery("abrechnung")
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const proforma = await db.query.invoices.findFirst({
+        where: eq(invoices.id, input.id),
+        with: { items: true },
+      });
+      if (!proforma) throw new Error("Proforma nicht gefunden.");
+      if (proforma.typ !== "proforma") {
+        throw new Error("Nur Proforma-Belege können umgewandelt werden.");
+      }
+      if (proforma.status !== "finalisiert") {
+        throw new Error("Die Proforma muss zuerst finalisiert werden.");
+      }
+      const bereitsUmgewandelt = await db.query.invoices.findFirst({
+        where: eq(invoices.proformaVonId, proforma.id),
+        columns: { id: true, nummer: true },
+      });
+      if (bereitsUmgewandelt) {
+        throw new Error(
+          `Diese Proforma wurde bereits verrechnet (Rechnung ${bereitsUmgewandelt.nummer ?? `#${bereitsUmgewandelt.id}`}).`,
+        );
+      }
+
+      const heute = new Date();
+      const fmt = (d: Date) => d.toISOString().slice(0, 10);
+      const settings = await db.query.companySettings.findFirst({
+        where: eq(companySettings.id, 1),
+      });
+      const kunde = await db.query.customers.findFirst({
+        where: eq(customers.id, proforma.customerId),
+      });
+      const zielTage = kunde?.zahlungszielTage ?? settings?.standardZahlungsziel ?? 14;
+      const faellig = new Date(heute);
+      faellig.setDate(faellig.getDate() + zielTage);
+
+      const neueId = await db.transaction(async (tx) => {
+        const [{ id }] = await tx
+          .insert(invoices)
+          .values({
+            customerId: proforma.customerId,
+            typ: "standard",
+            rechnungsdatum: fmt(heute),
+            faelligkeitsdatum: fmt(faellig),
+            leistungsdatum: proforma.leistungsdatum,
+            bankAccountId: proforma.bankAccountId,
+            kundeName: proforma.kundeName,
+            kundeZusatz: proforma.kundeZusatz,
+            kundeStrasse: proforma.kundeStrasse,
+            kundePlz: proforma.kundePlz,
+            kundeOrt: proforma.kundeOrt,
+            kundeLand: proforma.kundeLand,
+            netto: proforma.netto,
+            ust: proforma.ust,
+            brutto: proforma.brutto,
+            // Depot: was auf die Vorkasse tatsächlich gezahlt wurde
+            abschlagBetrag: proforma.bezahltBetrag,
+            proformaVonId: proforma.id,
+            pdfNotiz: proforma.pdfNotiz,
+          })
+          .$returningId();
+        if (proforma.items.length > 0) {
+          await tx.insert(invoiceItems).values(
+            proforma.items.map((it, i) => ({
+              invoiceId: id,
+              position: i + 1,
+              bezeichnung: it.bezeichnung,
+              beschreibung: it.beschreibung,
+              menge: it.menge,
+              einheit: it.einheit,
+              einzelpreis: it.einzelpreis,
+              ustSatz: it.ustSatz,
+            })),
+          );
+        }
+        return id;
+      });
+      return { id: neueId };
     }),
 
   /** Zahlungseingang verbuchen. */
@@ -336,6 +448,11 @@ export const invoiceRouter = createRouter({
       if (!rechnung) throw new Error("Rechnung nicht gefunden.");
       if (rechnung.status === "entwurf") {
         throw new Error("Nur finalisierte Rechnungen können storniert werden.");
+      }
+      if (rechnung.typ === "proforma") {
+        throw new Error(
+          "Proforma-Belege brauchen kein Storno (kein GoBD-Beleg) — gezahlte Vorkasse ggf. als Gutschrift über die Schlussrechnung ausweisen.",
+        );
       }
 
       const heute = new Date().toISOString().slice(0, 10);

@@ -314,6 +314,25 @@ export const planRouter = createRouter({
       return { ok: true, anzahl: tage.length };
     }),
 
+  // ── Tag-Status: alle Einträge eines Tages auf einen Status setzen ─────────
+  tagStatus: rechtQuery("plaene")
+    .input(
+      z.object({
+        planId: z.number().int(),
+        datum: datumInput,
+        status: z.enum(["geplant", "stattgefunden", "abgesagt", "ausgefallen"]),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [res] = await db
+        .update(planEntries)
+        .set({ status: input.status })
+        .where(and(eq(planEntries.planId, input.planId), eq(planEntries.datum, input.datum)));
+      void res;
+      return { ok: true };
+    }),
+
   // ── Block-Aktionen: markierte Einträge gemeinsam löschen/duplizieren ─────
   bulk: rechtQuery("plaene")
     .input(

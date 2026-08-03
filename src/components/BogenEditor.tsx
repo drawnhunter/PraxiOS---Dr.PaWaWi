@@ -34,6 +34,8 @@ const STANDARD_CONFIG: Record<BlockTyp, BlockConfig> = {
   textfeld_schreibfeld: { frage: "", zeilen: 4 },
   skala_1_10: { frage: "", vonLabel: "1 = schwach", bisLabel: "10 = stark" },
   haeufigkeit: { fragen: [] },
+  jaNein: { fragen: [], notizFrage: "" },
+  infotext: { text: "", checkboxLabel: "Ich willige ein", pflicht: true },
 };
 
 interface Props {
@@ -41,9 +43,11 @@ interface Props {
   onOpenChange: (offen: boolean) => void;
   formId: number | null;
   onGespeichert: () => void;
+  /** Vorbefüllte Blöcke (z. B. aus dem Import) — überschreibt formId-Laden. */
+  initial?: { titel: string; beschreibung: string; bloecke: FormBlock[] } | null;
 }
 
-export function BogenEditor({ offen, onOpenChange, formId, onGespeichert }: Props) {
+export function BogenEditor({ offen, onOpenChange, formId, onGespeichert, initial }: Props) {
   const utils = trpc.useUtils();
   const [titel, setTitel] = useState("");
   const [beschreibung, setBeschreibung] = useState("");
@@ -59,6 +63,12 @@ export function BogenEditor({ offen, onOpenChange, formId, onGespeichert }: Prop
   useEffect(() => {
     if (!offen) return;
     setFehler("");
+    if (initial) {
+      setTitel(initial.titel);
+      setBeschreibung(initial.beschreibung);
+      setBloecke(initial.bloecke.map((b) => ({ ...b })));
+      return;
+    }
     if (formId && bestehend.data) {
       setTitel(bestehend.data.titel);
       setBeschreibung(bestehend.data.beschreibung ?? "");
@@ -69,7 +79,7 @@ export function BogenEditor({ offen, onOpenChange, formId, onGespeichert }: Prop
       setBloecke([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offen, formId, bestehend.data?.id]);
+  }, [offen, formId, bestehend.data?.id, initial]);
 
   const speichern = trpc.anamnese.create.useMutation({ onSuccess: nachErfolg });
   const aktualisieren = trpc.anamnese.update.useMutation({ onSuccess: nachErfolg });
@@ -359,6 +369,66 @@ function BlockConfigEditor({
             />
           </div>
         )}
+      </>
+    );
+  }
+  if (block.typ === "jaNein") {
+    return (
+      <>
+        <div className="sm:col-span-2">
+          <Label>Ja/Nein-Fragen (eine pro Zeile) *</Label>
+          <Textarea
+            rows={4}
+            value={(block.config.fragen ?? []).join("\n")}
+            onChange={(e) =>
+              onChange({
+                ...block.config,
+                fragen: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+              })
+            }
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <Label>Optionale Notiz-Frage darunter (z. B. „Welche / seit wann?“)</Label>
+          <Input
+            value={block.config.notizFrage ?? ""}
+            onChange={(e) => onChange({ ...block.config, notizFrage: e.target.value })}
+          />
+        </div>
+      </>
+    );
+  }
+  if (block.typ === "infotext") {
+    return (
+      <>
+        <div className="sm:col-span-2">
+          <Label>Erklärungstext *</Label>
+          <Textarea
+            rows={6}
+            value={block.config.text ?? ""}
+            onChange={(e) => onChange({ ...block.config, text: e.target.value })}
+            placeholder="Rechtstext / Erklärung (Absätze werden übernommen)"
+          />
+        </div>
+        <div>
+          <Label>Zustimmungs-Checkbox (Label)</Label>
+          <Input
+            value={block.config.checkboxLabel ?? ""}
+            onChange={(e) => onChange({ ...block.config, checkboxLabel: e.target.value })}
+            placeholder="z. B. „Ich willige ein“ (leer = keine)"
+          />
+        </div>
+        <div className="flex items-end pb-1">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={block.config.pflicht ?? true}
+              onChange={(e) => onChange({ ...block.config, pflicht: e.target.checked })}
+              className="h-4 w-4 accent-[#0F766E]"
+            />
+            Zustimmung ist Pflicht
+          </label>
+        </div>
       </>
     );
   }

@@ -74,12 +74,15 @@ export async function ladeRechnungsBeleg(id: number): Promise<{ beleg: PdfBeleg;
         }
       : null);
 
+  const istProforma = r.typ === "proforma";
   return {
-    dateiname: r.nummer ?? `Entwurf-${r.id}`,
+    dateiname: r.nummer ?? (istProforma ? `Proforma-${r.id}` : `Entwurf-${r.id}`),
     beleg: {
       art: "rechnung",
-      nummer: r.nummer ?? `Entwurf #${r.id}`,
+      nummer: r.nummer ?? (istProforma ? `Proforma #${r.id}` : `Entwurf #${r.id}`),
       istEntwurf: r.status === "entwurf",
+      istProforma,
+      abschlagCent: r.abschlagBetrag ? Math.round(Number(r.abschlagBetrag) * 100) : 0,
       datum: r.rechnungsdatum,
       faellig: r.faelligkeitsdatum,
       leistungsdatum: r.leistungsdatum,

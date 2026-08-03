@@ -35,6 +35,7 @@ import { labelRouter } from "./labelRouter";
 import { posteingangRouter } from "./posteingangRouter";
 import { magicImportRouter } from "./magicImportRouter";
 import { kontierungRouter } from "./kontierungRouter";
+import { rezeptRouter } from "./rezeptRouter";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -72,6 +73,7 @@ export const appRouter = createRouter({
   posteingang: posteingangRouter,
   magicImport: magicImportRouter,
   kontierung: kontierungRouter,
+  rezepte: rezeptRouter,
   leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 

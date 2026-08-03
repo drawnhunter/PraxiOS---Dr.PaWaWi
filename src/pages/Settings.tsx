@@ -460,6 +460,9 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* ── Unterschrift (Rezepte/Atteste) ── */}
+      <SignaturAbschnitt />
+
       {/* ── DATEV & Kontierung ── */}
       <section className="rounded-lg border border-neutral-200 bg-white p-5">
         <h2 className="mb-1 text-sm font-medium text-neutral-700">DATEV &amp; Kontierung</h2>
@@ -863,5 +866,88 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ── Unterschriftsbild für Rezepte/Atteste ───────────────────────────────────
+function SignaturAbschnitt() {
+  const utils = trpc.useUtils();
+  const signatur = trpc.settings.signatur.useQuery();
+  const [fehler, setFehler] = useState<string | null>(null);
+  const setzen = trpc.settings.signaturSetzen.useMutation({
+    onSuccess: () => {
+      setFehler(null);
+      utils.settings.signatur.invalidate();
+      utils.settings.get.invalidate();
+    },
+    onError: (e) => setFehler(e.message),
+  });
+
+  const dateiLesen = (f: File) => {
+    if (!/^image\/(png|jpe?g)$/.test(f.type)) {
+      setFehler("Nur PNG oder JPG.");
+      return;
+    }
+    if (f.size > 1_400_000) {
+      setFehler("Bild zu groß (max. ca. 1,4 MB) — bitte vorher zuschneiden/komprimieren.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setzen.mutate({ dataUrl: String(reader.result) });
+    reader.readAsDataURL(f);
+  };
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-5">
+      <h2 className="mb-1 text-sm font-medium text-neutral-700">
+        Unterschrift (Privat-Rezepte &amp; Atteste)
+      </h2>
+      <p className="mb-4 text-xs text-neutral-400">
+        Wird als Bild auf erstellte Rezepte und Atteste gestempelt. Tipp: schwarze
+        Unterschrift auf weißem Papier, mit dem Handy scharf fotografieren und
+        freistellen (zuschneiden). Liegt kein Bild vor, erscheint nur die
+        Unterschriftszeile zum handschriftlichen Signieren.
+      </p>
+      <div className="flex flex-wrap items-center gap-4">
+        {signatur.data?.dataUrl ? (
+          <div className="rounded border border-neutral-200 bg-neutral-50 p-2">
+            <img
+              src={signatur.data.dataUrl}
+              alt="Hinterlegte Unterschrift"
+              className="h-16 max-w-[220px] object-contain"
+            />
+          </div>
+        ) : (
+          <span className="text-sm text-neutral-400">Keine Unterschrift hinterlegt.</span>
+        )}
+        <label className="cursor-pointer">
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) dateiLesen(f);
+              e.target.value = "";
+            }}
+          />
+          <span className="inline-flex h-9 items-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium hover:bg-neutral-50">
+            {setzen.isPending ? "Speichere …" : "Bild hochladen"}
+          </span>
+        </label>
+        {signatur.data?.dataUrl && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-red-600"
+            onClick={() => setzen.mutate({ dataUrl: null })}
+            disabled={setzen.isPending}
+          >
+            Entfernen
+          </Button>
+        )}
+        {fehler && <span className="text-sm text-red-600">{fehler}</span>}
+      </div>
+    </section>
   );
 }

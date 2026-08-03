@@ -13,6 +13,7 @@ import {
   rechtQuery,
 } from "./middleware";
 import { getDb } from "./queries/connection";
+import { DRX_BOGEN } from "@db/anamneseDrx";
 import {
   anamnesisBlocks,
   anamnesisForms,
@@ -43,6 +44,10 @@ const blockConfigInput = z.object({
   zeilen: z.number().int().min(1).max(20).optional(),
   vonLabel: z.string().trim().max(100).optional(),
   bisLabel: z.string().trim().max(100).optional(),
+  notizFrage: z.string().trim().max(500).optional(),
+  text: z.string().max(10000).optional(),
+  checkboxLabel: z.string().trim().max(300).optional(),
+  pflicht: z.boolean().optional(),
 });
 
 const formBlockInput = z.object({
@@ -155,6 +160,30 @@ export function patientZuordnen(
 }
 
 export const anamneseRouter = createRouter({
+  // ── Muster: Dr.-X-Anamnesebogen per Klick anlegen ─────────────────────────
+  musterDrx: rechtQuery("anamnese").mutation(async ({ ctx }) => {
+    const db = getDb();
+    const vorhanden = await db.query.anamnesisForms.findFirst({
+      where: eq(anamnesisForms.titel, DRX_BOGEN.titel),
+    });
+    if (vorhanden) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "Das Dr.-X-Muster existiert bereits (Bogen „" + DRX_BOGEN.titel + "“).",
+      });
+    }
+    const [{ id }] = await db
+      .insert(anamnesisForms)
+      .values({
+        titel: DRX_BOGEN.titel,
+        beschreibung: DRX_BOGEN.beschreibung,
+        schemaJson: JSON.stringify(DRX_BOGEN.bloecke),
+        createdBy: ctx.user.id,
+      })
+      .$returningId();
+    return { id };
+  }),
+
   // ── Block-Katalog ─────────────────────────────────────────────────────────
   bloecke: rechtQuery("anamnese").query(async () => {
     return getDb().query.anamnesisBlocks.findMany({
@@ -297,6 +326,26 @@ export const anamneseRouter = createRouter({
     }),
 
   // ── Öffentlich (ohne Login): Bogen abrufen + einreichen ───────────────────
+  /** Bogen-Importer: docx/pdf analysieren → Block-Vorschau für den Editor. */
+  bogenImportAnalysieren: rechtQuery("anamnese")
+    .input(z.object({ dateiname: z.string().min(1), base64: z.string().min(20) }))
+    .mutation(async ({ input }) => {
+      const { extrahiereText, analysiereBogenText } = await import("./bogenImport");
+      const puffer = Buffer.from(input.base64, "base64");
+      if (puffer.length > 15 * 1024 * 1024) {
+        throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Datei zu groß (max. 15 MB)." });
+      }
+      const { text, quelle } = await extrahiereText(input.dateiname, puffer);
+      if (!text.trim()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Kein lesbarer Text in der Datei gefunden.",
+        });
+      }
+      const analyse = analysiereBogenText(text);
+      return { ...analyse, quelle };
+    }),
+
   /** Verfügbare Sprachen für die Auswahl im öffentlichen Bogen. */
   sprachen: publicQuery.query(async () => {
     const { translateVerfuegbar } = await import("./lib/translate");
@@ -497,6 +546,22 @@ export const anamneseRouter = createRouter({
         where: eq(companySettings.id, 1),
       });
       const formBloecke = parseBlocks(form);
+
+      // infotext-Blöcke mit Pflicht-Zustimmung prüfen
+      const pflichtInfo = formBloecke.filter(
+        (b) => b.typ === "infotext" && b.config.checkboxLabel && (b.config.pflicht ?? true),
+      );
+      for (let i = 0; i < formBloecke.length; i++) {
+        if (!pflichtInfo.includes(formBloecke[i])) continue;
+        const wert = input.antworten[i]?.wert;
+        if (wert !== "ja") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Bitte bestätigen Sie: „${formBloecke[i].config.checkboxLabel}“`,
+          });
+        }
+      }
+
       const zielVerzeichnis = path.join(env.uploadDir, String(patient.id));
       mkdirSync(zielVerzeichnis, { recursive: true });
       const sprachName = SPRACHEN.find((s) => s.code === input.sprache)?.name ?? input.sprache;
@@ -674,7 +739,12 @@ export async function rueckUebersetzeAntworten(
       freitexte.push({ i, text: a.wert });
       return { ...a, titel: titelDe };
     }
-    if (a.typ === "haeufigkeit" && typeof a.wert === "object" && a.wert !== null && !Array.isArray(a.wert)) {
+    if (
+      (a.typ === "haeufigkeit" || a.typ === "jaNein") &&
+      typeof a.wert === "object" &&
+      a.wert !== null &&
+      !Array.isArray(a.wert)
+    ) {
       const mapped: Record<string, string> = {};
       for (const [frage, stufe] of Object.entries(a.wert as Record<string, string>) ) {
         mapped[rueck.get(frage) ?? frage] = rueck.get(stufe) ?? stufe;

@@ -254,6 +254,8 @@ function BogenFormular({
 }
 
 function standardAntwort(typ: string): AntwortWert {
+  if (typ === "jaNein" || typ === "haeufigkeit") return {};
+  if (typ === "infotext") return "";
   if (typ === "checkboxen") return [];
   if (typ === "skala_1_10") return 0 as unknown as number;
   if (typ === "haeufigkeit") return {};
@@ -371,6 +373,64 @@ function BlockEingabe({
           <span>{block.config.vonLabel ?? "1 = schwach"}</span>
           <span>{block.config.bisLabel ?? "10 = stark"}</span>
         </div>
+      </div>
+    );
+  }
+  if (block.typ === "jaNein") {
+    const map = (typeof wert === "object" && !Array.isArray(wert) ? wert : {}) as Record<string, string>;
+    return (
+      <div className="space-y-2">
+        {(block.config.fragen ?? []).map((frage) => (
+          <div key={frage} className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-50 pb-2">
+            <span className="min-w-40 text-sm">{frage}</span>
+            <div className="flex gap-1">
+              {["Ja", "Nein"].map((stufe) => (
+                <button
+                  key={stufe}
+                  type="button"
+                  onClick={() => onChange({ ...map, [frage]: map[frage] === stufe ? "" : stufe })}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs transition-colors",
+                    map[frage] === stufe
+                      ? "border-[#0F766E] bg-[#0F766E] text-white"
+                      : "border-neutral-200 text-neutral-600 hover:border-[#0F766E]/50",
+                  )}
+                >
+                  {stufe}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        {block.config.notizFrage && (
+          <div className="pt-1">
+            <Label>{block.config.notizFrage}</Label>
+            <Input
+              value={map["__notiz"] ?? ""}
+              onChange={(e) => onChange({ ...map, __notiz: e.target.value })}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (block.typ === "infotext") {
+    const an = wert === "ja";
+    return (
+      <div>
+        <div className="whitespace-pre-wrap text-sm text-neutral-600">
+          {block.config.text ?? ""}
+        </div>
+        {block.config.checkboxLabel && (
+          <label className="mt-3 flex items-start gap-2.5 text-sm text-neutral-700">
+            <Checkbox
+              checked={an}
+              onCheckedChange={(v) => onChange(v ? "ja" : "")}
+              className="mt-0.5"
+            />
+            <span>{block.config.checkboxLabel}</span>
+          </label>
+        )}
       </div>
     );
   }

@@ -57,6 +57,12 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "ics_token", ddl: "ALTER TABLE company_settings ADD COLUMN ics_token VARCHAR(48) NULL AFTER aufwandskonto_default" },
   { tabelle: "incoming_invoices", spalte: "konto", ddl: "ALTER TABLE incoming_invoices ADD COLUMN konto VARCHAR(10) NULL AFTER waehrung" },
   { tabelle: "incoming_invoices", spalte: "gegenkonto", ddl: "ALTER TABLE incoming_invoices ADD COLUMN gegenkonto VARCHAR(10) NULL AFTER konto" },
+  // Privat-Rezepte & Atteste: Unterschriftsbild des Arztes (Stufe 1.3)
+  { tabelle: "company_settings", spalte: "signatur_bild", ddl: "ALTER TABLE company_settings ADD COLUMN signatur_bild MEDIUMTEXT NULL AFTER age_secret" },
+  // Proforma/Vorkasse + Therapiedepot (Stufe 1.3)
+  { tabelle: "invoices", spalte: "typ", ddl: "ALTER TABLE invoices ADD COLUMN typ ENUM('standard','proforma') NOT NULL DEFAULT 'standard' AFTER nummer" },
+  { tabelle: "invoices", spalte: "abschlag_betrag", ddl: "ALTER TABLE invoices ADD COLUMN abschlag_betrag DECIMAL(12,2) NULL AFTER status" },
+  { tabelle: "invoices", spalte: "proforma_von_id", ddl: "ALTER TABLE invoices ADD COLUMN proforma_von_id BIGINT UNSIGNED NULL AFTER abschlag_betrag" },
 ];
 
 const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
@@ -391,6 +397,22 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       CONSTRAINT pe_lieferant_fk FOREIGN KEY (absender_lieferant_id) REFERENCES suppliers(id) ON DELETE SET NULL,
       CONSTRAINT pe_kategorie_fk FOREIGN KEY (kategorie_id) REFERENCES kategorien(id) ON DELETE SET NULL,
       CONSTRAINT pe_invoice_fk FOREIGN KEY (incoming_invoice_id) REFERENCES incoming_invoices(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "rezepte",
+    ddl: `CREATE TABLE IF NOT EXISTS rezepte (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      typ ENUM('rezept','attest') NOT NULL,
+      inhalt TEXT NOT NULL,
+      document_id BIGINT UNSIGNED NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX rezepte_patient_idx (patient_id),
+      CONSTRAINT rezepte_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT rezepte_document_fk FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL,
+      CONSTRAINT rezepte_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
   },
 ];

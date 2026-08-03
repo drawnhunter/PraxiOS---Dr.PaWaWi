@@ -203,6 +203,24 @@ export const timelineEventsRelations = relations(timelineEvents, ({ one }) => ({
   }),
 }));
 
+// ── PraxiOS: Privat-Rezepte & Atteste ───────────────────────────────────────
+import { rezepte } from "./schema";
+
+export const rezepteRelations = relations(rezepte, ({ one }) => ({
+  patient: one(customers, {
+    fields: [rezepte.patientId],
+    references: [customers.id],
+  }),
+  dokument: one(documents, {
+    fields: [rezepte.documentId],
+    references: [documents.id],
+  }),
+  ersteller: one(users, {
+    fields: [rezepte.createdBy],
+    references: [users.id],
+  }),
+}));
+
 // ── PraxiOS: Rollen-Gruppen ─────────────────────────────────────────────────
 import { gruppen } from "./schema";
 

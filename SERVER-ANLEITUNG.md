@@ -88,15 +88,17 @@ Die lange Zufallszeichenfolge **markieren & kopieren** (in cmd/Putty:
 Markieren kopiert meist schon). Dann:
 
 ```
-nano docker-compose.yml
+cp .env.example .env
+nano .env
 ```
 
-In der Datei **vier Stellen** ändern:
+In der `.env` **drei Werte** setzen (die `docker-compose.yml` enthält seit
+1.3.0 bewusst keine Secret-Werte mehr — Compose liest die `.env`
+automatisch ein):
 
-1. `MYSQL_ROOT_PASSWORD: rewaki` → eigenes Passwort, z. B. `MYSQL_ROOT_PASSWORD: DeinSicheresPw123`
-2. In der Zeile `test: [... "-prewaki"]` → `-pDeinSicheresPw123`
-3. `DATABASE_URL: mysql://root:rewaki@db:3306/rewaki` → `mysql://root:DeinSicheresPw123@db:3306/rewaki`
-4. `APP_SECRET: bitte-zufaellig-setzen` → die kopierte Zufallszeichenfolge einfügen (Einfügen in nano: Rechtsklick)
+1. `MYSQL_ROOT_PASSWORD=` → eigenes Datenbank-Passwort eintragen
+2. `DATABASE_URL=mysql://root:<MYSQL_ROOT_PASSWORD>@db:3306/rewaki` → dasselbe Passwort in der URL einsetzen
+3. `APP_SECRET=` → die kopierte Zufallszeichenfolge einfügen (Einfügen in nano: Rechtsklick)
 
 **Optional (siehe Teil 1):** Für den Import deiner Daten die Zeile
 `# - ./dump.sql:/docker-entrypoint-initdb.d/schema.sql:ro` einkommentieren
@@ -190,10 +192,10 @@ crontab -e
 ```
 
 (Beim ersten Mal Editor-Frage → `1` für nano.) Diese Zeile ans Ende —
-`DeinSicheresPw123` durch dein Datenbank-Passwort aus Teil 4 ersetzen:
+sie liest das Datenbank-Passwort selbst aus der `.env`:
 
 ```
-17 3 * * * docker compose -f $HOME/rewaki/docker-compose.yml exec -T db mysqldump -u root -pDeinSicheresPw123 rewaki > $HOME/backups/rewaki-$(date +\%Y-\%m-\%d).sql 2>/dev/null
+17 3 * * * DB_PASS=$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' $HOME/rewaki/.env) && docker compose -f $HOME/rewaki/docker-compose.yml exec -T db mysqldump -u root -p"$DB_PASS" rewaki > $HOME/backups/rewaki-$(date +\%Y-\%m-\%d).sql 2>/dev/null
 ```
 
 → Jede Nacht um 3:17 Uhr eine Sicherung in `~/backups/`. Kopier dir die
@@ -249,23 +251,11 @@ Handkorrekturen mehr nötig.**
    **automatisch** nach (Selbst-Migration).
 5. Browser **hart neu laden** (Strg+F5), sonst zeigt er die alte App.
 
-> **Eigene Passwörter dauerhaft schützen:** Das Überschreiben ersetzt auch
-> die `docker-compose.yml` (Standard-Passwörter!). Lege einmalig eine Datei
-> `~/rewaki/docker-compose.override.yml` an — sie wird automatisch mit
-> eingelesen und **nie** überschrieben:
->
-> ```yaml
-> services:
->   app:
->     environment:
->       APP_SECRET: "dein-geheimnis"
->       DATABASE_URL: "mysql://root:deinpasswort@db:3306/rewaki"
->   db:
->     environment:
->       MYSQL_ROOT_PASSWORD: "deinpasswort"
-> ```
-> (Falls du das DB-Passwort geändert hast, auch die `healthcheck`-Zeile in
-> der docker-compose.yml einmalig anpassen.)
+> **Eigene Passwörter dauerhaft schützen:** Deine Geheimnisse stehen in der
+> `.env` — die wird beim Update **nie** überschrieben (der SupportHub und
+> diese Anleitung lassen `.env` immer in Ruhe). Die `docker-compose.yml`
+> darf deshalb bedenkenlos ersetzt werden: Sie enthält seit 1.3.0 keine
+> Werte mehr, sondern verweist nur auf die Variablennamen.
 
 ---
 
@@ -307,16 +297,17 @@ gpg --batch --yes --passphrase-file ~/.praxios-backup.secret \
   -d $(ls -t ~/backups/praxios/*.gpg | head -1) | tar xz -C /tmp && cd /tmp
 
 # 3) Auf TEST-Datenbank einspielen (NICHT die Produktiv-DB!)
-docker exec -i praxiswerk-db-1 mysql -uroot -ppraxiswerk \
+DB_PASS=$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' ~/praxiswerk/.env)
+docker exec -i praxiswerk-db-1 mysql -uroot -p"$DB_PASS" \
   -e "DROP DATABASE IF EXISTS praxiswerk_restoretest; CREATE DATABASE praxiswerk_restoretest;"
-cat /tmp/datenbank.sql | docker exec -i praxiswerk-db-1 mysql -uroot -ppraxiswerk praxiswerk_restoretest
+cat /tmp/datenbank.sql | docker exec -i praxiswerk-db-1 mysql -uroot -p"$DB_PASS" praxiswerk_restoretest
 
 # 4) App kurz auf die Test-DB zeigen lassen (zweite Instanz, Port 3101)
 cd ~/praxiswerk
 sudo docker run --rm -d --name praxios-restoretest \
   --network praxiswerk_default \
-  -e DATABASE_URL=mysql://root:praxiswerk@db:3306/praxiswerk_restoretest \
-  -e APP_SECRET=$(grep APP_SECRET docker-compose.yml | awk '{print $2}') \
+  -e DATABASE_URL=mysql://root:$DB_PASS@db:3306/praxiswerk_restoretest \
+  -e APP_SECRET=$(sed -n 's/^APP_SECRET=//p' .env) \
   -e NODE_ENV=production -e PORT=3000 -p 3101:3000 praxiswerk-app
 
 # 5) Dokumente-Volume in ein Test-Volume kopieren
@@ -333,7 +324,7 @@ docker run --rm -v praxios-restoretest-docs:/ziel -v /tmp:/quelle alpine \
 # 7) Aufräumen + Protokoll eintragen
 sudo docker stop praxios-restoretest
 docker volume rm praxios-restoretest-docs
-docker exec -i praxiswerk-db-1 mysql -uroot -ppraxiswerk \
+docker exec -i praxiswerk-db-1 mysql -uroot -p"$DB_PASS" \
   -e "DROP DATABASE praxiswerk_restoretest;"
 #    -> Ergebnis + Datum in Verfahrensdokumentation.md (Abschnitt 10) eintragen
 ```

@@ -62,7 +62,7 @@ import {
   tageAddieren,
   uhrzeitBereich,
 } from "./Kalender";
-import { CalendarPlus, Copy, Download, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CalendarPlus, Check, Copy, Download, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type PlanDetailDaten = RouterOutputs["plaene"]["byId"];
@@ -146,6 +146,12 @@ export default function PlanDetail() {
     onSuccess: () => {
       invalidate();
       zeigeErfolg("Eintrag dupliziert.");
+    },
+  });
+  const tagStatus = trpc.plaene.tagStatus.useMutation({
+    onSuccess: () => {
+      invalidate();
+      zeigeErfolg("Tag als stattgefunden markiert.");
     },
   });
   const dupliziereTag = trpc.plaene.duplicateDay.useMutation({
@@ -558,6 +564,16 @@ export default function PlanDetail() {
                         {WOCHENTAGE_KURZ[i]}{" "}
                         <span className="tabular-nums">{datum(tag)}</span>
                       </span>
+                      {tagesEintraege.length > 0 && imZeitraum && (
+                        <button
+                          type="button"
+                          title="Alle Einträge des Tages als stattgefunden markieren"
+                          onClick={() => tagStatus.mutate({ planId, datum: tag, status: "stattgefunden" })}
+                          className="rounded p-0.5 text-neutral-300 hover:bg-neutral-100 hover:text-primary"
+                        >
+                          <Check className="h-3 w-3" />
+                        </button>
+                      )}
                       {tagesEintraege.length > 0 && imZeitraum && (
                         <button
                           type="button"

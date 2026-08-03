@@ -63,8 +63,38 @@ export const companySettings = mysqlTable("company_settings", {
   kalenderToken: varchar("kalender_token", { length: 64 }),
   // Geheimer Schlüssel — verlässt den Server NIE (wird in der API nicht ausgeliefert)
   ageSecret: varchar("age_secret", { length: 100 }),
+  // Unterschrift des Arztes (base64-Data-URL, PNG/JPG) — wird auf Rezepte/
+  // Atteste gestempelt. Wird in settings.get NICHT ausgeliefert (nur Flag).
+  signaturBild: mediumtext("signatur_bild"),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });
+
+// ── Privat-Rezepte & Atteste ────────────────────────────────────────────────
+// Erstellte Verordnungen/Bescheinigungen. Das gerenderte PDF liegt als
+// Dokument (kategorie rezept/arztbrief) in der Akte; inhalt = JSON
+// (Medikamenten-Zeilen bzw. Attest-Text/Zeitraum).
+export const rezepte = mysqlTable(
+  "rezepte",
+  {
+    id: serial("id").primaryKey(),
+    patientId: bigint("patient_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    typ: mysqlEnum("typ", ["rezept", "attest"]).notNull(),
+    inhalt: text("inhalt").notNull(), // JSON: RezeptInhalt | AttestInhalt
+    documentId: bigint("document_id", { mode: "number", unsigned: true }).references(
+      () => documents.id,
+      { onDelete: "set null" },
+    ),
+    createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("rezepte_patient_idx").on(t.patientId)],
+);
+export type Rezept = typeof rezepte.$inferSelect;
 
 // ── Kollegen-Praxen (Empfänger für den Akten-Export) ────────────────────────
 export const kollegen = mysqlTable("kollegen", {
@@ -201,11 +231,17 @@ export const invoices = mysqlTable(
   "invoices",
   {
     id: serial("id").primaryKey(),
-    // Nummer wird erst bei Finalisierung vergeben (Entwürfe haben keine)
+    // Nummer wird erst bei Finalisierung vergeben (Entwürfe haben keine);
+    // Proforma bekommt NIE eine Nummer (kein GoBD-Beleg, nur Zahlungsaufforderung)
     nummer: varchar("nummer", { length: 20 }).unique(),
+    typ: mysqlEnum("typ", ["standard", "proforma"]).notNull().default("standard"),
     status: mysqlEnum("status", ["entwurf", "finalisiert", "storniert"])
       .notNull()
       .default("entwurf"),
+    // Therapiedepot: auf der Schlussrechnung abgezogene Abschlagszahlung
+    abschlagBetrag: decimal("abschlag_betrag", { precision: 12, scale: 2 }),
+    // Schlussrechnung → verrechnete Proforma (gegen Doppel-Verrechnung geprüft)
+    proformaVonId: bigint("proforma_von_id", { mode: "number", unsigned: true }),
     customerId: bigint("customer_id", { mode: "number", unsigned: true }).notNull(),
     rechnungsdatum: date("rechnungsdatum", { mode: "string" }).notNull(),
     faelligkeitsdatum: date("faelligkeitsdatum", { mode: "string" }).notNull(),

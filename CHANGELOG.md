@@ -1,5 +1,61 @@
 # Changelog — PraxiOS
 
+## [1.3.0] — 2026-08-03 — Rezepte & Atteste, Proforma/Vorkasse, Bogen-Import, Muster-Dr.-X
+
+### Privat-Rezepte & Atteste (Prio 1/3 der Praxis-Taskliste)
+- **Neuer Tab „Rezepte & Atteste"** in der Patientenakte: **Privatrezept**
+  (mehrere Verordnungszeilen mit Stärke, Menge/Packung, Dosierung + Hinweis),
+  **Arbeitsunfähigkeitsbescheinigung** (Zeitraum von/bis einschließlich) und
+  **freies Attest** — als sauberes A4-PDF mit Praxis-Kopf, „Rp."-Block und
+  Unterschriftsbereich
+- **Digitale Unterschrift**: In den Einstellungen kann ein Unterschriftsbild
+  (PNG/JPG, z. B. mit dem Handy fotografiert) hinterlegt werden — es wird auf
+  jedes Rezept/Attest gestempelt; ohne Bild erscheint die klassische
+  Unterschriftszeile zum handschriftlichen Signieren
+- PDFs landen automatisch als Dokument (Kategorie Rezept/Arztbrief) in der
+  Akte + Timeline-Eintrag; Löschung nur mit Eintrag ins Löschprotokoll
+
+### Proforma / Vorkasse + Therapiedepot
+- **Proforma-Belege**: Beim Rechnungs-Neu-Dialog wählbar („Rechnung" /
+  „Proforma / Vorkasse"). Proforma ist eine Zahlungsaufforderung **ohne
+  GoBD-Belegnummer** (Nummernkreis bleibt unberührt), mit eigenem PDF-Titel
+  „Proforma / Vorkasse"
+- **Therapiedepot**: Zahlungseingänge auf die Vorkasse wie gewohnt verbuchen;
+  per Klick auf **„In Rechnung umwandeln"** entsteht die Schlussrechnung als
+  Entwurf — die gezahlte Vorkasse wird auf dem PDF automatisch abgezogen
+  („Abzüglich Abschlagszahlung (Therapiedepot)") und die Restsumme ausgewiesen.
+  Doppel-Verrechnung ist gesperrt; Storno/Lieferschein/X-Rechnung/Mahnwesen
+  greifen bei Proforma bewusst nicht
+
+### Anamnesebögen: Muster + verbesserter Importer
+- **„Muster: Dr.-X-Bogen"**: Unser echter Praxis-Anamnesebogen (inkl. DSGVO-
+  Einwilligung und IMTZ-Schweigepflichtsentbindung) liegt 1:1 digitalisiert als
+  Muster vor — ein Klick legt ihn als bearbeitbaren Bogen an
+- **Bogen-Importer (docx/pdf) gehärtet**: Ankreuz-Zeilen werden nie mehr als
+  Bereichs-Titel fehlgedeutet, Fragen mit „?" nicht mehr als Titel, Skala-
+  Fragen bleiben vollständig erhalten, Tabellen-Kopfzeilen
+  („Organsystem / Bereich") werden verworfen, „Bitte kreuzen Sie…"-Anweisungen
+  werden zuverlässig übersprungen, zwei getrennte Zeilen („Operationen" +
+  „Ja / Nein") werden als eine Ja/Nein-Frage erkannt, der Kopfbogen-Hinweis
+  entfernt alle Stammdaten-Blöcke (nicht nur den ersten)
+- Router-Schema nimmt jetzt alle Block-Config-Felder entgegen (pflicht,
+  notizFrage, text, checkboxLabel) — vorher gingen sie beim Speichern verloren
+
+### Deployment & Secrets (SupportHub-kompatibel)
+- **docker-compose.yml enthält keine Secret-Werte mehr** (Listen-Syntax:
+  `- MYSQL_ROOT_PASSWORD` etc.) — alle Geheimnisse stehen ausschließlich in der
+  `.env` (Compose liest sie automatisch; `.env.example` als Vorlage).
+  Verhindert Fehlalarme von Secret-Scannern (z. B. PraxiOS SupportHub) und
+  versehentlich committete Passwörter
+- `scripts/backup.sh` liest das DB-Passwort jetzt selbst aus der Projekt-`.env`;
+  SERVER-ANLEITUNG.md komplett auf den .env-Fluss umgestellt
+
+### Technik
+- Neue Tests: Rezept/Attest-PDF (inkl. Signatur-Stempel und defektes Bild),
+  Dr.-X-Seed gegen Router-Schema, Bogen-Importer (7 Fälle) — **68 Tests grün**
+
+---
+
 ## [1.2.0] — 2026-08-01 — ReWaWi-1.2-Port: Post Manager, OCR, Magic Import, Kontierung
 
 ### Neue Menüleiste (ReWaWi-1.2-Stil)

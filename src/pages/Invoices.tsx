@@ -50,6 +50,7 @@ export default function Invoices() {
   const [statusFilter, setStatusFilter] = useState<string>("alle");
   const [neuDialog, setNeuDialog] = useState(false);
   const [modus, setModus] = useState<"bestehend" | "neu">("bestehend");
+  const [belegTyp, setBelegTyp] = useState<"standard" | "proforma">("standard");
   const [kundenId, setKundenId] = useState<string>("");
   const [neukunde, setNeukunde] = useState<NeukundeForm>({
     name: "",
@@ -89,7 +90,7 @@ export default function Invoices() {
   const weiter = async () => {
     if (modus === "bestehend") {
       if (!kundenId) return;
-      erstellen.mutate({ customerId: Number(kundenId) });
+      erstellen.mutate({ customerId: Number(kundenId), typ: belegTyp });
       return;
     }
     // Neukunde zuerst anlegen, dann Rechnung damit öffnen
@@ -102,7 +103,7 @@ export default function Invoices() {
       email: neukunde.email || null,
     });
     utils.customers.list.invalidate();
-    erstellen.mutate({ customerId: res.id });
+    erstellen.mutate({ customerId: res.id, typ: belegTyp });
   };
 
   const fehler = erstellen.error ?? kundeErstellen.error;
@@ -203,8 +204,14 @@ export default function Invoices() {
                       to={`/rechnungen/${r.id}`}
                       className="font-medium text-neutral-900 hover:underline"
                     >
-                      {r.nummer ?? `Entwurf #${r.id}`}
+                      {r.nummer ??
+                        (r.typ === "proforma" ? `Proforma #${r.id}` : `Entwurf #${r.id}`)}
                     </Link>
+                    {r.typ === "proforma" && (
+                      <Badge variant="outline" className="ml-2 border-teal-300 text-teal-700">
+                        Vorkasse
+                      </Badge>
+                    )}
                     {r.creditNotes.length > 0 && (
                       <span className="ml-2 text-xs text-neutral-400">
                         ({r.creditNotes.length} Gutschrift(en))
@@ -241,8 +248,37 @@ export default function Invoices() {
       <Dialog open={neuDialog} onOpenChange={setNeuDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Neue Rechnung</DialogTitle>
+            <DialogTitle>
+              {belegTyp === "proforma" ? "Neue Proforma / Vorkasse" : "Neue Rechnung"}
+            </DialogTitle>
           </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-2 rounded-md bg-neutral-100 p-1 text-sm">
+            <button
+              className={`rounded px-3 py-1.5 transition-colors ${
+                belegTyp === "standard" ? "bg-white font-medium shadow-sm" : "text-neutral-500"
+              }`}
+              onClick={() => setBelegTyp("standard")}
+            >
+              Rechnung
+            </button>
+            <button
+              className={`rounded px-3 py-1.5 transition-colors ${
+                belegTyp === "proforma" ? "bg-white font-medium shadow-sm" : "text-neutral-500"
+              }`}
+              onClick={() => setBelegTyp("proforma")}
+            >
+              Proforma / Vorkasse
+            </button>
+          </div>
+          {belegTyp === "proforma" && (
+            <p className="rounded-md bg-teal-50 px-3 py-2 text-xs text-teal-800">
+              Zahlungsaufforderung ohne Rechnungsnummer (kein GoBD-Beleg) — z. B.
+              als Therapiedepot. Nach Zahlungseingang über „In Rechnung umwandeln"
+              verrechnen; der gezahlte Betrag wird auf der Schlussrechnung
+              automatisch abgezogen.
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-2 rounded-md bg-neutral-100 p-1 text-sm">
             <button

@@ -161,6 +161,48 @@ export function renderBogenPdf(input: BogenPdfInput): Promise<Buffer> {
         doc.font(regular).fontSize(7.5).fillColor(GRAU).text(von, MARGIN, y, { width: W / 2 });
         doc.text(bis, MARGIN + W / 2, y, { width: W / 2, align: "right" });
         y += 22;
+      } else if (block.typ === "jaNein") {
+        const map = (typeof antwort === "object" && antwort !== null && !Array.isArray(antwort)
+          ? (antwort as Record<string, string>)
+          : {}) as Record<string, string>;
+        for (const frage of block.config.fragen ?? []) {
+          sichereSeite(16);
+          doc.font(regular).fontSize(9).fillColor(DUNKEL).text(frage, MARGIN, y + 2, { width: W * 0.7 });
+          const gewahlt = map[frage];
+          (["Ja", "Nein"] as const).forEach((stufe, si) => {
+            const x = MARGIN + W * 0.72 + si * (W * 0.14);
+            kreis(doc, x + 5, y + 6, gewahlt === stufe);
+            doc.font(regular).fontSize(8.5).fillColor(GRAU).text(stufe, x + 13, y, { width: 40 });
+          });
+          y += 16;
+        }
+        if (block.config.notizFrage) {
+          sichereSeite(20);
+          const notiz = map["__notiz"] ?? "";
+          doc.font(regular).fontSize(8.5).fillColor(GRAU).text(block.config.notizFrage, MARGIN, y, { width: W * 0.4 });
+          if (ausgefuellt && notiz) {
+            doc.font(bold).fontSize(9).fillColor(DUNKEL).text(notiz, MARGIN + W * 0.42, y - 2, { width: W * 0.58 });
+          } else {
+            doc.moveTo(MARGIN + W * 0.42, y + 9).lineTo(MARGIN + W, y + 9).lineWidth(0.5).strokeColor(HELL).stroke();
+          }
+          y += 20;
+        }
+        y += 6;
+      } else if (block.typ === "infotext") {
+        const absaetze = (block.config.text ?? "").split(/\n\s*\n/);
+        for (const absatz of absaetze) {
+          sichereSeite(14);
+          doc.font(regular).fontSize(8.5).fillColor(GRAU).text(absatz.replace(/\n/g, " "), MARGIN, y, { width: W });
+          y = doc.y + 6;
+        }
+        if (block.config.checkboxLabel) {
+          sichereSeite(20);
+          const an = antwort === "ja";
+          kasten(doc, MARGIN, y, an);
+          doc.font(regular).fontSize(9).fillColor(DUNKEL).text(block.config.checkboxLabel, MARGIN + 16, y - 1, { width: W - 16 });
+          y += 22;
+        }
+        y += 6;
       } else if (block.typ === "haeufigkeit") {
         const kopfW = W * 0.42;
         const stufW = (W - kopfW) / HAEUFIGKEIT_STUFEN.length;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import {
   adminQuery,
   authedQuery,
@@ -53,14 +54,55 @@ export const settingsRouter = createRouter({
       where: eq(companySettings.id, 1),
     });
     if (!row) return null;
-    // age_secret verlässt den Server nie (geheimer Schlüssel für den Austausch)
-    const { ageSecret: _geheim, smtpPasswortEnc: _smtp, ...oeffentlich } = row;
+    // age_secret verlässt den Server nie (geheimer Schlüssel für den Austausch);
+    // das Unterschriftsbild ist zu groß für den Routine-GET (nur Flag + eigenes Query)
+    const { ageSecret: _geheim, smtpPasswortEnc: _smtp, signaturBild: _sig, ...oeffentlich } = row;
     return {
       ...oeffentlich,
       ageSecretVorhanden: !!row.ageSecret,
       smtpPasswortGesetzt: !!row.smtpPasswortEnc,
+      signaturVorhanden: !!row.signaturBild,
     };
   }),
+
+  // Unterschriftsbild (base64-Data-URL) für Rezepte/Atteste — nur Verwaltung
+  signatur: adminQuery.query(async () => {
+    const row = await getDb().query.companySettings.findFirst({
+      where: eq(companySettings.id, 1),
+      columns: { signaturBild: true },
+    });
+    return { dataUrl: row?.signaturBild ?? null };
+  }),
+
+  signaturSetzen: adminQuery
+    .input(
+      z.object({
+        // PNG/JPG als Data-URL, max. ~1,5 MB base64; null = entfernen
+        dataUrl: z
+          .string()
+          .regex(/^data:image\/(png|jpe?g);base64,[A-Za-z0-9+/=]+$/, "Nur PNG/JPG als Data-URL")
+          .max(2_000_000, "Bild zu groß (max. ca. 1,5 MB)")
+          .nullable(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const row = await db.query.companySettings.findFirst({
+        where: eq(companySettings.id, 1),
+        columns: { id: true },
+      });
+      if (!row) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Bitte zuerst die Praxisdaten oben speichern.",
+        });
+      }
+      await db
+        .update(companySettings)
+        .set({ signaturBild: input.dataUrl })
+        .where(eq(companySettings.id, 1));
+      return { ok: true };
+    }),
 
   // PraxiOS: Einstellungen ändern = Verwaltung (admin/Leitung)
   update: adminQuery.input(settingsInput).mutation(async ({ input }) => {

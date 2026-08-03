@@ -50,6 +50,7 @@ CREATE TABLE `company_settings` (
   `pdf_layout` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'klassisch',
   `age_recipient` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `age_secret` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `signatur_bild` mediumtext COLLATE utf8mb4_unicode_ci,
   `erinnerung_aktiv` tinyint(1) NOT NULL DEFAULT '0',
   `erinnerung_tage_vorher` int NOT NULL DEFAULT '1',
   `kalender_token` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -152,7 +153,10 @@ DROP TABLE IF EXISTS `delivery_notes`;
 CREATE TABLE `delivery_notes` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `nummer` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `typ` enum('standard','proforma') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'standard',
   `status` enum('entwurf','finalisiert','storniert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'entwurf',
+  `abschlag_betrag` decimal(12,2) DEFAULT NULL,
+  `proforma_von_id` bigint unsigned DEFAULT NULL,
   `customer_id` bigint unsigned NOT NULL,
   `invoice_id` bigint unsigned DEFAULT NULL,
   `datum` date NOT NULL,
@@ -810,3 +814,18 @@ CREATE TABLE `post_eingang` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;
+
+CREATE TABLE `rezepte` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `typ` enum('rezept','attest') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `inhalt` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `document_id` bigint unsigned DEFAULT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `rezepte_patient_idx` (`patient_id`),
+  CONSTRAINT `rezepte_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `rezepte_document_fk` FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `rezepte_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
