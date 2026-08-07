@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  normalisiereBloecke,
   protokollGesperrt,
   strukturOhneWerte,
   zahlAusZelle,
@@ -28,7 +29,7 @@ describe("strukturOhneWerte (Vorlagen enthalten keine Inhalte)", () => {
       { id: "b", typ: "tabelle", titel: "RR", spalten: ["Zeit", "RR"], zeilen: [["08:00", "120"]], diagramm: true },
       { id: "c", typ: "skala", titel: "Schmerz", wert: 7 },
       { id: "d", typ: "foto", titel: "Wunde", dokumentId: 42 },
-      { id: "e", typ: "vital", titel: "Vital", werte: { puls: "88", rrSys: "120" } },
+      { id: "e", typ: "vital", titel: "Vital", spalten: 3, felder: [{ label: "Puls (/min)", wert: "88" }, { label: "RR systolisch (mmHg)", wert: "120" }] },
       { id: "f", typ: "ankreuz", titel: "Check", optionen: [{ label: "Aufklärung", gewaehlt: true }] },
     ];
     const s = strukturOhneWerte(bloecke);
@@ -36,10 +37,40 @@ describe("strukturOhneWerte (Vorlagen enthalten keine Inhalte)", () => {
     expect(s[1]).toMatchObject({ typ: "tabelle", zeilen: [], spalten: ["Zeit", "RR"], diagramm: true });
     expect(s[2]).toMatchObject({ wert: null });
     expect(s[3]).toMatchObject({ dokumentId: null });
-    expect(s[4]).toMatchObject({ werte: {} });
+    expect(s[4]).toMatchObject({
+      felder: [
+        { label: "Puls (/min)", wert: "" },
+        { label: "RR systolisch (mmHg)", wert: "" },
+      ],
+    });
     expect(s[5]).toMatchObject({ optionen: [{ label: "Aufklärung", gewaehlt: false }] });
     // Titel bleiben erhalten (das ist die Struktur)
     expect(s.map((b) => b.titel)).toEqual(bloecke.map((b) => b.titel));
+  });
+});
+
+describe("normalisiereBloecke (Altformat 1.4.0 → freie Felder)", () => {
+  it("wandelt das feste werte-Objekt in Felder um", () => {
+    const alt = [
+      { id: "v", typ: "vital", titel: "Vital", werte: { puls: "88", rrSys: "120", zeitpunkt: "08:30" } },
+    ] as unknown as ProtokollBlock[];
+    const n = normalisiereBloecke(alt);
+    expect(n[0].typ).toBe("vital");
+    if (n[0].typ === "vital") {
+      expect(n[0].spalten).toBe(3);
+      expect(n[0].felder).toEqual([
+        { label: "Zeitpunkt", wert: "08:30" },
+        { label: "RR systolisch (mmHg)", wert: "120" },
+        { label: "Puls (/min)", wert: "88" },
+      ]);
+    }
+  });
+  it("lässt neue Felder-Blöcke unverändert", () => {
+    const neu: ProtokollBlock[] = [
+      { id: "v", typ: "vital", titel: "Vital", spalten: 2, felder: [{ label: "Puls", wert: "70" }] },
+    ];
+    const n = normalisiereBloecke(neu);
+    expect(n[0]).toMatchObject({ spalten: 2, felder: [{ label: "Puls", wert: "70" }] });
   });
 });
 

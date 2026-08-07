@@ -13,6 +13,22 @@ export interface VitalWerte {
   spo2?: string;
 }
 
+/** Frei modifizierbares Feld im Vitalparameter-Block (Überschrift + Kästchen). */
+export interface VitalFeld {
+  label: string;
+  wert: string;
+}
+
+/** Standard-Felder beim Hinzufügen eines Vitalparameter-Blocks. */
+export const VITAL_STANDARD: VitalFeld[] = [
+  { label: "Zeitpunkt", wert: "" },
+  { label: "RR systolisch (mmHg)", wert: "" },
+  { label: "RR diastolisch (mmHg)", wert: "" },
+  { label: "Puls (/min)", wert: "" },
+  { label: "Temperatur (°C)", wert: "" },
+  { label: "SpO₂ (%)", wert: "" },
+];
+
 export interface AnkreuzOption {
   label: string;
   gewaehlt: boolean;
@@ -33,7 +49,15 @@ export type ProtokollBlock =
     }
   | { id: string; typ: "skala"; titel: string; wert: number | null }
   | { id: string; typ: "foto"; titel: string; dokumentId: number | null }
-  | { id: string; typ: "vital"; titel: string; werte: VitalWerte }
+  | {
+      id: string;
+      typ: "vital";
+      titel: string;
+      /** Anzahl Spalten nebeneinander (2 oder 3). */
+      spalten: 2 | 3;
+      /** Frei modifizierbare Felder: Überschrift + Kästchen darunter. */
+      felder: VitalFeld[];
+    }
   | { id: string; typ: "ankreuz"; titel: string; optionen: AnkreuzOption[] };
 
 export type ProtokollBlockTyp = ProtokollBlock["typ"];
@@ -76,10 +100,33 @@ export function strukturOhneWerte(bloecke: ProtokollBlock[]): ProtokollBlock[] {
       case "foto":
         return { ...b, dokumentId: null };
       case "vital":
-        return { ...b, werte: {} };
+        return { ...b, felder: b.felder.map((f) => ({ label: f.label, wert: "" })) };
       case "ankreuz":
         return { ...b, optionen: b.optionen.map((o) => ({ label: o.label, gewaehlt: false })) };
     }
+  });
+}
+
+/** Altformat des Vital-Blocks (festes werte-Objekt aus 1.4.0) in das freie
+ *  Felder-Format überführen — damit Bestands-Protokolle weiter funktionieren. */
+export function normalisiereBloecke(bloecke: ProtokollBlock[]): ProtokollBlock[] {
+  return bloecke.map((b) => {
+    if (b.typ !== "vital") return b;
+    const alt = b as unknown as { werte?: VitalWerte; felder?: VitalFeld[]; spalten?: 2 | 3 };
+    if (Array.isArray(alt.felder)) return { ...b, spalten: alt.spalten ?? 3 };
+    const w = alt.werte ?? {};
+    const mapping: [keyof VitalWerte, string][] = [
+      ["zeitpunkt", "Zeitpunkt"],
+      ["rrSys", "RR systolisch (mmHg)"],
+      ["rrDia", "RR diastolisch (mmHg)"],
+      ["puls", "Puls (/min)"],
+      ["temperatur", "Temperatur (°C)"],
+      ["spo2", "SpO₂ (%)"],
+    ];
+    const felder = mapping
+      .filter(([k]) => w[k] !== undefined)
+      .map(([k, label]) => ({ label, wert: w[k] ?? "" }));
+    return { ...b, spalten: 3 as const, felder: felder.length > 0 ? felder : VITAL_STANDARD.map((f) => ({ ...f })) };
   });
 }
 

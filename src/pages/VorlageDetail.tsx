@@ -12,7 +12,9 @@ import { ArrowLeft } from "lucide-react";
 
 export default function VorlageDetail() {
   const { id } = useParams<{ id: string }>();
-  const vorlageId = id === "neu" ? null : Number(id);
+  // Statische Route „/protokolle/vorlagen/neu" hat KEINEN :id-Parameter —
+  // id ist dann undefined (nicht „neu"!). Number(undefined) wäre NaN.
+  const vorlageId = id && id !== "neu" ? Number(id) : null;
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const vorlagen = trpc.protokolle.vorlagen.useQuery(undefined, { enabled: vorlageId !== null });

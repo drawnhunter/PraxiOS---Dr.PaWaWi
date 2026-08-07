@@ -4,6 +4,7 @@ import { useRef } from "react";
 import {
   BLOCK_TYP_LABEL,
   neueBlockId,
+  VITAL_STANDARD,
   type ProtokollBlock,
   type ProtokollBlockTyp,
 } from "@contracts/protokolle";
@@ -52,7 +53,7 @@ function neuerBlock(typ: ProtokollBlockTyp): ProtokollBlock {
     case "foto":
       return { id, typ, titel: "Dokumentation", dokumentId: null };
     case "vital":
-      return { id, typ, titel: "Vitalparameter", werte: {} };
+      return { id, typ, titel: "Vitalparameter", spalten: 3, felder: VITAL_STANDARD.map((f) => ({ ...f })) };
     case "ankreuz":
       return { id, typ, titel: "Checkliste", optionen: [{ label: "Erledigt", gewaehlt: false }] };
   }
@@ -354,30 +355,71 @@ function BlockInhalt({
     }
 
     case "vital": {
-      const setWert = (feld: keyof typeof block.werte, wert: string) =>
-        onChange({ ...block, werte: { ...block.werte, [feld]: wert } });
-      const felder: { feld: keyof typeof block.werte; label: string; einheit?: string }[] = [
-        { feld: "zeitpunkt", label: "Zeitpunkt" },
-        { feld: "rrSys", label: "RR systolisch", einheit: "mmHg" },
-        { feld: "rrDia", label: "RR diastolisch", einheit: "mmHg" },
-        { feld: "puls", label: "Puls", einheit: "/min" },
-        { feld: "temperatur", label: "Temperatur", einheit: "°C" },
-        { feld: "spo2", label: "SpO₂", einheit: "%" },
-      ];
+      const setFeld = (i: number, teil: Partial<(typeof block.felder)[0]>) =>
+        onChange({
+          ...block,
+          felder: block.felder.map((f, j) => (j === i ? { ...f, ...teil } : f)),
+        });
       return (
         <div>
           {titelZeile}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {felder.map(({ feld, label, einheit }) => (
-              <div key={feld}>
-                <Label className="text-xs">
-                  {label}
-                  {einheit ? ` (${einheit})` : ""}
-                </Label>
+          {!gesperrt && (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-neutral-500">Spalten nebeneinander:</span>
+              <div className="flex gap-1 rounded-md bg-neutral-100 p-0.5 text-xs">
+                {([2, 3] as const).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => onChange({ ...block, spalten: n })}
+                    className={`rounded px-2.5 py-1 transition-colors ${
+                      block.spalten === n ? "bg-white font-medium shadow-sm" : "text-neutral-500"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto h-7"
+                disabled={block.felder.length >= 24}
+                onClick={() =>
+                  onChange({ ...block, felder: [...block.felder, { label: "Neues Feld", wert: "" }] })
+                }
+              >
+                + Feld
+              </Button>
+            </div>
+          )}
+          <div className={`grid gap-2 ${block.spalten === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3"}`}>
+            {block.felder.map((f, i) => (
+              <div key={i} className="rounded-md border border-neutral-100 p-1.5">
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={f.label}
+                    onChange={(e) => setFeld(i, { label: e.target.value })}
+                    className="h-7 border-transparent bg-transparent px-1 text-xs font-medium text-neutral-500"
+                    placeholder="Überschrift"
+                    {...ro}
+                  />
+                  {!gesperrt && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 shrink-0 p-0 text-red-500"
+                      onClick={() => onChange({ ...block, felder: block.felder.filter((_, j) => j !== i) })}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
                 <Input
-                  value={block.werte[feld] ?? ""}
-                  onChange={(e) => setWert(feld, e.target.value)}
-                  className="h-8"
+                  value={f.wert}
+                  onChange={(e) => setFeld(i, { wert: e.target.value })}
+                  className="mt-1 h-8"
+                  placeholder="Wert …"
                   {...ro}
                 />
               </div>

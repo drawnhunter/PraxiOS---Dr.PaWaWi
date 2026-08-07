@@ -1,5 +1,22 @@
 # Changelog — PraxiOS
 
+## [1.4.1] — 2026-08-04 — Fix Vorlagen-Speichern, frei modifizierbarer Vitalparameter-Block
+
+### Fixes & Anpassungen
+- **Fix: „Neue Vorlage" speichern schlug fehl** (`expected number, received NaN`):
+  Die statische Route hat keinen URL-Parameter — das Frontend rechnete
+  `Number(undefined)`. Jetzt werden neue Vorlagen korrekt ohne ID gespeichert
+- **Vitalparameter-Block frei modifizierbar**: Überschriften aller Felder sind
+  editierbar, Felder lassen sich hinzufügen/entfernen, und die Darstellung ist
+  wählbar zwischen **2 oder 3 Spalten** nebeneinander (Überschrift + Kästchen
+  darunter). Die bisherigen Standard-Felder (Zeitpunkt, RR, Puls, Temp, SpO₂)
+  bleiben die Vorgabe beim Hinzufügen; Protokolle im Altformat werden beim
+  Öffnen automatisch überführt
+- **Versionsanzeige im Menü-Footer** kommt jetzt automatisch aus der
+  package.json — sie kann nicht mehr veralten
+
+---
+
 ## [1.4.0] — 2026-08-04 — Behandlungsprotokolle, Tablet-DnD (Versuch 2), Markiertes verschieben
 
 ### Behandlungsprotokolle (neuer Menüpunkt + Akten-Tab)

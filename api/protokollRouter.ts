@@ -10,6 +10,7 @@ import { customers, loeschprotokoll, protokolle, protokollVorlagen } from "@db/s
 import {
   strukturOhneWerte,
   protokollGesperrt,
+  normalisiereBloecke,
   type ProtokollBlock,
   type ProtokollNachtrag,
 } from "@contracts/protokolle";
@@ -30,14 +31,8 @@ const blockInput = z.discriminatedUnion("typ", [
     id: z.string().max(60),
     typ: z.literal("vital"),
     titel: z.string().max(255),
-    werte: z.object({
-      zeitpunkt: z.string().max(50).optional(),
-      rrSys: z.string().max(10).optional(),
-      rrDia: z.string().max(10).optional(),
-      puls: z.string().max(10).optional(),
-      temperatur: z.string().max(10).optional(),
-      spo2: z.string().max(10).optional(),
-    }),
+    spalten: z.union([z.literal(2), z.literal(3)]),
+    felder: z.array(z.object({ label: z.string().max(255), wert: z.string().max(500) })).max(24),
   }),
   z.object({
     id: z.string().max(60),
@@ -49,7 +44,9 @@ const blockInput = z.discriminatedUnion("typ", [
 
 const parseBloecke = (json: string): ProtokollBlock[] => {
   try {
-    return JSON.parse(json) as ProtokollBlock[];
+    // normalisiereBloecke wandelt das 1.4.0-Altformat (festes werte-Objekt)
+    // in das freie Felder-Format um
+    return normalisiereBloecke(JSON.parse(json) as ProtokollBlock[]);
   } catch {
     return [];
   }
