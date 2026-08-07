@@ -415,6 +415,37 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       CONSTRAINT rezepte_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
   },
+  {
+    tabelle: "protokoll_vorlagen",
+    ddl: `CREATE TABLE IF NOT EXISTS protokoll_vorlagen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      titel VARCHAR(255) NOT NULL,
+      beschreibung TEXT NULL,
+      schema_json TEXT NOT NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT pv_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "protokolle",
+    ddl: `CREATE TABLE IF NOT EXISTS protokolle (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      vorlage_id BIGINT UNSIGNED NULL,
+      titel VARCHAR(255) NOT NULL,
+      schema_json TEXT NOT NULL,
+      nachtraege TEXT NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX protokolle_patient_idx (patient_id),
+      CONSTRAINT protokolle_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT protokolle_vorlage_fk FOREIGN KEY (vorlage_id) REFERENCES protokoll_vorlagen(id) ON DELETE SET NULL,
+      CONSTRAINT protokolle_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
 ];
 
 const NEUE_INDIZES: { tabelle: string; index: string; ddl: string }[] = [

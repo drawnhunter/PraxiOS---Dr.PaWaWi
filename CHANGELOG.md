@@ -1,5 +1,44 @@
 # Changelog — PraxiOS
 
+## [1.4.0] — 2026-08-04 — Behandlungsprotokolle, Tablet-DnD (Versuch 2), Markiertes verschieben
+
+### Behandlungsprotokolle (neuer Menüpunkt + Akten-Tab)
+- **Block-Baukasten mit sechs Typen**: Textfeld (Titel + Freitext), **Tabelle**
+  (Spaltenzahl und Spaltenköpfe frei, Zeilen beliebig; Konvention: erste Spalte
+  = Zeit/Datum), **Skala 1–10**, **Foto/Dokument** (Upload direkt im Protokoll,
+  landet als Dokument in der Akte), **Vitalparameter-Schnellzeile**
+  (Zeitpunkt, RR sys/dia, Puls, Temperatur, SpO₂), **Ankreuz-Block**
+  (Optionen mit Checkboxen). Blöcke frei sortierbar (hoch/runter)
+- **Diagramm aus Tabellen**: optional unter der Tabelle — automatisch aus den
+  Zahlenwerten erzeugt (X = erste Spalte, Y = alle Zahlen-Spalten je eine Linie,
+  deutsches Zahlenformat verstehend, reines SVG ohne Zusatzbibliothek)
+- **Volle Vorlagen-Verwaltung** (Tab „Vorlagen"): Vorlagen anlegen, bearbeiten,
+  löschen; aus jeder Vorlage ein Protokoll starten; fertige Protokolle per Klick
+  **„Als Vorlage speichern"** (Struktur wird übernommen, Inhalte entfernt)
+- **48-h-Fenster**: Protokolle sind nach Anlage 48 Stunden editierbar und werden
+  danach automatisch **gesperrt** (medizinische Dokumentation). Danach nur noch
+  **Nachträge** (append-only, mit Zeit + Name); Löschen nur innerhalb des
+  Fensters und mit Löschprotokoll-Eintrag
+- Eigene Menü-Seite (Patient suchen → Protokolle + zuletzt bearbeitet) und
+  Tab „Protokolle" in der Patientenakte
+
+### Therapieplan: Tablet-Verschieben (Versuch 2)
+- **Eigener Drag-Griff** (⠿) an jeder Leistungsblase — nur der Griff startet
+  das Verschieben (`touch-action: none`): Text in der Blase bleibt markierbar,
+  Wischen scrollt weiterhin die Seite. Touch-Sensor: 200 ms halten aktiviert,
+  kurze Wisch-Gesten werden als Scrollen durchgereicht
+
+### Therapieplan: Markierte Einträge verschieben
+- Sammel-Leiste um **„Verschieben"** ergänzt: markierte Einträge wechseln per
+  Zieldatum auf einen anderen Tag — Uhrzeit, Therapeut und Raum bleiben erhalten
+  (bisher war nur Duplizieren möglich)
+
+### Technik
+- Neue Tests: Protokoll-Logik (48-h-Fenster, Vorlagen-Struktur, Zahlen-Parsing)
+  — **76 Tests grün**
+
+---
+
 ## [1.3.0] — 2026-08-03 — Rezepte & Atteste, Proforma/Vorkasse, Bogen-Import, Muster-Dr.-X
 
 ### Privat-Rezepte & Atteste (Prio 1/3 der Praxis-Taskliste)

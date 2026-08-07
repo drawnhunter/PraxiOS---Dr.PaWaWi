@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import {
   DndContext,
   PointerSensor,
+  TouchSensor,
   closestCenter,
   useDraggable,
   useDroppable,
@@ -62,7 +63,7 @@ import {
   tageAddieren,
   uhrzeitBereich,
 } from "./Kalender";
-import { CalendarPlus, Check, Copy, Download, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CalendarPlus, Check, Copy, Download, GripVertical, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type PlanDetailDaten = RouterOutputs["plaene"]["byId"];
@@ -167,9 +168,11 @@ export default function PlanDetail() {
   const [duplikatModus, setDuplikatModus] = useState<"kopieren" | "verschieben">("kopieren");
   // Markieren (Block-Aktionen)
   const [markiert, setMarkiert] = useState<Set<number>>(new Set());
-  // dnd-kit: Touch-Sensor (Maus + Tablet + Handy), 6px Aktivierungsdistanz
+  // dnd-kit: Maus = sofort ab 6px; Touch = 200 ms halten (kurzes Wischen
+  // bleibt Scrollen). Listeners hängen NUR am Griff — nicht an der Karte.
   const sensoren = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
   const handleDragEnd = (ev: DragEndEvent) => {
     const { active, over } = ev;
@@ -184,7 +187,7 @@ export default function PlanDetail() {
       { onSuccess: () => zeigeErfolg(`Verschoben auf ${datum(tag)}.`) },
     );
   };
-  const [bulkDialog, setBulkDialog] = useState<null | "duplizieren">(null);
+  const [bulkDialog, setBulkDialog] = useState<null | "duplizieren" | "verschieben">(null);
   const [bulkZiel, setBulkZiel] = useState("");
 
   const toggleMark = (id: number) =>
@@ -210,7 +213,9 @@ export default function PlanDetail() {
       zeigeErfolg(
         vars.aktion === "loeschen"
           ? `${r.anzahl} Einträge gelöscht.`
-          : `${r.anzahl} Einträge dupliziert.`,
+          : vars.aktion === "verschieben"
+            ? `${r.anzahl} Einträge verschoben.`
+            : `${r.anzahl} Einträge dupliziert.`,
       );
     },
   });
@@ -633,6 +638,9 @@ export default function PlanDetail() {
           <Button size="sm" variant="outline" onClick={() => setBulkDialog("duplizieren")}>
             <Copy className="mr-1 h-3.5 w-3.5" /> Duplizieren
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setBulkDialog("verschieben")}>
+            <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Verschieben
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -651,17 +659,23 @@ export default function PlanDetail() {
         </div>
       )}
 
-      {/* ── Block-Duplizieren-Dialog ── */}
+      {/* ── Block-Duplizieren/Verschieben-Dialog ── */}
       <Dialog open={bulkDialog !== null} onOpenChange={(o) => !o && setBulkDialog(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{markiert.size} Einträge duplizieren</DialogTitle>
+            <DialogTitle>
+              {markiert.size} Einträge {bulkDialog === "verschieben" ? "verschieben" : "duplizieren"}
+            </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-neutral-600">
-            Zieldatum leer lassen = am selben Tag duplizieren (Kopien starten als „geplant“).
+            {bulkDialog === "verschieben"
+              ? "Die Einträge wechseln auf das Zieldatum — Uhrzeit, Therapeut und Raum bleiben erhalten."
+              : "Zieldatum leer lassen = am selben Tag duplizieren (Kopien starten als „geplant“)."}
           </p>
           <div>
-            <Label>Zieldatum (optional)</Label>
+            <Label>
+              Zieldatum {bulkDialog === "verschieben" ? "*" : "(optional)"}
+            </Label>
             <Input
               type="date"
               value={bulkZiel}
@@ -675,16 +689,20 @@ export default function PlanDetail() {
               Abbrechen
             </Button>
             <Button
-              disabled={bulk.isPending}
+              disabled={bulk.isPending || (bulkDialog === "verschieben" && !bulkZiel)}
               onClick={() =>
                 bulk.mutate({
                   ids: [...markiert],
-                  aktion: "duplizieren",
+                  aktion: bulkDialog === "verschieben" ? "verschieben" : "duplizieren",
                   zielDatum: bulkZiel || undefined,
                 })
               }
             >
-              {bulk.isPending ? "Dupliziere …" : "Duplizieren"}
+              {bulk.isPending
+                ? "Arbeite …"
+                : bulkDialog === "verschieben"
+                  ? "Verschieben"
+                  : "Duplizieren"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -967,8 +985,6 @@ function EintragsKarte({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
-      {...attributes}
-      {...listeners}
       className={cn(
         "w-full rounded border bg-white p-1.5 text-left text-xs transition-colors",
         isDragging && "z-30 shadow-lg",
@@ -980,7 +996,7 @@ function EintragsKarte({
       )}
     >
       <div className="flex items-stretch gap-1.5">
-        {/* Links: Status-Punkt (klickbar) + Markieren-Checkbox (gespiegelt) */}
+        {/* Links: Status-Punkt (klickbar), Drag-Griff (Mitte), Markieren-Checkbox */}
         <div className="flex shrink-0 flex-col items-center justify-between py-0.5">
           <Popover open={statusOffen} onOpenChange={setStatusOffen}>
             <PopoverTrigger asChild>
@@ -1014,6 +1030,17 @@ function EintragsKarte({
               ))}
             </PopoverContent>
           </Popover>
+          {/* Drag-Griff: NUR hier startet das Verschieben. touch-action:none
+              verhindert Scrollen/Text-Markierung beim Halten auf dem Griff. */}
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            title="Zum Verschieben halten & ziehen"
+            className="cursor-grab touch-none select-none rounded p-0.5 text-neutral-300 [-webkit-touch-callout:none] hover:bg-neutral-100 hover:text-neutral-500 active:cursor-grabbing"
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
           <input
             type="checkbox"
             checked={markiert}

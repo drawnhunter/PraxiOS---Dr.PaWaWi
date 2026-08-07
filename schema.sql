@@ -829,3 +829,31 @@ CREATE TABLE `rezepte` (
   CONSTRAINT `rezepte_document_fk` FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE SET NULL,
   CONSTRAINT `rezepte_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `protokoll_vorlagen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `titel` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `beschreibung` text COLLATE utf8mb4_unicode_ci,
+  `schema_json` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `pv_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `protokolle` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `vorlage_id` bigint unsigned DEFAULT NULL,
+  `titel` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `schema_json` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `nachtraege` text COLLATE utf8mb4_unicode_ci,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `protokolle_patient_idx` (`patient_id`),
+  CONSTRAINT `protokolle_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `protokolle_vorlage_fk` FOREIGN KEY (`vorlage_id`) REFERENCES `protokoll_vorlagen` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `protokolle_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

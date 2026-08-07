@@ -36,6 +36,7 @@ import { posteingangRouter } from "./posteingangRouter";
 import { magicImportRouter } from "./magicImportRouter";
 import { kontierungRouter } from "./kontierungRouter";
 import { rezeptRouter } from "./rezeptRouter";
+import { protokollRouter } from "./protokollRouter";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -74,6 +75,7 @@ export const appRouter = createRouter({
   magicImport: magicImportRouter,
   kontierung: kontierungRouter,
   rezepte: rezeptRouter,
+  protokolle: protokollRouter,
   leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 

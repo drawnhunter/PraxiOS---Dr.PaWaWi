@@ -96,6 +96,49 @@ export const rezepte = mysqlTable(
 );
 export type Rezept = typeof rezepte.$inferSelect;
 
+// ── Behandlungsprotokolle (Block-Baukasten + Vorlagen) ─────────────────────
+// Protokolle sind 48 h nach Anlage editierbar und werden danach automatisch
+// gesperrt (medizinische Dokumentation); Nachträge bleiben append-only möglich.
+export const protokollVorlagen = mysqlTable("protokoll_vorlagen", {
+  id: serial("id").primaryKey(),
+  titel: varchar("titel", { length: 255 }).notNull(),
+  beschreibung: text("beschreibung"),
+  schemaJson: text("schema_json").notNull(), // ProtokollBlock[] (nur Struktur)
+  createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type ProtokollVorlage = typeof protokollVorlagen.$inferSelect;
+
+export const protokolle = mysqlTable(
+  "protokolle",
+  {
+    id: serial("id").primaryKey(),
+    patientId: bigint("patient_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    vorlageId: bigint("vorlage_id", { mode: "number", unsigned: true }).references(
+      () => protokollVorlagen.id,
+      { onDelete: "set null" },
+    ),
+    titel: varchar("titel", { length: 255 }).notNull(),
+    schemaJson: text("schema_json").notNull(), // ProtokollBlock[] mit Werten
+    // JSON: ProtokollNachtrag[] — append-only, auch nach Sperrung
+    nachtraege: text("nachtraege"),
+    createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  },
+  (t) => [index("protokolle_patient_idx").on(t.patientId)],
+);
+export type Protokoll = typeof protokolle.$inferSelect;
+
 // ── Kollegen-Praxen (Empfänger für den Akten-Export) ────────────────────────
 export const kollegen = mysqlTable("kollegen", {
   id: serial("id").primaryKey(),

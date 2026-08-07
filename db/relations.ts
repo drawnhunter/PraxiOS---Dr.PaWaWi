@@ -221,6 +221,31 @@ export const rezepteRelations = relations(rezepte, ({ one }) => ({
   }),
 }));
 
+// ── PraxiOS: Behandlungsprotokolle ──────────────────────────────────────────
+import { protokolle, protokollVorlagen } from "./schema";
+
+export const protokolleRelations = relations(protokolle, ({ one }) => ({
+  patient: one(customers, {
+    fields: [protokolle.patientId],
+    references: [customers.id],
+  }),
+  vorlage: one(protokollVorlagen, {
+    fields: [protokolle.vorlageId],
+    references: [protokollVorlagen.id],
+  }),
+  ersteller: one(users, {
+    fields: [protokolle.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const protokollVorlagenRelations = relations(protokollVorlagen, ({ one }) => ({
+  ersteller: one(users, {
+    fields: [protokollVorlagen.createdBy],
+    references: [users.id],
+  }),
+}));
+
 // ── PraxiOS: Rollen-Gruppen ─────────────────────────────────────────────────
 import { gruppen } from "./schema";
 

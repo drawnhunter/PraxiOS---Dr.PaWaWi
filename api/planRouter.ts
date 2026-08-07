@@ -338,8 +338,8 @@ export const planRouter = createRouter({
     .input(
       z.object({
         ids: z.array(z.number().int()).min(1).max(200),
-        aktion: z.enum(["loeschen", "duplizieren"]),
-        zielDatum: datumInput.optional(), // nur bei duplizieren: sonst selber Tag
+        aktion: z.enum(["loeschen", "duplizieren", "verschieben"]),
+        zielDatum: datumInput.optional(), // duplizieren: sonst selber Tag; verschieben: Pflicht
       }),
     )
     .mutation(async ({ input }) => {
@@ -352,6 +352,20 @@ export const planRouter = createRouter({
       }
       if (input.aktion === "loeschen") {
         await db.delete(planEntries).where(inArray(planEntries.id, input.ids));
+        return { ok: true, anzahl: eintraege.length };
+      }
+      if (input.aktion === "verschieben") {
+        if (!input.zielDatum) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Zum Verschieben bitte ein Ziel-Datum angeben.",
+          });
+        }
+        // Uhrzeit/Therapeut/Raum bleiben — nur das Datum wechselt
+        await db
+          .update(planEntries)
+          .set({ datum: input.zielDatum })
+          .where(inArray(planEntries.id, input.ids));
         return { ok: true, anzahl: eintraege.length };
       }
       await db.insert(planEntries).values(
