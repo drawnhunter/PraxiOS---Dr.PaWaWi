@@ -2,6 +2,7 @@ import {
   createRouter,
   publicQuery,
 } from "./middleware";
+import { APP_VERSION } from "./lib/version";
 import { settingsRouter } from "./settingsRouter";
 import { bankRouter } from "./bankRouter";
 import { customerRouter } from "./customerRouter";
@@ -19,7 +20,6 @@ import { reminderRouter } from "./reminderRouter";
 import { offerRouter } from "./offerRouter";
 import { authRouter } from "./auth-router";
 import { statsRouter } from "./statsRouter";
-import { bankImportRouter } from "./bankImportRouter";
 import { invoiceImportRouter } from "./invoiceImportRouter";
 import { therapyImportRouter } from "./therapyImportRouter";
 import { planRouter } from "./planRouter";
@@ -37,9 +37,11 @@ import { magicImportRouter } from "./magicImportRouter";
 import { kontierungRouter } from "./kontierungRouter";
 import { rezeptRouter } from "./rezeptRouter";
 import { protokollRouter } from "./protokollRouter";
+import { unternehmenRouter } from "./unternehmenRouter";
+import { bankTransaktionenRouter } from "./bankTransaktionenRouter";
 
 export const appRouter = createRouter({
-  ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
+  ping: publicQuery.query(() => ({ ok: true, ts: Date.now(), version: APP_VERSION })),
   auth: authRouter,
   settings: settingsRouter,
   bank: bankRouter,
@@ -57,7 +59,6 @@ export const appRouter = createRouter({
   reminders: reminderRouter,
   offers: offerRouter,
   stats: statsRouter,
-  bankImport: bankImportRouter,
   invoiceImport: invoiceImportRouter,
   therapyImport: therapyImportRouter,
   // PraxisWerk-Akte
@@ -76,6 +77,8 @@ export const appRouter = createRouter({
   kontierung: kontierungRouter,
   rezepte: rezeptRouter,
   protokolle: protokollRouter,
+  unternehmen: unternehmenRouter,
+  bankTrans: bankTransaktionenRouter,
   leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 

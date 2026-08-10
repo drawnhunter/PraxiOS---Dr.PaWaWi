@@ -3,9 +3,10 @@ import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { geld, datum } from "@/lib/format";
 import { STATUS_LABELS, type InvoiceStatus } from "@contracts/invoicing";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { CsvButton } from "@/components/CsvButton";
+import RechnungsPanel from "@/components/RechnungsPanel";
 import { deZahl } from "@/lib/downloads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ interface NeukundeForm {
 export default function Invoices() {
   const [serienOffen, setSerienOffen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("alle");
+  const [panelId, setPanelId] = useState<number | null>(null);
   const [neuDialog, setNeuDialog] = useState(false);
   const [modus, setModus] = useState<"bestehend" | "neu">("bestehend");
   const [belegTyp, setBelegTyp] = useState<"standard" | "proforma">("standard");
@@ -64,9 +66,11 @@ export default function Invoices() {
 
   const utils = trpc.useUtils();
   const liste = trpc.invoices.list.useQuery(
-    statusFilter === "alle" || statusFilter === "ueberfaellig"
-      ? undefined
-      : { status: statusFilter as InvoiceStatus },
+    statusFilter === "archiviert"
+      ? { archiviert: true }
+      : statusFilter === "alle" || statusFilter === "ueberfaellig"
+        ? { archiviert: false }
+        : { status: statusFilter as InvoiceStatus, archiviert: false },
   );
 
   const heute = new Date().toISOString().slice(0, 10);
@@ -165,6 +169,7 @@ export default function Invoices() {
             <SelectItem value="finalisiert">Finalisiert</SelectItem>
             <SelectItem value="ueberfaellig">Überfällig</SelectItem>
             <SelectItem value="storniert">Storniert</SelectItem>
+            <SelectItem value="archiviert">Archiviert</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -198,15 +203,18 @@ export default function Invoices() {
                   : 0;
               const ueberfaellig = offen > 0.004 && r.faelligkeitsdatum < heute;
               return (
-                <tr key={r.id} className="border-b border-neutral-100 last:border-0">
+                <tr key={r.id} className="cursor-pointer border-b border-neutral-100 last:border-0 hover:bg-neutral-50" onClick={() => setPanelId(r.id)}>
                   <td className="px-4 py-2.5">
-                    <Link
-                      to={`/rechnungen/${r.id}`}
+                    <span
                       className="font-medium text-neutral-900 hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/rechnungen/${r.id}`);
+                      }}
                     >
                       {r.nummer ??
                         (r.typ === "proforma" ? `Proforma #${r.id}` : `Entwurf #${r.id}`)}
-                    </Link>
+                    </span>
                     {r.typ === "proforma" && (
                       <Badge variant="outline" className="ml-2 border-teal-300 text-teal-700">
                         Vorkasse
@@ -385,6 +393,13 @@ export default function Invoices() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {panelId !== null && (
+        <RechnungsPanel
+          id={panelId}
+          onClose={() => setPanelId(null)}
+          onChanged={() => liste.refetch()}
+        />
+      )}
       <SerienDialog offen={serienOffen} onSchliessen={() => setSerienOffen(false)} />
     </div>
   );

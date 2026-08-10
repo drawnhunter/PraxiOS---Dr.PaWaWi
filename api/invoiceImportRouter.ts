@@ -4,14 +4,93 @@
 // finalisierte Belege (Altbestand) — der eigene Nummernkreis bleibt unberuehrt.
 import { z } from "zod";
 import Papa from "papaparse";
-import { and, eq } from "drizzle-orm";
-import {
-  createRouter,
-  rechtQuery,
-} from "./middleware";
+import { eq } from "drizzle-orm";
+import { createRouter, rechtQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { invoices, invoiceItems, customers, companySettings, bankAccounts } from "@db/schema";
+import { invoices } from "@db/schema";
 import { computeTotals, centToDecimal } from "@contracts/invoicing";
+import { analysiereSumUpPdfDatei } from "./lib/sumupPdf";
+import { analysiereXrechnung } from "./xrechnungEinlesen";
+import { bucheAltbestand, type AltbestandGruppe } from "./lib/altbestand";
+
+// ── Datei → Altbestand-Gruppe (SumUp-PDF oder XRechnung, ausgehende Belege) ──
+type DateiErgebnis = (AltbestandGruppe & { quelle: "SumUp-PDF" | "XRechnung"; warnung: string | null }) | { fehler: string };
+
+async function dateiZuGruppe(name: string, puffer: Buffer): Promise<DateiErgebnis> {
+  const lower = name.toLowerCase();
+
+  if (lower.endsWith(".xml")) {
+    const xml = puffer.toString("utf8");
+    const { daten, fehler } = analysiereXrechnung(xml);
+    if (fehler.length > 0 || !daten) return { fehler: `Keine gültige XRechnung: ${fehler.join("; ")}` };
+    if (!daten.datum) return { fehler: "Rechnungsdatum fehlt in der XRechnung." };
+    const kaeufer = daten.kaeufer;
+    if (!kaeufer?.name) return { fehler: "Käufer (BuyerTradeParty) fehlt in der XRechnung." };
+    return {
+      quelle: "XRechnung",
+      warnung: null,
+      nummer: daten.nummer,
+      datum: daten.datum,
+      faellig: daten.faellig,
+      kunde: kaeufer.name,
+      kundeStrasse: kaeufer.strasse,
+      kundePlz: kaeufer.plz,
+      kundeOrt: kaeufer.ort,
+      kundeEmail: null,
+      bezahlt: true, // Altbestand ohne Zahlungsstatus gilt als bezahlt
+      items: daten.positionen.map((p) => ({
+        bezeichnung: p.bezeichnung,
+        menge: String(p.menge),
+        einheit: p.einheit,
+        einzelpreis: p.einzelpreis.toFixed(2),
+        ustSatz: p.ustSatz,
+      })),
+      bruttoCent: Math.round(daten.brutto * 100),
+      nettoCent: Math.round(daten.netto * 100),
+      ustCent: Math.round(daten.ust * 100),
+    };
+  }
+
+  if (lower.endsWith(".pdf")) {
+    let sumup;
+    try {
+      sumup = await analysiereSumUpPdfDatei(puffer);
+    } catch (e) {
+      return { fehler: `PDF ist keine importierbare SumUp-Rechnung: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    if (sumup.storniert) {
+      return { fehler: "Stornierte Rechnung — nicht importierbar (Storno bitte manuell als Gutschrift erfassen)." };
+    }
+    const vollBezahlt = sumup.bezahlt >= sumup.brutto - 0.01;
+    const teilBezahlt = !vollBezahlt && sumup.bezahlt > 0.005;
+    return {
+      quelle: "SumUp-PDF",
+      warnung: sumup.warnung,
+      nummer: sumup.nummer,
+      datum: sumup.datum,
+      faellig: sumup.faellig,
+      kunde: sumup.kunde,
+      kundeStrasse: sumup.kundeStrasse,
+      kundePlz: sumup.kundePlz,
+      kundeOrt: sumup.kundeOrt,
+      kundeEmail: null,
+      bezahlt: vollBezahlt,
+      bezahltBetragCent: teilBezahlt ? Math.round(sumup.bezahlt * 100) : undefined,
+      items: sumup.positionen.map((p) => ({
+        bezeichnung: p.bezeichnung,
+        menge: String(p.menge),
+        einheit: p.einheit,
+        einzelpreis: p.einzelpreis.toFixed(2),
+        ustSatz: p.ustSatz,
+      })),
+      bruttoCent: Math.round(sumup.brutto * 100),
+      nettoCent: Math.round(sumup.netto * 100),
+      ustCent: Math.round(sumup.ust * 100),
+    };
+  }
+
+  return { fehler: "Dateityp wird nicht unterstützt (erwartet: SumUp-PDF oder XRechnung-XML)." };
+}
 
 function parseCsv(csvText: string): Record<string, string>[] {
   const res = Papa.parse<Record<string, string>>(csvText.replace(/^﻿/, ""), {
@@ -122,12 +201,6 @@ function datumLesen(roh: string): string | null {
   m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (m) return `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
   return null;
-}
-
-function plusTage(iso: string, tage: number): string {
-  const d = new Date(iso + "T00:00:00Z");
-  d.setUTCDate(d.getUTCDate() + tage);
-  return d.toISOString().slice(0, 10);
 }
 
 const BEZAHLT_WERTE = ["paid", "bezahlt", "beglichen", "1", "ja", "yes", "true", "erstattet"];
@@ -263,93 +336,91 @@ export const invoiceImportRouter = createRouter({
   importieren: rechtQuery("abrechnung")
     .input(z.object({ csvText: z.string().min(1), mapping: mappingInput }))
     .mutation(async ({ input }) => {
+      const gruppen = gruppiere(parseCsv(input.csvText), input.mapping).filter((g) => !g.warnung);
+      const ergebnis = await bucheAltbestand(gruppen);
+      return { ...ergebnis, fehler: ergebnis.fehler.slice(0, 20) };
+    }),
+
+  /** Vorschau: SumUp-PDFs + XRechnung-XMLs analysieren (Batch). */
+  analysierenDateien: rechtQuery("abrechnung")
+    .input(
+      z.object({
+        dateien: z.array(z.object({ name: z.string().min(1).max(255), base64: z.string().min(4) })).min(1).max(50),
+      }),
+    )
+    .mutation(async ({ input }) => {
       const db = getDb();
-      const gruppen = gruppiere(parseCsv(input.csvText), input.mapping);
-      const settings = await db.query.companySettings.findFirst({
-        where: eq(companySettings.id, 1),
-      });
-      if (!settings) throw new Error("Firmen-Einstellungen fehlen.");
-      const standardBank = await db.query.bankAccounts.findFirst({
-        where: eq(bankAccounts.istStandard, true),
-      });
-      const firmenSnapshot = JSON.stringify({
-        name: settings.name, strasse: settings.strasse, plz: settings.plz,
-        ort: settings.ort, land: settings.land, handelsregister: settings.handelsregister,
-        steuernummer: settings.steuernummer, ustIdNr: settings.ustIdNr,
-        email: settings.email, telefon: settings.telefon, webseite: settings.webseite,
-        fussText: settings.fussText,
-      });
-      const bankSnapshot = standardBank
-        ? JSON.stringify({
-            bezeichnung: standardBank.bezeichnung, bankName: standardBank.bankName,
-            kontoinhaber: standardBank.kontoinhaber, iban: standardBank.iban, bic: standardBank.bic,
-          })
-        : null;
+      const ergebnisse: {
+        name: string;
+        ok: boolean;
+        fehler?: string;
+        existiert?: boolean;
+        gruppe?: {
+          nummer: string; datum: string | null; kunde: string; positionen: number;
+          brutto: string; bezahlt: boolean; quelle: "SumUp-PDF" | "XRechnung";
+        };
+      }[] = [];
 
-      let importiert = 0;
-      let uebersprungen = 0;
-      let kundenNeu = 0;
-      const fehler: string[] = [];
-
-      for (const g of gruppen) {
-        if (g.warnung || !g.datum) { uebersprungen++; continue; }
-        const dup = await db.query.invoices.findFirst({ where: eq(invoices.nummer, g.nummer) });
-        if (dup) { uebersprungen++; fehler.push(`${g.nummer} existiert bereits`); continue; }
-
-        // Kunde finden oder anlegen
-        let kunde = await db.query.customers.findFirst({
-          where: and(eq(customers.name, g.kunde), eq(customers.plz, g.kundePlz ?? "")),
-        });
-        if (!kunde) {
-          const [res] = await db.insert(customers).values({
-            name: g.kunde,
-            strasse: g.kundeStrasse ?? "",
-            plz: g.kundePlz ?? "",
-            ort: g.kundeOrt ?? "",
-            land: "Deutschland",
-            email: g.kundeEmail,
-          }).$returningId();
-          kunde = await db.query.customers.findFirst({ where: eq(customers.id, res.id) });
-          kundenNeu++;
+      for (const d of input.dateien) {
+        const puffer = Buffer.from(d.base64, "base64");
+        try {
+          const g = await dateiZuGruppe(d.name, puffer);
+          if ("fehler" in g) {
+            ergebnisse.push({ name: d.name, ok: false, fehler: g.fehler });
+            continue;
+          }
+          if (g.warnung) {
+            ergebnisse.push({ name: d.name, ok: false, fehler: g.warnung });
+            continue;
+          }
+          const dup = await db.query.invoices.findFirst({ where: eq(invoices.nummer, g.nummer) });
+          ergebnisse.push({
+            name: d.name,
+            ok: true,
+            existiert: !!dup,
+            gruppe: {
+              nummer: g.nummer,
+              datum: g.datum,
+              kunde: g.kunde,
+              positionen: g.items.length,
+              brutto: centToDecimal(g.bruttoCent),
+              bezahlt: g.bezahlt,
+              quelle: g.quelle,
+            },
+          });
+        } catch (e) {
+          ergebnisse.push({ name: d.name, ok: false, fehler: e instanceof Error ? e.message : String(e) });
         }
-
-        const [res] = await db.insert(invoices).values({
-          customerId: kunde!.id,
-          nummer: g.nummer,
-          status: "finalisiert",
-          rechnungsdatum: g.datum,
-          faelligkeitsdatum: g.faellig ?? plusTage(g.datum, 14),
-          kundeName: kunde!.name,
-          kundeZusatz: kunde!.zusatz,
-          kundeStrasse: kunde!.strasse,
-          kundePlz: kunde!.plz,
-          kundeOrt: kunde!.ort,
-          kundeLand: kunde!.land,
-          netto: centToDecimal(g.nettoCent),
-          ust: centToDecimal(g.ustCent),
-          brutto: centToDecimal(g.bruttoCent),
-          bezahltBetrag: g.bezahlt ? centToDecimal(g.bruttoCent) : "0",
-          bezahltAm: g.bezahlt ? g.datum : null,
-          firmenSnapshot,
-          bankSnapshot,
-          bankAccountId: standardBank?.id ?? null,
-          finalizedAt: new Date(),
-          bemerkung: "Importiert aus Altbestand",
-        }).$returningId();
-
-        await db.insert(invoiceItems).values(
-          g.items.map((it, i) => ({
-            invoiceId: res.id,
-            position: i + 1,
-            bezeichnung: it.bezeichnung,
-            menge: it.menge,
-            einheit: it.einheit,
-            einzelpreis: it.einzelpreis,
-            ustSatz: it.ustSatz,
-          })),
-        );
-        importiert++;
       }
-      return { importiert, uebersprungen, kundenNeu, fehler: fehler.slice(0, 20) };
+      return {
+        dateien: ergebnisse,
+        importierbar: ergebnisse.filter((e) => e.ok && !e.existiert).length,
+        duplikate: ergebnisse.filter((e) => e.ok && e.existiert).length,
+        fehlerhaft: ergebnisse.filter((e) => !e.ok).length,
+      };
+    }),
+
+  /** Import: SumUp-PDFs + XRechnung-XMLs buchen (Batch). */
+  importierenDateien: rechtQuery("abrechnung")
+    .input(
+      z.object({
+        dateien: z.array(z.object({ name: z.string().min(1).max(255), base64: z.string().min(4) })).min(1).max(50),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const gruppen: AltbestandGruppe[] = [];
+      const dateiFehler: { name: string; fehler: string }[] = [];
+      for (const d of input.dateien) {
+        try {
+          const g = await dateiZuGruppe(d.name, Buffer.from(d.base64, "base64"));
+          if ("fehler" in g) dateiFehler.push({ name: d.name, fehler: g.fehler });
+          else if (g.warnung) dateiFehler.push({ name: d.name, fehler: g.warnung });
+          else gruppen.push(g);
+        } catch (e) {
+          dateiFehler.push({ name: d.name, fehler: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      const ergebnis = await bucheAltbestand(gruppen);
+      return { ...ergebnis, dateiFehler };
     }),
 });

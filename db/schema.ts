@@ -42,6 +42,12 @@ export const companySettings = mysqlTable("company_settings", {
   debitorStartnummer: int("debitor_startnummer").notNull().default(10000),
   kreditorStartnummer: int("kreditor_startnummer").notNull().default(70000),
   aufwandskontoDefault: varchar("aufwandskonto_default", { length: 10 }),
+  // Company Control (ReWaWi v1.6): weitere registrierte Kennnummern
+  eori: varchar("eori", { length: 30 }),
+  betriebsnummer: varchar("betriebsnummer", { length: 30 }), // Agentur fuer Arbeit
+  bgMitgliedsnummer: varchar("bg_mitgliedsnummer", { length: 50 }), // Berufsgenossenschaft
+  ihk: varchar("ihk", { length: 60 }), // IHK/HWK-Mitgliedsnummer
+  glaeubigerId: varchar("glaeubiger_id", { length: 30 }), // SEPA-Lastschrift
   // ICS-Abo für Zahlungsziele-Kalender (geheime URL)
   icsToken: varchar("ics_token", { length: 48 }),
   // Design
@@ -309,6 +315,8 @@ export const invoices = mysqlTable(
       .default("0"),
     bezahltAm: date("bezahlt_am", { mode: "string" }),
     bereitsBezahlt: boolean("bereits_bezahlt").notNull().default(false),
+    // ReWaWi-Sync (1.5): Archivieren statt Löschen (GoBD-sicher)
+    archiviert: boolean("archiviert").notNull().default(false),
     pdfNotiz: text("pdf_notiz"),
     bemerkung: text("bemerkung"),
     finalizedAt: timestamp("finalized_at"),
@@ -418,6 +426,11 @@ export const suppliers = mysqlTable(
     ustIdNr: varchar("ust_id_nr", { length: 50 }),
     notizen: text("notizen"),
     archiviert: boolean("archiviert").notNull().default(false),
+    // Regelwerk (ReWaWi v1.6): Standard-Kategorie -> Konto/USt-Vorschlag im Post Manager
+    kategorieId: bigint("kategorie_id", { mode: "number", unsigned: true }).references(
+      () => kategorien.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => ({
@@ -1069,7 +1082,7 @@ export const emailKonten = mysqlTable("email_konten", {
 // deckt ihn mit ab (GoBD).
 export const postEingang = mysqlTable("post_eingang", {
   id: serial("id").primaryKey(),
-  typ: mysqlEnum("typ", ["rechnung", "sonstiges"]).notNull().default("rechnung"),
+  typ: mysqlEnum("typ", ["rechnung", "lieferschein", "gutschrift", "sonstiges"]).notNull().default("rechnung"),
   status: mysqlEnum("status", ["neu", "gebucht", "abgelegt"]).notNull().default("neu"),
   originalname: varchar("originalname", { length: 255 }).notNull(),
   mime: varchar("mime", { length: 100 }).notNull(),
@@ -1107,3 +1120,73 @@ export type Kontenrahmen = typeof kontenrahmen.$inferSelect;
 export type Kategorie = typeof kategorien.$inferSelect;
 export type EmailKonto = typeof emailKonten.$inferSelect;
 export type PostEingang = typeof postEingang.$inferSelect;
+
+// ── Company Control: freie Kennwerte mit Beleg-Verknüpfung (ReWaWi v1.6) ────
+export const companyKennwerte = mysqlTable("company_kennwerte", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  wert: varchar("wert", { length: 255 }).notNull(),
+  postEingangId: bigint("post_eingang_id", { mode: "number", unsigned: true }).references(
+    () => postEingang.id,
+    { onDelete: "set null" },
+  ),
+  sortierung: int("sortierung").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type CompanyKennwert = typeof companyKennwerte.$inferSelect;
+
+// ── Banking (ReWaWi v1.3): persistente Bank-Transaktionen je Konto ─────────
+export const bankImporte = mysqlTable("bank_importe", {
+  id: serial("id").primaryKey(),
+  bankAccountId: bigint("bank_account_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => bankAccounts.id, { onDelete: "cascade" }),
+  dateiname: varchar("dateiname", { length: 255 }).notNull(),
+  vorlage: varchar("vorlage", { length: 60 }).notNull().default("Bank-CSV"),
+  zeilen: int("zeilen").notNull().default(0),
+  duplikate: int("duplikate").notNull().default(0),
+  summeEin: decimal("summe_ein", { precision: 14, scale: 2 }).notNull().default("0"),
+  summeAus: decimal("summe_aus", { precision: 14, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const bankTransaktionen = mysqlTable(
+  "bank_transaktionen",
+  {
+    id: serial("id").primaryKey(),
+    bankAccountId: bigint("bank_account_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => bankAccounts.id, { onDelete: "cascade" }),
+    importId: bigint("import_id", { mode: "number", unsigned: true }).references(
+      () => bankImporte.id,
+      { onDelete: "set null" },
+    ),
+    datum: date("datum", { mode: "string" }).notNull(),
+    name: varchar("name", { length: 255 }).notNull().default(""),
+    zweck: text("zweck"),
+    betrag: decimal("betrag", { precision: 14, scale: 2 }).notNull(), // + Eingang / - Ausgang
+    gebuehr: decimal("gebuehr", { precision: 12, scale: 2 }),
+    saldoNach: decimal("saldo_nach", { precision: 14, scale: 2 }),
+    hash: varchar("hash", { length: 64 }).notNull(), // Duplikat-Erkennung je Konto
+    status: mysqlEnum("status", ["offen", "zugeordnet", "ignoriert"]).notNull().default("offen"),
+    invoiceId: bigint("invoice_id", { mode: "number", unsigned: true }).references(
+      () => invoices.id,
+      { onDelete: "set null" },
+    ),
+    incomingInvoiceId: bigint("incoming_invoice_id", { mode: "number", unsigned: true }).references(
+      () => incomingInvoices.id,
+      { onDelete: "set null" },
+    ),
+    zugeordneterBetrag: decimal("zugeordneter_betrag", { precision: 14, scale: 2 }),
+    zugeordnetAm: timestamp("zugeordnet_am"),
+    bemerkung: varchar("bemerkung", { length: 500 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("bank_tx_hash_uniq").on(t.bankAccountId, t.hash),
+    index("bank_tx_konto_datum").on(t.bankAccountId, t.datum),
+    index("bank_tx_status").on(t.status),
+  ],
+);
+export type BankImport = typeof bankImporte.$inferSelect;
+export type BankTransaktion = typeof bankTransaktionen.$inferSelect;

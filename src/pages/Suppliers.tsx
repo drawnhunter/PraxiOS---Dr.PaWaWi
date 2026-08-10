@@ -1,8 +1,16 @@
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
+import { useSortierung } from "@/lib/sortierung";
 import { Button } from "@/components/ui/button";
 import { CsvButton } from "@/components/CsvButton";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +36,7 @@ interface FormState {
   telefon: string;
   ustIdNr: string;
   notizen: string;
+  kategorieId: number | null;
 }
 
 const leeresFormular: FormState = {
@@ -41,6 +50,7 @@ const leeresFormular: FormState = {
   telefon: "",
   ustIdNr: "",
   notizen: "",
+  kategorieId: null,
 };
 
 export default function Suppliers() {
@@ -50,6 +60,11 @@ export default function Suppliers() {
 
   const utils = trpc.useUtils();
   const liste = trpc.suppliers.list.useQuery({ suche: suche || undefined });
+  const sort = useSortierung<NonNullable<typeof liste.data>[number]>("name");
+  const zeilen = sort.sortiere(liste.data ?? [], (l, key) =>
+    key === "name" ? l.name : key === "ort" ? l.ort : null,
+  );
+  const kategorienListe = trpc.kontierung.kategorien.useQuery();
   const speichern = trpc.suppliers.create.useMutation({
     onSuccess: () => {
       utils.suppliers.list.invalidate();
@@ -79,6 +94,7 @@ export default function Suppliers() {
       telefon: l.telefon ?? "",
       ustIdNr: l.ustIdNr ?? "",
       notizen: l.notizen ?? "",
+      kategorieId: l.kategorieId ?? null,
     });
     setDialogOffen(true);
   };
@@ -95,6 +111,7 @@ export default function Suppliers() {
       telefon: form.telefon || null,
       ustIdNr: form.ustIdNr || null,
       notizen: form.notizen || null,
+      kategorieId: form.kategorieId ?? null,
     };
     if (form.id) {
       aktualisieren.mutate({ id: form.id, data: daten });
@@ -146,21 +163,21 @@ export default function Suppliers() {
           <table className="w-full min-w-[600px] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
-              <th className="px-4 py-2.5 font-medium">Name</th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("name")}>Name<sort.KopfIcon k="name" /></th>
               <th className="px-4 py-2.5 font-medium">Adresse</th>
               <th className="px-4 py-2.5 font-medium">Kontakt</th>
               <th className="px-4 py-2.5 text-right font-medium">Aktionen</th>
             </tr>
           </thead>
           <tbody>
-            {(liste.data ?? []).length === 0 && (
+            {zeilen.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-neutral-400">
                   Keine Lieferanten vorhanden.
                 </td>
               </tr>
             )}
-            {(liste.data ?? []).map((l) => (
+            {zeilen.map((l) => (
               <tr key={l.id} className="border-b border-neutral-100 last:border-0">
                 <td className="px-4 py-2.5">
                   <div className="font-medium text-neutral-900">
@@ -266,6 +283,27 @@ export default function Suppliers() {
                 value={form.ustIdNr}
                 onChange={(e) => setForm({ ...form, ustIdNr: e.target.value })}
               />
+            </div>
+            <div className="col-span-2">
+              <Label>Standard-Kategorie (Regelwerk Post Manager)</Label>
+              <Select
+                value={form.kategorieId ? String(form.kategorieId) : "0"}
+                onValueChange={(v) => setForm({ ...form, kategorieId: v === "0" ? null : Number(v) })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">— keine —</SelectItem>
+                  {(kategorienListe.data ?? []).map((k) => (
+                    <SelectItem key={k.id} value={String(k.id)}>
+                      {k.name}{k.konto ? ` (${k.konto})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-neutral-400">
+                Eingescannte Belege dieses Lieferanten schlagen Kategorie, Konto und
+                USt-Satz automatisch vor.
+              </p>
             </div>
             <div className="col-span-2">
               <Label>Notizen (intern)</Label>

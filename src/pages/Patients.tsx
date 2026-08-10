@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { trpc } from "@/providers/trpc";
+import { useSortierung } from "@/lib/sortierung";
 import { datum } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ export default function PatientsPage() {
   const [inklArchiviert, setInklArchiviert] = useState(false);
   const [dialogOffen, setDialogOffen] = useState(false);
 
+  const sort = useSortierung<NonNullable<typeof patienten.data>[number]>("name");
   const patienten = trpc.customers.list.useQuery({
     suche: suche || undefined,
     tag: tag || undefined,
@@ -101,16 +103,18 @@ export default function PatientsPage() {
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500">
-                  <th className="px-2 py-2 font-medium">Name</th>
-                  <th className="px-2 py-2 font-medium">Patienten-Nr.</th>
+                  <th className="cursor-pointer select-none px-2 py-2 font-medium" onClick={() => sort.umschalten("name")}>Name<sort.KopfIcon k="name" /></th>
+                  <th className="cursor-pointer select-none px-2 py-2 font-medium" onClick={() => sort.umschalten("patientenNr")}>Patienten-Nr.<sort.KopfIcon k="patientenNr" /></th>
                   <th className="px-2 py-2 font-medium">Geburtsdatum</th>
-                  <th className="px-2 py-2 font-medium">Ort</th>
+                  <th className="cursor-pointer select-none px-2 py-2 font-medium" onClick={() => sort.umschalten("ort")}>Ort<sort.KopfIcon k="ort" /></th>
                   <th className="px-2 py-2 font-medium">Telefon</th>
                   <th className="px-2 py-2 font-medium">Tags</th>
                 </tr>
               </thead>
               <tbody>
-                {(patienten.data ?? []).map((p) => {
+                {sort.sortiere(patienten.data ?? [], (p, key) =>
+                  key === "name" ? p.name : key === "ort" ? p.ort : key === "patientenNr" ? p.patientenNr : key === "geburtsdatum" ? p.geburtsdatum : null,
+                ).map((p) => {
                   const alter = alterAm(p.geburtsdatum);
                   return (
                     <tr

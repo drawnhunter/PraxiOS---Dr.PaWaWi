@@ -16,6 +16,7 @@ import {
   Package,
   Package2,
   Settings,
+  Building2,
   FileSignature,
   NotebookPen,
   Pill,
@@ -69,7 +70,7 @@ const GRUPPEN: NavGruppe[] = [
       { to: "/import", label: "Import", icon: FileUp, recht: "abrechnung" },
       { to: "/rechnungen", label: "Rechnungen", icon: FileText, recht: "abrechnung" },
       { to: "/gutschriften", label: "Gutschriften", icon: Receipt, recht: "abrechnung" },
-      { to: "/e-rechnung", label: "E-Rechnung", icon: FileDown, recht: "abrechnung" },
+      { to: "/e-rechnungen", label: "Eingangsbelege", icon: FileDown, recht: "abrechnung" },
       { to: "/posteingang", label: "Post Manager", icon: MailOpen, recht: "abrechnung" },
       { to: "/zahlungsziele", label: "Zahlungsziele", icon: CalendarClock, recht: "abrechnung" },
       { to: "/bank", label: "Bank", icon: Landmark, recht: "abrechnung" },
@@ -86,6 +87,7 @@ const GRUPPEN: NavGruppe[] = [
 ];
 
 const UNTEN: NavEintrag[] = [
+  { to: "/unternehmen", label: "Unternehmen", icon: Building2, recht: "abrechnung" },
   { to: "/einstellungen", label: "Einstellungen", icon: Settings, adminNur: true },
 ];
 

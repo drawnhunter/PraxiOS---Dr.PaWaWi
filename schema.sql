@@ -45,6 +45,11 @@ CREATE TABLE `company_settings` (
   `debitor_startnummer` int NOT NULL DEFAULT '10000',
   `kreditor_startnummer` int NOT NULL DEFAULT '70000',
   `aufwandskonto_default` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `eori` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `betriebsnummer` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `bg_mitgliedsnummer` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ihk` varchar(60) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `glaeubiger_id` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `ics_token` varchar(48) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `akzentfarbe` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'neutral',
   `pdf_layout` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'klassisch',
@@ -219,6 +224,7 @@ CREATE TABLE `invoices` (
   `bezahlt_betrag` decimal(12,2) NOT NULL DEFAULT '0',
   `bezahlt_am` date DEFAULT NULL,
   `bereits_bezahlt` tinyint(1) NOT NULL DEFAULT '0',
+  `archiviert` tinyint(1) NOT NULL DEFAULT '0',
   `pdf_notiz` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `bemerkung` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finalized_at` timestamp NULL DEFAULT NULL,
@@ -784,7 +790,7 @@ CREATE TABLE `email_konten` (
 DROP TABLE IF EXISTS `post_eingang`;
 CREATE TABLE `post_eingang` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `typ` enum('rechnung','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'rechnung',
+  `typ` enum('rechnung','lieferschein','gutschrift','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'rechnung',
   `status` enum('neu','gebucht','abgelegt') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'neu',
   `originalname` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `mime` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -856,4 +862,55 @@ CREATE TABLE `protokolle` (
   CONSTRAINT `protokolle_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
   CONSTRAINT `protokolle_vorlage_fk` FOREIGN KEY (`vorlage_id`) REFERENCES `protokoll_vorlagen` (`id`) ON DELETE SET NULL,
   CONSTRAINT `protokolle_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `company_kennwerte` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `wert` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `post_eingang_id` bigint unsigned DEFAULT NULL,
+  `sortierung` int NOT NULL DEFAULT '0',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `ck_post_fk` FOREIGN KEY (`post_eingang_id`) REFERENCES `post_eingang` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `bank_importe` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `bank_account_id` bigint unsigned NOT NULL,
+  `dateiname` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `vorlage` varchar(60) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Bank-CSV',
+  `zeilen` int NOT NULL DEFAULT '0',
+  `duplikate` int NOT NULL DEFAULT '0',
+  `summe_ein` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `summe_aus` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `bank_importe_konto_fk` FOREIGN KEY (`bank_account_id`) REFERENCES `bank_accounts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `bank_transaktionen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `bank_account_id` bigint unsigned NOT NULL,
+  `import_id` bigint unsigned DEFAULT NULL,
+  `datum` date NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `zweck` text COLLATE utf8mb4_unicode_ci,
+  `betrag` decimal(14,2) NOT NULL,
+  `gebuehr` decimal(12,2) DEFAULT NULL,
+  `saldo_nach` decimal(14,2) DEFAULT NULL,
+  `hash` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('offen','zugeordnet','ignoriert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'offen',
+  `invoice_id` bigint unsigned DEFAULT NULL,
+  `incoming_invoice_id` bigint unsigned DEFAULT NULL,
+  `zugeordneter_betrag` decimal(14,2) DEFAULT NULL,
+  `zugeordnet_am` timestamp NULL DEFAULT NULL,
+  `bemerkung` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `bank_tx_hash_uniq` (`bank_account_id`,`hash`),
+  KEY `bank_tx_konto_datum` (`bank_account_id`,`datum`),
+  KEY `bank_tx_status` (`status`),
+  CONSTRAINT `bank_tx_konto_fk` FOREIGN KEY (`bank_account_id`) REFERENCES `bank_accounts` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `bank_tx_import_fk` FOREIGN KEY (`import_id`) REFERENCES `bank_importe` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `bank_tx_invoice_fk` FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `bank_tx_incoming_fk` FOREIGN KEY (`incoming_invoice_id`) REFERENCES `incoming_invoices` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

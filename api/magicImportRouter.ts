@@ -8,8 +8,9 @@ import { extrahiereXmlAusPdf } from "./zugferdPdf";
 import { bucheEingangsrechnungAusXml } from "./lib/einrechnung";
 import { erzeugePostEingang, mimeAusName } from "./lib/posteingang";
 import { blaetterDesPlans } from "./therapyPlan";
+import { erkenneSumUpMerkmale } from "./lib/sumupPdf";
 
-const ROUTEN = ["erechnung", "post", "therapieplan", "kunden", "produkte", "bank", "unbekannt"] as const;
+const ROUTEN = ["erechnung", "post", "therapieplan", "altbestand", "kunden", "produkte", "bank", "unbekannt"] as const;
 type Route = (typeof ROUTEN)[number];
 
 const dateiInput = z.object({
@@ -40,7 +41,7 @@ interface Analyse {
   meta?: { lieferant?: string; nummer?: string; brutto?: string };
 }
 
-function analysiereDatei(name: string, puffer: Buffer): Analyse {
+async function analysiereDatei(name: string, puffer: Buffer): Promise<Analyse> {
   const lower = name.toLowerCase();
 
   if (lower.endsWith(".xml")) {
@@ -86,12 +87,18 @@ function analysiereDatei(name: string, puffer: Buffer): Analyse {
       erechnung: "",
       post: "",
       therapieplan: "Therapieplan-CSV (PraxisAkte-Export) erkannt",
+      altbestand: "",
       kunden: "SumUp-Kundenexport erkannt",
       produkte: "SumUp-Produktexport erkannt",
       bank: "Bank-/Kontoauszug erkannt",
       unbekannt: "CSV-Format nicht erkannt",
     };
     return { name, route, hinweis: hinweise[route] };
+  }
+
+  // SumUp-Rechnungs-PDF (ausgehender Beleg) → Altbestand-Import (ReWaWi-Sync)
+  if (lower.endsWith(".pdf") && (await erkenneSumUpMerkmale(puffer))) {
+    return { name, route: "altbestand", hinweis: "SumUp-Rechnung erkannt — komplett importierbar (Altbestand)" };
   }
 
   // Dr.PaWaWi: IMTZ-Therapieplan (XLSX mit KW-Blättern) → Therapie-Import
@@ -118,7 +125,20 @@ export const magicImportRouter = createRouter({
   analysieren: rechtQuery("abrechnung")
     .input(z.object({ dateien: z.array(dateiInput).min(1).max(10) }))
     .mutation(async ({ input }) => {
-      return input.dateien.map((d) => analysiereDatei(d.name, Buffer.from(d.base64, "base64")));
+      // Pro Datei fangen: eine kaputte Datei darf den Rest nicht blockieren (v1.6.2)
+      return Promise.all(
+        input.dateien.map(async (d) => {
+          try {
+            return await analysiereDatei(d.name, Buffer.from(d.base64, "base64"));
+          } catch (e) {
+            return {
+              name: d.name,
+              route: "unbekannt" as const,
+              hinweis: `Analyse fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`,
+            };
+          }
+        }),
+      );
     }),
 
   ausfuehren: rechtQuery("abrechnung")
@@ -128,7 +148,7 @@ export const magicImportRouter = createRouter({
           .array(
             dateiInput.extend({
               route: z.enum(ROUTEN),
-              postTyp: z.enum(["rechnung", "sonstiges"]).default("rechnung"),
+              postTyp: z.enum(["rechnung", "lieferschein", "gutschrift", "sonstiges"]).default("rechnung"),
             }),
           )
           .min(1)
@@ -149,7 +169,7 @@ export const magicImportRouter = createRouter({
         const puffer = Buffer.from(d.base64, "base64");
         try {
           if (d.route === "erechnung") {
-            const analyse = analysiereDatei(d.name, puffer);
+            const analyse = await analysiereDatei(d.name, puffer);
             if (!analyse.xml) throw new Error("Keine E-Rechnung (XML) gefunden.");
             const { id, lieferant, nummer } = await bucheEingangsrechnungAusXml(analyse.xml);
             ergebnisse.push({ name: d.name, ok: true, ziel: `E-Rechnung gebucht: ${lieferant} — ${nummer}`, id });
@@ -162,12 +182,13 @@ export const magicImportRouter = createRouter({
               quelle: "Magic Import",
             });
             ergebnisse.push({ name: d.name, ok: true, ziel: "im Post Manager abgelegt", id });
-          } else if (d.route === "kunden" || d.route === "produkte" || d.route === "bank" || d.route === "therapieplan") {
+          } else if (d.route === "kunden" || d.route === "produkte" || d.route === "bank" || d.route === "therapieplan" || d.route === "altbestand") {
             const ziele: Record<string, string> = {
               kunden: "/kunden",
               produkte: "/produkte",
               bank: "/bank",
               therapieplan: "/therapie-import",
+              altbestand: "/rechnungen/importieren",
             };
             ergebnisse.push({
               name: d.name,

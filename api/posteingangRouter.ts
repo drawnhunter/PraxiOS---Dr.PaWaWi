@@ -12,7 +12,7 @@ const datumSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const bearbeitenInput = z.object({
   id: z.number().int(),
-  typ: z.enum(["rechnung", "sonstiges"]),
+  typ: z.enum(["rechnung", "lieferschein", "gutschrift", "sonstiges"]),
   absenderLieferantId: z.number().int().nullish(),
   absenderFreitext: z.string().max(255).nullish(),
   stichwort: z.string().max(255).nullish(),
@@ -41,7 +41,7 @@ export const posteingangRouter = createRouter({
     .input(
       z.object({
         status: z.enum(["neu", "gebucht", "abgelegt"]).optional(),
-        typ: z.enum(["rechnung", "sonstiges"]).optional(),
+        typ: z.enum(["rechnung", "lieferschein", "gutschrift", "sonstiges"]).optional(),
       }),
     )
     .query(async ({ input }) => {
@@ -75,9 +75,14 @@ export const posteingangRouter = createRouter({
     }),
 
   get: rechtQuery("abrechnung").input(z.object({ id: z.number().int() })).query(async ({ input }) => {
-    const r = await getDb().query.postEingang.findFirst({ where: eq(postEingang.id, input.id) });
-    if (!r) throw new Error("Dokument nicht gefunden.");
-    return r;
+    const rows = await getDb()
+      .select({ r: postEingang, lieferantName: suppliers.name })
+      .from(postEingang)
+      .leftJoin(suppliers, eq(postEingang.absenderLieferantId, suppliers.id))
+      .where(eq(postEingang.id, input.id))
+      .limit(1);
+    if (!rows[0]) throw new Error("Dokument nicht gefunden.");
+    return { ...rows[0].r, lieferantName: rows[0].lieferantName };
   }),
 
   anlegen: rechtQuery("abrechnung")
@@ -86,7 +91,7 @@ export const posteingangRouter = createRouter({
         originalname: z.string().min(1).max(255),
         mime: z.string().max(100).optional(),
         base64: z.string().min(20),
-        typ: z.enum(["rechnung", "sonstiges"]).default("rechnung"),
+        typ: z.enum(["rechnung", "lieferschein", "gutschrift", "sonstiges"]).default("rechnung"),
         quelle: z.string().max(120).default("upload"),
       }),
     )
@@ -101,6 +106,46 @@ export const posteingangRouter = createRouter({
         quelle: input.quelle,
       });
       return { id };
+    }),
+
+  /** v1.4: Massen-Upload — ganze Scan-Stapel in einem Rutsch (max. 30 Dateien). */
+  anlegenBatch: rechtQuery("abrechnung")
+    .input(
+      z.object({
+        dateien: z
+          .array(
+            z.object({
+              originalname: z.string().min(1).max(255),
+              mime: z.string().max(100).optional(),
+              base64: z.string().min(20),
+            }),
+          )
+          .min(1)
+          .max(30),
+        typ: z.enum(["rechnung", "lieferschein", "gutschrift", "sonstiges"]).default("rechnung"),
+        quelle: z.string().max(120).default("scan-upload"),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const ids: number[] = [];
+      const fehler: string[] = [];
+      for (const d of input.dateien) {
+        try {
+          const puffer = Buffer.from(d.base64, "base64");
+          if (puffer.length > 12 * 1024 * 1024) throw new Error("Datei zu groß (max. 12 MB).");
+          const id = await erzeugePostEingang({
+            originalname: d.originalname,
+            mime: mimeAusName(d.originalname, d.mime),
+            puffer,
+            typ: input.typ,
+            quelle: input.quelle,
+          });
+          ids.push(id);
+        } catch (e) {
+          fehler.push(`${d.originalname}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      return { angelegt: ids.length, ids, fehler };
     }),
 
   aktualisieren: rechtQuery("abrechnung").input(bearbeitenInput).mutation(async ({ input }) => {
@@ -199,7 +244,23 @@ export const posteingangRouter = createRouter({
         .limit(1);
       if (treffer[0]) lieferant = treffer[0];
     }
-    return { felder, lieferant, zeichen: text.length };
+
+    // v1.6 Regelwerk: Lieferant hat Standard-Kategorie -> Konto/USt vorschlagen
+    let regelwerk: { kategorieId: number; kategorieName: string; konto: string | null; ustSatz: number } | null = null;
+    if (lieferant) {
+      const lf = await getDb().query.suppliers.findFirst({
+        where: eq(suppliers.id, lieferant.id),
+      });
+      if (lf?.kategorieId) {
+        const kat = await getDb().query.kategorien.findFirst({
+          where: eq(kategorien.id, lf.kategorieId),
+        });
+        if (kat) {
+          regelwerk = { kategorieId: kat.id, kategorieName: kat.name, konto: kat.konto, ustSatz: kat.ustSatz };
+        }
+      }
+    }
+    return { felder, lieferant, regelwerk, zeichen: text.length };
   }),
 
   /** Zahlungsziele: offene Eingangsrechnungen + Wiedervorlagen + ungebuchte Posts. */

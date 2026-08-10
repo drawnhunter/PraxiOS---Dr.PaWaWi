@@ -12,6 +12,7 @@ import Rezepte from "@/pages/Rezepte";
 import Protokolle from "@/pages/Protokolle";
 import ProtokollDetail from "@/pages/ProtokollDetail";
 import VorlageDetail from "@/pages/VorlageDetail";
+import Unternehmen from "@/pages/Unternehmen";
 import Bogen from "@/pages/Bogen";
 import Austausch from "@/pages/Austausch";
 import IncomingInvoices from "@/pages/IncomingInvoices";
@@ -20,7 +21,7 @@ import Posteingang from "@/pages/Posteingang";
 import Import from "@/pages/Import";
 import Zahlungsziele from "@/pages/Zahlungsziele";
 import Statistics from "@/pages/Statistics";
-import BankImport from "@/pages/BankImport";
+import Banking from "@/pages/Banking";
 import InvoiceImport from "@/pages/InvoiceImport";
 import Invoices from "@/pages/Invoices";
 import InvoiceDetail from "@/pages/InvoiceDetail";
@@ -56,8 +57,10 @@ export default function App() {
         <Route path="/protokolle/vorlagen/neu" element={<VorlageDetail />} />
         <Route path="/protokolle/vorlagen/:id" element={<VorlageDetail />} />
         <Route path="/protokolle/:id" element={<ProtokollDetail />} />
+        <Route path="/unternehmen" element={<Unternehmen />} />
         <Route path="/austausch" element={<Austausch />} />
         <Route path="/e-rechnung" element={<IncomingInvoices />} />
+        <Route path="/e-rechnungen" element={<IncomingInvoices />} />
         <Route path="/lager" element={<Lager />} />
         <Route path="/posteingang" element={<Posteingang />} />
         <Route path="/import" element={<Import />} />
@@ -65,7 +68,8 @@ export default function App() {
         <Route path="/therapie-import" element={<TherapyImport />} />
         <Route path="/uebersicht" element={<Dashboard />} />
         <Route path="/statistik" element={<Statistics />} />
-        <Route path="/bank" element={<BankImport />} />
+        <Route path="/bank" element={<Banking />} />
+        <Route path="/banking" element={<Banking />} />
         <Route path="/rechnungen/importieren" element={<InvoiceImport />} />
         <Route path="/angebote" element={<Offers />} />
         <Route path="/angebote/:id" element={<OfferDetail />} />

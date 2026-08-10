@@ -13,6 +13,8 @@ import {
   customers,
   companySettings,
   bankAccounts,
+  bankTransaktionen,
+  mailLog,
 } from "@db/schema";
 import { eq, desc, and, ne, inArray } from "drizzle-orm";
 import {
@@ -71,13 +73,20 @@ export const invoiceRouter = createRouter({
   list: rechtQuery("abrechnung")
     .input(
       z
-        .object({ status: z.enum(["entwurf", "finalisiert", "storniert"]).optional() })
+        .object({
+          status: z.enum(["entwurf", "finalisiert", "storniert"]).optional(),
+          archiviert: z.boolean().optional(), // Standard: nur nicht-archivierte
+        })
         .optional(),
     )
     .query(async ({ input }) => {
       const db = getDb();
+      const bed = [
+        ...(input?.status ? [eq(invoices.status, input.status)] : []),
+        eq(invoices.archiviert, input?.archiviert ?? false),
+      ];
       const rows = await db.query.invoices.findMany({
-        where: input?.status ? eq(invoices.status, input.status) : undefined,
+        where: and(...bed),
         orderBy: [desc(invoices.createdAt)],
         with: { creditNotes: true },
       });
@@ -547,6 +556,103 @@ export const invoiceRouter = createRouter({
         await tx.delete(invoices).where(eq(invoices.id, input.id));
       });
       return { ok: true };
+    }),
+
+  /** ReWaWi-Sync (1.5): Beleg duplizieren — Kopf + Positionen in einen neuen Entwurf. */
+  duplicate: rechtQuery("abrechnung")
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const r = await db.query.invoices.findFirst({
+        where: eq(invoices.id, input.id),
+        with: { items: true },
+      });
+      if (!r) throw new Error("Rechnung nicht gefunden.");
+      const heute = new Date().toISOString().slice(0, 10);
+      const [{ id }] = await db
+        .insert(invoices)
+        .values({
+          customerId: r.customerId,
+          typ: r.typ,
+          rechnungsdatum: heute,
+          faelligkeitsdatum: r.faelligkeitsdatum,
+          leistungsdatum: r.leistungsdatum,
+          bankAccountId: r.bankAccountId,
+          kundeName: r.kundeName,
+          kundeZusatz: r.kundeZusatz,
+          kundeStrasse: r.kundeStrasse,
+          kundePlz: r.kundePlz,
+          kundeOrt: r.kundeOrt,
+          kundeLand: r.kundeLand,
+          netto: r.netto,
+          ust: r.ust,
+          brutto: r.brutto,
+          bereitsBezahlt: false,
+          pdfNotiz: r.pdfNotiz,
+          bemerkung: r.bemerkung,
+        })
+        .$returningId();
+      if (r.items.length > 0) {
+        await db.insert(invoiceItems).values(
+          r.items.map((it) => ({
+            invoiceId: id,
+            position: it.position,
+            bezeichnung: it.bezeichnung,
+            beschreibung: it.beschreibung,
+            menge: it.menge,
+            einheit: it.einheit,
+            einzelpreis: it.einzelpreis,
+            ustSatz: it.ustSatz,
+          })),
+        );
+      }
+      return { id };
+    }),
+
+  /** ReWaWi-Sync (1.5): Archivieren/Entarchivieren — GoBD-sicher (Beleg bleibt). */
+  setArchiviert: rechtQuery("abrechnung")
+    .input(z.object({ id: z.number(), archiviert: z.boolean() }))
+    .mutation(async ({ input }) => {
+      await getDb()
+        .update(invoices)
+        .set({ archiviert: input.archiviert })
+        .where(eq(invoices.id, input.id));
+      return { ok: true };
+    }),
+
+  /** ReWaWi-Sync (1.5): Aktivitäts-Timeline einer Rechnung (Seitenpanel). */
+  aktivitaeten: rechtQuery("abrechnung")
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const r = await db.query.invoices.findFirst({
+        where: eq(invoices.id, input.id),
+        with: { creditNotes: true },
+      });
+      if (!r) throw new Error("Rechnung nicht gefunden.");
+      const mails = await db
+        .select()
+        .from(mailLog)
+        .where(and(eq(mailLog.belegArt, "rechnung"), eq(mailLog.belegId, input.id)))
+        .orderBy(desc(mailLog.gesendetAm));
+      const bank = await db
+        .select({
+          datum: bankTransaktionen.datum,
+          betrag: bankTransaktionen.zugeordneterBetrag,
+          zugeordnetAm: bankTransaktionen.zugeordnetAm,
+        })
+        .from(bankTransaktionen)
+        .where(and(eq(bankTransaktionen.invoiceId, input.id), eq(bankTransaktionen.status, "zugeordnet")))
+        .orderBy(desc(bankTransaktionen.datum));
+      return {
+        erstelltAm: r.createdAt,
+        finalizedAm: r.finalizedAt,
+        bezahltAm: r.bezahltAm,
+        bezahltBetrag: r.bezahltBetrag,
+        mails,
+        bankZuordnungen: bank,
+        gutschriften: r.creditNotes.map((g) => ({ id: g.id, nummer: g.nummer, datum: g.datum, brutto: g.brutto })),
+      };
     }),
 
   /** Gutschrift (Storno) aus einer finalisierten Rechnung erzeugen. */

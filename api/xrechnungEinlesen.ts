@@ -9,6 +9,7 @@ export interface EingehendeRechnung {
   faellig: string | null;
   lieferant: string;
   lieferantKennung: string | null;
+  kaeufer: { name: string; strasse: string | null; plz: string | null; ort: string | null } | null;
   positionen: {
     bezeichnung: string;
     menge: number;
@@ -121,6 +122,17 @@ export function analysiereXrechnung(xml: string): {
   const agreement = trans?.["ApplicableHeaderTradeAgreement"] as Record<string, unknown> | undefined;
   const seller = agreement?.["SellerTradeParty"] as Record<string, unknown> | undefined;
   const lieferant = text(seller?.["Name"]).trim();
+  // Kaeufer (fuer Altbestand-Import eigener AUSGEHENDER Rechnungen, ReWaWi v1.3)
+  const buyer = agreement?.["BuyerTradeParty"] as Record<string, unknown> | undefined;
+  const buyerAdr = buyer?.["PostalTradeAddress"] as Record<string, unknown> | undefined;
+  const kaeufer = buyer
+    ? {
+        name: text(buyer["Name"]).trim(),
+        strasse: buyerAdr ? text(buyerAdr["LineOne"]).trim() || null : null,
+        plz: buyerAdr ? text(buyerAdr["PostcodeCode"]).trim() || null : null,
+        ort: buyerAdr ? text(buyerAdr["CityName"]).trim() || null : null,
+      }
+    : null;
   let lieferantKennung: string | null = null;
   const steuerReg = alsArray(seller?.["SpecifiedTaxRegistration"] as never);
   for (const sr of steuerReg) {
@@ -219,6 +231,7 @@ export function analysiereXrechnung(xml: string): {
       faellig,
       lieferant,
       lieferantKennung,
+      kaeufer,
       positionen,
       netto,
       ust,

@@ -1,5 +1,78 @@
 # Changelog — PraxiOS
 
+## [1.5.0] — 2026-08-10 — ReWaWi-v1.7.0-Sync (Post Manager, Eingangsbelege, Company Control, Banking)
+
+> Cherry-Pick-Sync aus ReWaWi v1.2.1–v1.7.0 nach Handover-Empfehlung.
+> **Bewusst NICHT übernommen:** Zeiterfassung (kollidiert mit der
+> Behandlungs-Abrechnungs-DNA) und XP-Desktop (eigene Demo folgt separat).
+
+### SOP-Konformität & Pflicht-Fixes
+- **`api/lib/version.ts`** (kanonische Version für den SupportHub), `ping`
+  liefert sie mit; Sync version.ts ↔ package.json ↔ CHANGELOG wird per Test erzwungen
+- **Migration gehärtet**: jeder Schritt isoliert (try/catch — ein Fehler
+  blockiert nie die Kette), FK-Reihenfolge beachtet (bank_importe vor
+  bank_transaktionen, company_kennwerte nach post_eingang)
+- **Käufer-Parser** in der XRechnung-Einlesung (BuyerTradeParty + Adresse) —
+  Grundlage für den Altbestand-Import ausgehender Belege
+
+### Post Manager (ReWaWi v1.4/v1.6)
+- **Massen-Upload**: ganze Scan-Stapel (bis 30 Dateien) mit Fortschritt,
+  Typ-Vorwahl und Fehler-Banner (`anlegenBatch`)
+- **Durchraster-Workflow**: Pfeil-Navigation im Dialog (x/y) +
+  „Buchen & nächster" — Scan-Marathon ohne Mauswege
+- **Neue Belegtypen** Lieferschein + Gutschrift (Enum-Migration idempotent)
+- **Regelwerk**: Standard-Kategorie je Lieferant (Stammdaten) → Kategorie-/
+  Konto-/USt-Vorschlag bei OCR und manueller Buchung
+- Deeplink `/posteingang?beleg=ID` (für Company-Control-Verknüpfungen)
+
+### Eingangsbelege-Zentrale (ReWaWi v1.5)
+- Menüpunkt **„Eingangsbelege"** (statt „E-Rechnung"): Tabs Rechnungen/
+  Lieferscheine/Gutschriften/Archiv, Summen-Chips (offen/überfällig/bezahlt),
+  Suche, CSV-Export, Post-Manager-Archiv mit PDF-Viewer, Schnellwechsel-Links,
+  Fehleranzeige statt leerer Liste bei Query-Fehlern
+
+### Company Control (ReWaWi v1.6)
+- Neuer Menüpunkt **„Unternehmen"**: registrierte Kennnummern (EORI,
+  Betriebsnummer, BG-Mitgliedsnummer, IHK/HWK, Gläubiger-ID) +
+  **freie Kennwerte** mit Beleg-Verknüpfung zum Post Manager
+  (z. B. Praxisregistrierungen mit Nachweisdokument)
+
+### Banking komplett (ReWaWi v1.3)
+- **Persistente Transaktionen** (`bank_transaktionen` + `bank_importe`,
+  Duplikat-Hash je Konto), Ein-/Ausgänge, Saldo-Verlauf, Import-Historie
+- **Auto-Match** auf Ausgangs- UND Eingangsrechnungen, manuelle Zuordnung
+  **bidirektional** inkl. Lösen mit Rückbuchung, Ignorieren/Löschen mit
+  GoBD-Schutz, **Kontoauszug-PDF**
+- **Bank-Zuordnung im Rechnungsdetail** (Vorschläge nach Restbetrag)
+- **SumUp-Vollexport nativ** (15-Spalten-Format, deutsches Datum)
+- Der alte Bank-CSV-Import ist darin aufgegangen (Menü „Bank" = neue Zentrale)
+
+### Altbestand-Migration (ReWaWi v1.2.1/v1.3)
+- **Altbestand-Import aus SumUp-Rechnungs-PDFs** (lokal per pdftotext:
+  Positionen, Plausi-Warnungen, Storno-Ablehnung) und aus **XRechnungen**
+  (ausgehende Belege mit Original-Nummern als finalisierte Belege) —
+  Nummernkreis wird bei eigenem Format angehoben (kein ER_DUP_ENTRY danach)
+- Magic Import erkennt SumUp-PDFs und Therapieplan-XLSX jetzt auch im
+  Datei-Dialog (Accept + Routing ergänzt), Fehler-Banner und pro-Datei-
+  Fehlerisolierung statt stillem Abbruch
+
+### Komfort (ReWaWi v1.6)
+- **Rechnungen-Seitenpanel**: Klick auf eine Zeile öffnet ein Panel mit
+  Aktivitäts-Timeline (Entwurf → Finalisierung → Mail → Zahlung/Bank →
+  Gutschriften) und Aktionen (Öffnen, PDF, Vorschau, **Duplizieren**,
+  Gutschrift, **Archivieren**)
+- **Archivieren** statt Löschen (`invoices.archiviert` + Filter, GoBD-sicher)
+- **Sortierung** per Spaltenklick in Patienten-, Leistungen-, Lieferanten-
+  und Gutschriften-Listen, Suche in Gutschriften/Eingangsbelegen
+- Unternehmen-Seite: Hinweis statt ewigem „Lade …" bei fehlenden Firmendaten
+
+### Technik
+- **80 Tests grün** (inkl. Versions-Sync-Wache)
+
+---
+
+---
+
 ## [1.4.1] — 2026-08-04 — Fix Vorlagen-Speichern, frei modifizierbarer Vitalparameter-Block
 
 ### Fixes & Anpassungen

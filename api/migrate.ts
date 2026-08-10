@@ -63,6 +63,16 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "invoices", spalte: "typ", ddl: "ALTER TABLE invoices ADD COLUMN typ ENUM('standard','proforma') NOT NULL DEFAULT 'standard' AFTER nummer" },
   { tabelle: "invoices", spalte: "abschlag_betrag", ddl: "ALTER TABLE invoices ADD COLUMN abschlag_betrag DECIMAL(12,2) NULL AFTER status" },
   { tabelle: "invoices", spalte: "proforma_von_id", ddl: "ALTER TABLE invoices ADD COLUMN proforma_von_id BIGINT UNSIGNED NULL AFTER abschlag_betrag" },
+  // ReWaWi-Sync (1.5): Archivieren statt Löschen
+  { tabelle: "invoices", spalte: "archiviert", ddl: "ALTER TABLE invoices ADD COLUMN archiviert TINYINT(1) NOT NULL DEFAULT 0 AFTER bereits_bezahlt" },
+  // ReWaWi-Sync (1.5): Regelwerk — Standard-Kategorie je Lieferant
+  { tabelle: "suppliers", spalte: "kategorie_id", ddl: "ALTER TABLE suppliers ADD COLUMN kategorie_id BIGINT UNSIGNED NULL AFTER archiviert, ADD CONSTRAINT suppliers_kategorie_fk FOREIGN KEY (kategorie_id) REFERENCES kategorien(id) ON DELETE SET NULL" },
+  // ReWaWi-Sync (1.5): Company Control — registrierte Kennnummern
+  { tabelle: "company_settings", spalte: "eori", ddl: "ALTER TABLE company_settings ADD COLUMN eori VARCHAR(30) NULL AFTER aufwandskonto_default" },
+  { tabelle: "company_settings", spalte: "betriebsnummer", ddl: "ALTER TABLE company_settings ADD COLUMN betriebsnummer VARCHAR(30) NULL AFTER eori" },
+  { tabelle: "company_settings", spalte: "bg_mitgliedsnummer", ddl: "ALTER TABLE company_settings ADD COLUMN bg_mitgliedsnummer VARCHAR(50) NULL AFTER betriebsnummer" },
+  { tabelle: "company_settings", spalte: "ihk", ddl: "ALTER TABLE company_settings ADD COLUMN ihk VARCHAR(60) NULL AFTER bg_mitgliedsnummer" },
+  { tabelle: "company_settings", spalte: "glaeubiger_id", ddl: "ALTER TABLE company_settings ADD COLUMN glaeubiger_id VARCHAR(30) NULL AFTER ihk" },
 ];
 
 const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
@@ -446,6 +456,64 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       CONSTRAINT protokolle_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
   },
+  {
+    // ReWaWi-Sync (1.5): Company Control — freie Kennwerte (nach post_eingang!)
+    tabelle: "company_kennwerte",
+    ddl: `CREATE TABLE IF NOT EXISTS company_kennwerte (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
+      wert VARCHAR(255) NOT NULL,
+      post_eingang_id BIGINT UNSIGNED NULL,
+      sortierung INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT ck_post_fk FOREIGN KEY (post_eingang_id) REFERENCES post_eingang(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    // ReWaWi-Sync (1.5): Banking (bank_importe VOR bank_transaktionen — FK!)
+    tabelle: "bank_importe",
+    ddl: `CREATE TABLE IF NOT EXISTS bank_importe (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      bank_account_id BIGINT UNSIGNED NOT NULL,
+      dateiname VARCHAR(255) NOT NULL,
+      vorlage VARCHAR(60) NOT NULL DEFAULT 'Bank-CSV',
+      zeilen INT NOT NULL DEFAULT 0,
+      duplikate INT NOT NULL DEFAULT 0,
+      summe_ein DECIMAL(14,2) NOT NULL DEFAULT 0,
+      summe_aus DECIMAL(14,2) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT bank_importe_konto_fk FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id) ON DELETE CASCADE
+    )`,
+  },
+  {
+    tabelle: "bank_transaktionen",
+    ddl: `CREATE TABLE IF NOT EXISTS bank_transaktionen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      bank_account_id BIGINT UNSIGNED NOT NULL,
+      import_id BIGINT UNSIGNED NULL,
+      datum DATE NOT NULL,
+      name VARCHAR(255) NOT NULL DEFAULT '',
+      zweck TEXT NULL,
+      betrag DECIMAL(14,2) NOT NULL,
+      gebuehr DECIMAL(12,2) NULL,
+      saldo_nach DECIMAL(14,2) NULL,
+      hash VARCHAR(64) NOT NULL,
+      status ENUM('offen','zugeordnet','ignoriert') NOT NULL DEFAULT 'offen',
+      invoice_id BIGINT UNSIGNED NULL,
+      incoming_invoice_id BIGINT UNSIGNED NULL,
+      zugeordneter_betrag DECIMAL(14,2) NULL,
+      zugeordnet_am TIMESTAMP NULL,
+      bemerkung VARCHAR(500) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX bank_tx_hash_uniq (bank_account_id, hash),
+      INDEX bank_tx_konto_datum (bank_account_id, datum),
+      INDEX bank_tx_status (status),
+      CONSTRAINT bank_tx_konto_fk FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id) ON DELETE CASCADE,
+      CONSTRAINT bank_tx_import_fk FOREIGN KEY (import_id) REFERENCES bank_importe(id) ON DELETE SET NULL,
+      CONSTRAINT bank_tx_invoice_fk FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+      CONSTRAINT bank_tx_incoming_fk FOREIGN KEY (incoming_invoice_id) REFERENCES incoming_invoices(id) ON DELETE SET NULL
+    )`,
+  },
 ];
 
 const NEUE_INDIZES: { tabelle: string; index: string; ddl: string }[] = [
@@ -461,7 +529,27 @@ const SPALTEN_AENDERUNGEN: { tabelle: string; spalte: string; ddl: string; pruef
     ddl: "ALTER TABLE documents MODIFY COLUMN kategorie ENUM('befund','arztbrief','rezept','einverstaendnis','anamnesebogen','sonstiges') NOT NULL DEFAULT 'sonstiges'",
     pruefWert: "anamnesebogen",
   },
+  {
+    // ReWaWi-Sync (1.5): Post Manager um Lieferscheine/Gutschriften
+    tabelle: "post_eingang",
+    spalte: "typ",
+    ddl: "ALTER TABLE post_eingang MODIFY COLUMN typ ENUM('rechnung','lieferschein','gutschrift','sonstiges') NOT NULL DEFAULT 'rechnung'",
+    pruefWert: "lieferschein",
+  },
 ];
+
+// SOP §8.5: Jeder Migrationsschritt läuft isoliert — ein Fehler blockiert
+// nie die restliche Kette (wird geloggt und gemeldet).
+async function schritt(db: ReturnType<typeof getDb>, ddl: string, label: string): Promise<boolean> {
+  try {
+    await db.execute(sql.raw(ddl));
+    console.log(`[migrate] + ${label}`);
+    return true;
+  } catch (e) {
+    console.error(`[migrate] FEHLER bei ${label}:`, e instanceof Error ? e.message : e);
+    return false;
+  }
+}
 
 export async function migriereFehlendeSpalten(): Promise<void> {
   const db = getDb();
@@ -474,8 +562,7 @@ export async function migriereFehlendeSpalten(): Promise<void> {
       ),
     )) as unknown as [{ n: number }[], unknown];
     if (Number(rows[0]?.n ?? 0) === 0) {
-      console.log(`[migrate] + ${s.tabelle}.${s.spalte}`);
-      await db.execute(sql.raw(s.ddl));
+      await schritt(db, s.ddl, `${s.tabelle}.${s.spalte}`);
     }
   }
 
@@ -486,8 +573,7 @@ export async function migriereFehlendeSpalten(): Promise<void> {
       ),
     )) as unknown as [{ n: number }[], unknown];
     if (Number(rows[0]?.n ?? 0) === 0) {
-      console.log(`[migrate] + Tabelle ${t.tabelle}`);
-      await db.execute(sql.raw(t.ddl));
+      await schritt(db, t.ddl, `Tabelle ${t.tabelle}`);
     }
   }
 
@@ -498,8 +584,7 @@ export async function migriereFehlendeSpalten(): Promise<void> {
       ),
     )) as unknown as [{ n: number }[], unknown];
     if (Number(rows[0]?.n ?? 0) === 0) {
-      console.log(`[migrate] + Index ${i.index}`);
-      await db.execute(sql.raw(i.ddl));
+      await schritt(db, i.ddl, `Index ${i.index}`);
     }
   }
 
@@ -511,8 +596,7 @@ export async function migriereFehlendeSpalten(): Promise<void> {
     )) as unknown as [{ t: string }[], unknown];
     const typ = rows[0]?.t ?? "";
     if (typ && !typ.includes(a.pruefWert)) {
-      console.log(`[migrate] ~ ${a.tabelle}.${a.spalte}`);
-      await db.execute(sql.raw(a.ddl));
+      await schritt(db, a.ddl, `~ ${a.tabelle}.${a.spalte}`);
     }
   }
 }

@@ -8,7 +8,7 @@ export interface NeuerBeleg {
   originalname: string;
   mime: string;
   puffer: Buffer;
-  typ: "rechnung" | "sonstiges";
+  typ: "rechnung" | "lieferschein" | "gutschrift" | "sonstiges";
   quelle: string;
   absenderFreitext?: string | null;
 }

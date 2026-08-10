@@ -46,6 +46,7 @@ import { MailDialog } from "@/components/MailDialog";
 import { SerieSpeichernDialog } from "@/components/SerienDialog";
 import { XrechnungButton } from "@/components/XrechnungButton";
 import { Mahnwesen } from "@/components/Mahnwesen";
+import BankZuordnung from "@/components/BankZuordnung";
 
 interface EditItem {
   bezeichnung: string;
@@ -498,6 +499,13 @@ export default function InvoiceDetail() {
 
       {r.status === "finalisiert" && r.typ !== "proforma" && offenCent > 0 && (
         <Mahnwesen rechnungId={r.id} />
+      )}
+
+      {/* ── Bank-Zuordnung (ReWaWi v1.3-Sync) ── */}
+      {r.status !== "entwurf" && (
+        <div className="mb-6">
+          <BankZuordnung invoiceId={r.id} />
+        </div>
       )}
 
       {/* ── Kopfdaten ── */}

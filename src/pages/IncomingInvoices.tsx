@@ -1,9 +1,13 @@
 import { useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router";
+import { CsvButton } from "@/components/CsvButton";
+import { deZahl } from "@/lib/downloads";
 import { trpc } from "@/providers/trpc";
 import { useSortierung } from "@/lib/sortierung";
 import { geld, datum as fmtDatum } from "@/lib/format";
 import { textHerunterladen } from "@/lib/downloads";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -21,7 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Upload, CheckCircle2, AlertTriangle, XCircle, FileDown, Eye } from "lucide-react";
+import { Upload, CheckCircle2, AlertTriangle, XCircle, FileDown, Eye, FileText, ArchiveRestore, Search } from "lucide-react";
 
 type Analyse = {
   ok: boolean;
@@ -47,8 +51,15 @@ export default function IncomingInvoices() {
 
   const liste = trpc.einrechnung.list.useQuery();
   const sort = useSortierung<NonNullable<typeof liste.data>[number]>("datum");
-  const zeilen = sort.sortiere(liste.data ?? [], (r, k) =>
+  const [q, setQ] = useState("");
+  const gefiltert = (liste.data ?? []).filter(
+    (r) => !q.trim() ||
+      r.lieferantName.toLowerCase().includes(q.toLowerCase()) ||
+      r.nummer.toLowerCase().includes(q.toLowerCase()),
+  );
+  const zeilen = sort.sortiere(gefiltert, (r, k) =>
     k === "lieferant" ? r.lieferantName :
+    k === "nummer" ? r.nummer :
     k === "datum" ? r.rechnungsdatum :
     k === "brutto" ? Number(r.brutto) :
     k === "status" ? (r.bezahltAm ? "1" : "0") : null,
@@ -114,14 +125,30 @@ export default function IncomingInvoices() {
 
   const d = analyse?.daten;
 
+  // ── v1.5: Eingangsbelege — Tabs (Deeplink via ?tab=) + Summen ──
+  const [params, setParams] = useSearchParams();
+  const tab = (params.get("tab") ?? "rechnungen") as "rechnungen" | "lieferscheine" | "gutschriften" | "archiv";
+  const setTab = (t: string) =>
+    setParams((alt) => {
+      const n = new URLSearchParams(alt);
+      n.set("tab", t);
+      return n;
+    }, { replace: true });
+  const heute = new Date().toISOString().slice(0, 10);
+  const offeneListe = (liste.data ?? []).filter((r) => !r.bezahltAm);
+  const summeOffen = offeneListe.reduce((a, r) => a + Number(r.brutto), 0);
+  const ueberfaelligListe = offeneListe.filter((r) => r.faelligkeitsdatum && r.faelligkeitsdatum < heute);
+  const summeUeberfaellig = ueberfaelligListe.reduce((a, r) => a + Number(r.brutto), 0);
+  const summeBezahlt = (liste.data ?? []).filter((r) => r.bezahltAm).reduce((a, r) => a + Number(r.brutto), 0);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">E-Rechnungen (Eingang)</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Eingangsbelege</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Empfangene E-Rechnungen (XML oder ZUGFeRD-PDF) hochladen, prüfen und als
-            Eingangsrechnung buchen. Das Original-XML wird GoBD-konform archiviert.
+            Alle eingehenden Belege: gebuchte Eingangsrechnungen, Lieferscheine,
+            Gutschriften und das Scan-Archiv — an einem Ort.
           </p>
         </div>
         <Button variant="outline" onClick={() => dateiRef.current?.click()}>
@@ -136,6 +163,30 @@ export default function IncomingInvoices() {
         />
       </div>
 
+      {/* ── Tabs (v1.5) ── */}
+      <div className="flex gap-1 rounded-lg border border-neutral-200 bg-neutral-50 p-1">
+        {([
+          ["rechnungen", "Rechnungen"],
+          ["lieferscheine", "Lieferscheine"],
+          ["gutschriften", "Gutschriften"],
+          ["archiv", "Archiv"],
+        ] as const).map(([t, label]) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+              tab === t ? "bg-white shadow-sm" : "text-neutral-500 hover:text-neutral-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab !== "rechnungen" ? (
+        <AblageListe typ={tab === "archiv" ? undefined : tab === "lieferscheine" ? "lieferschein" : "gutschrift"} />
+      ) : (
+      <>
       {/* ── Analyse-Dialog ── */}
       {analyse && (
         <section className="rounded-lg border border-neutral-200 bg-white p-5">
@@ -228,13 +279,46 @@ export default function IncomingInvoices() {
         </section>
       )}
 
+      {/* ── Summen (Auswertung) ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary">Offen: {geld(summeOffen)} ({offeneListe.length})</Badge>
+        {summeUeberfaellig > 0 && (
+          <Badge variant="destructive">Überfällig: {geld(summeUeberfaellig)} ({ueberfaelligListe.length})</Badge>
+        )}
+        <Badge variant="outline">Bezahlt gesamt: {geld(summeBezahlt)}</Badge>
+        <span className="ml-auto">
+          <CsvButton
+            dateiname="eingangsrechnungen.csv"
+            zeilen={[
+              ["Lieferant", "Nummer", "Datum", "Fällig", "Netto", "USt", "Brutto", "Konto", "Gegenkonto", "Bezahlt am"],
+              ...zeilen.map((r) => [
+                r.lieferantName, r.nummer, r.rechnungsdatum, r.faelligkeitsdatum ?? "",
+                deZahl(r.netto), deZahl(r.ust), deZahl(r.brutto),
+                r.konto ?? "", r.gegenkonto ?? "", r.bezahltAm ?? "",
+              ]),
+            ]}
+          />
+        </span>
+      </div>
+
+      <div className="relative mb-3 max-w-xs">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Lieferant / Nummer suchen …" className="pl-8" />
+      </div>
+
+      {liste.error && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          Eingangsrechnungen konnten nicht geladen werden: {liste.error.message}
+        </p>
+      )}
+
       {/* ── Liste ── */}
       <section className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
               <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("lieferant")}>Lieferant<sort.KopfIcon k="lieferant" /></th>
-              <th className="px-4 py-2.5 font-medium">Nummer</th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("nummer")}>Nummer<sort.KopfIcon k="nummer" /></th>
               <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("datum")}>Datum<sort.KopfIcon k="datum" /></th>
               <th className="cursor-pointer select-none px-4 py-2.5 text-right font-medium" onClick={() => sort.umschalten("brutto")}>Brutto<sort.KopfIcon k="brutto" /></th>
               <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("status")}>Status<sort.KopfIcon k="status" /></th>
@@ -286,6 +370,9 @@ export default function IncomingInvoices() {
           </tbody>
         </table>
       </section>
+
+      </>
+      )}
 
       {/* ── Detail-Dialog ── */}
       <Dialog open={detail !== null} onOpenChange={(o) => !o && setDetail(null)}>
@@ -340,6 +427,151 @@ export default function IncomingInvoices() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+
+/* ═══ v1.5: Ablage-Tabs — Lieferscheine/Gutschriften/Archiv aus dem Post Manager ═══ */
+const ABL_TYP_LABEL: Record<string, string> = {
+  rechnung: "Rechnung",
+  lieferschein: "Lieferschein",
+  gutschrift: "Gutschrift",
+  sonstiges: "Sonstiges",
+};
+const ABL_STATUS_LABEL: Record<string, string> = { neu: "Neu", gebucht: "Gebucht", abgelegt: "Abgelegt" };
+
+function AblageListe({ typ }: { typ?: "lieferschein" | "gutschrift" }) {
+  const [viewer, setViewer] = useState<number | null>(null);
+  const [q, setQ] = useState("");
+  const liste = trpc.posteingang.liste.useQuery({ typ });
+  const dok = trpc.posteingang.get.useQuery({ id: viewer ?? 0 }, { enabled: viewer !== null });
+
+  const isoAm = (d: unknown) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
+  const sort = useSortierung<NonNullable<typeof liste.data>[number]>("eingang");
+  const gefiltert = (liste.data ?? []).filter(
+    (r) => !q.trim() ||
+      (r.stichwort ?? r.originalname).toLowerCase().includes(q.toLowerCase()) ||
+      (r.lieferantName ?? r.absenderFreitext ?? "").toLowerCase().includes(q.toLowerCase()) ||
+      (r.rechnungsnummer ?? "").toLowerCase().includes(q.toLowerCase()),
+  );
+  const zeilen = sort.sortiere(gefiltert, (r, k) =>
+    k === "dokument" ? r.stichwort ?? r.originalname
+    : k === "absender" ? r.lieferantName ?? r.absenderFreitext ?? ""
+    : k === "betrag" ? (r.betrag !== null ? Number(r.betrag) : null)
+    : k === "faellig" ? r.faelligAm ?? r.wiedervorlageAm
+    : k === "status" ? r.status
+    : k === "eingang" ? (r.createdAt instanceof Date ? r.createdAt.getTime() : String(r.createdAt))
+    : null,
+  );
+
+  const d = dok.data;
+  const dataUrl = d ? `data:${d.mime};base64,${d.dateiInhalt}` : "";
+
+  return (
+    <div className="space-y-3">
+      <div className="relative max-w-xs">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Dokument / Absender suchen …" className="pl-8" />
+      </div>
+
+      <section className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead>
+            <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("dokument")}>Dokument<sort.KopfIcon k="dokument" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("absender")}>Absender<sort.KopfIcon k="absender" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 text-right font-medium" onClick={() => sort.umschalten("betrag")}>Betrag<sort.KopfIcon k="betrag" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("faellig")}>Fällig / WV<sort.KopfIcon k="faellig" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("status")}>Status<sort.KopfIcon k="status" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("eingang")}>Eingang<sort.KopfIcon k="eingang" /></th>
+            </tr>
+          </thead>
+          <tbody>
+            {zeilen.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-neutral-400">
+                  {liste.isLoading ? "Lade …" : "Nichts im Archiv — Belege über den Post Manager einscannen."}
+                </td>
+              </tr>
+            )}
+            {zeilen.map((r) => (
+              <tr
+                key={r.id}
+                className="cursor-pointer border-b border-neutral-100 last:border-0 hover:bg-neutral-50"
+                onClick={() => setViewer(r.id)}
+              >
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 shrink-0 text-neutral-400" />
+                    <div>
+                      <div className="flex items-center gap-2 font-medium text-neutral-800">
+                        {r.stichwort ?? r.originalname}
+                        {r.typ !== "rechnung" && (
+                          <Badge variant="outline" className="text-[10px]">{ABL_TYP_LABEL[r.typ] ?? r.typ}</Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-neutral-400">{r.originalname}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-2.5 text-neutral-600">{r.lieferantName ?? r.absenderFreitext ?? "–"}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums">{r.betrag ? geld(r.betrag) : "–"}</td>
+                <td className="px-4 py-2.5 text-neutral-600">
+                  {r.faelligAm ? fmtDatum(r.faelligAm) : r.wiedervorlageAm ? `WV ${fmtDatum(r.wiedervorlageAm)}` : "–"}
+                </td>
+                <td className="px-4 py-2.5">
+                  <Badge variant={r.status === "neu" ? "default" : r.status === "gebucht" ? "secondary" : "outline"}>
+                    {ABL_STATUS_LABEL[r.status] ?? r.status}
+                  </Badge>
+                </td>
+                <td className="px-4 py-2.5 text-xs text-neutral-500">{fmtDatum(isoAm(r.createdAt))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      {/* ── Viewer-Dialog (nur ansehen; Bearbeiten im Post Manager) ── */}
+      <Dialog open={viewer !== null} onOpenChange={(o) => !o && setViewer(null)}>
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {d?.originalname ?? "Lade …"}
+              {d && <Badge variant="outline">{ABL_TYP_LABEL[d.typ] ?? d.typ}</Badge>}
+              {d && <Badge variant="secondary">{ABL_STATUS_LABEL[d.status] ?? d.status}</Badge>}
+            </DialogTitle>
+          </DialogHeader>
+          {d && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-neutral-600">
+                {(d.lieferantName || d.absenderFreitext) && (
+                  <span>Absender: <strong>{d.lieferantName ?? d.absenderFreitext}</strong></span>
+                )}
+                {d.rechnungsnummer && <span>Nummer: <strong>{d.rechnungsnummer}</strong></span>}
+                {d.betrag && <span>Betrag: <strong>{geld(d.betrag)}</strong></span>}
+                {d.faelligAm && <span>Fällig: <strong>{fmtDatum(d.faelligAm)}</strong></span>}
+                {d.wiedervorlageAm && <span>WV: <strong>{fmtDatum(d.wiedervorlageAm)}</strong></span>}
+              </div>
+              <div className="min-h-[400px] rounded-lg border border-neutral-200 bg-neutral-50">
+                {d.mime === "application/pdf" ? (
+                  <iframe title="Beleg" src={dataUrl} className="h-full min-h-[560px] w-full rounded-lg" />
+                ) : (
+                  <img src={dataUrl} alt="Beleg" className="mx-auto max-h-[70vh] rounded-lg object-contain" />
+                )}
+              </div>
+              <div className="flex justify-between">
+                <Button variant="outline" asChild>
+                  <Link to={`/posteingang?beleg=${d.id}`}>
+                    <ArchiveRestore className="mr-1.5 h-4 w-4" /> Im Post Manager öffnen
+                  </Link>
+                </Button>
+                <Button variant="ghost" onClick={() => setViewer(null)}>Schließen</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

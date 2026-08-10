@@ -34,6 +34,12 @@ const settingsInput = z.object({
   debitorStartnummer: z.number().int().min(1).default(10000),
   kreditorStartnummer: z.number().int().min(1).default(70000),
   aufwandskontoDefault: z.string().max(10).nullable().optional(),
+  // Company Control (ReWaWi v1.6): registrierte Kennnummern
+  eori: z.string().max(30).nullable().optional(),
+  betriebsnummer: z.string().max(30).nullable().optional(),
+  bgMitgliedsnummer: z.string().max(50).nullable().optional(),
+  ihk: z.string().max(60).nullable().optional(),
+  glaeubigerId: z.string().max(30).nullable().optional(),
   akzentfarbe: z
     .enum(["petrol", "neutral", "blau", "gruen", "bernstein", "violett", "rot"])
     .default("petrol"),

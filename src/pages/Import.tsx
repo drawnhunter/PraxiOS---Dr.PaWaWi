@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { CheckCircle2, FileText, FileUp, Loader2, Trash2, Upload, XCircle } from "lucide-react";
 
-type Route = "erechnung" | "post" | "kunden" | "produkte" | "bank" | "unbekannt";
+type Route = "erechnung" | "post" | "therapieplan" | "altbestand" | "kunden" | "produkte" | "bank" | "unbekannt";
 
 interface DateiZustand {
   name: string;
@@ -34,6 +34,8 @@ interface Ergebnis {
 const ROUTE_LABEL: Record<Route, string> = {
   erechnung: "E-Rechnung",
   post: "Post Manager",
+  therapieplan: "Therapieplan (IMTZ)",
+  altbestand: "Altbestand (SumUp)",
   kunden: "Kunden-CSV",
   produkte: "Produkte-CSV",
   bank: "Bank-CSV",
@@ -52,6 +54,7 @@ function liesDatei(datei: File): Promise<string> {
 export default function Import() {
   const dateiRef = useRef<HTMLInputElement>(null);
   const [dateien, setDateien] = useState<DateiZustand[]>([]);
+  const [fehler, setFehler] = useState<string | null>(null);
   const [ergebnisse, setErgebnisse] = useState<Ergebnis[] | null>(null);
   const [ziehen, setZiehen] = useState(false);
 
@@ -61,24 +64,29 @@ export default function Import() {
   });
 
   const aufnehmen = async (liste: FileList | File[]) => {
-    const neu: { name: string; base64: string }[] = [];
-    for (const f of Array.from(liste).slice(0, 10)) {
-      neu.push({ name: f.name, base64: await liesDatei(f) });
+    setFehler(null);
+    try {
+      const neu: { name: string; base64: string }[] = [];
+      for (const f of Array.from(liste).slice(0, 10)) {
+        neu.push({ name: f.name, base64: await liesDatei(f) });
+      }
+      if (neu.length === 0) return;
+      setErgebnisse(null);
+      const analysiert = await analysieren.mutateAsync({ dateien: neu });
+      setDateien((alt) => [
+        ...alt,
+        ...analysiert.map((a) => ({
+          name: a.name,
+          base64: neu.find((n) => n.name === a.name)!.base64,
+          route: a.route as Route,
+          postTyp: "rechnung" as const,
+          hinweis: a.hinweis,
+          meta: a.meta,
+        })),
+      ]);
+    } catch (e) {
+      setFehler(e instanceof Error ? e.message : String(e));
     }
-    if (neu.length === 0) return;
-    setErgebnisse(null);
-    const analysiert = await analysieren.mutateAsync({ dateien: neu });
-    setDateien((alt) => [
-      ...alt,
-      ...analysiert.map((a) => ({
-        name: a.name,
-        base64: neu.find((n) => n.name === a.name)!.base64,
-        route: a.route as Route,
-        postTyp: "rechnung" as const,
-        hinweis: a.hinweis,
-        meta: a.meta,
-      })),
-    ]);
   };
 
   const setze = (idx: number, patch: Partial<DateiZustand>) =>
@@ -146,10 +154,16 @@ export default function Import() {
           type="file"
           multiple
           className="hidden"
-          accept=".xml,.pdf,.jpg,.jpeg,.png,.csv"
+          accept=".xml,.pdf,.jpg,.jpeg,.png,.csv,.xlsx,.xls"
           onChange={(e) => e.target.files && void aufnehmen(e.target.files)}
         />
       </div>
+
+      {fehler && (
+        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-left text-sm text-red-700">
+          Import fehlgeschlagen: {fehler}
+        </p>
+      )}
 
       {/* Erkannte Dateien */}
       {dateien.length > 0 && !ergebnisse && (
@@ -178,6 +192,8 @@ export default function Import() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="rechnung">Rechnung</SelectItem>
+                    <SelectItem value="lieferschein">Lieferschein</SelectItem>
+                    <SelectItem value="gutschrift">Gutschrift</SelectItem>
                     <SelectItem value="sonstiges">Sonstiges</SelectItem>
                   </SelectContent>
                 </Select>

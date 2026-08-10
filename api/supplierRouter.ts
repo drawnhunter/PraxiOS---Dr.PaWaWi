@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  createRouter,
-  rechtQuery,
-} from "./middleware";
+import { createRouter, rechtQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { suppliers } from "@db/schema";
 import { eq, like, or, desc } from "drizzle-orm";
@@ -18,6 +15,7 @@ const supplierInput = z.object({
   telefon: z.string().nullable().optional(),
   ustIdNr: z.string().nullable().optional(),
   notizen: z.string().nullable().optional(),
+  kategorieId: z.number().nullable().optional(), // v1.6: Regelwerk-Standardkategorie
 });
 
 export const supplierRouter = createRouter({
@@ -48,7 +46,10 @@ export const supplierRouter = createRouter({
   }),
 
   create: rechtQuery("abrechnung").input(supplierInput).mutation(async ({ input }) => {
-    const [{ id }] = await getDb().insert(suppliers).values(input).$returningId();
+    const [{ id }] = await getDb()
+      .insert(suppliers)
+      .values({ ...input, kategorieId: input.kategorieId ?? null })
+      .$returningId();
     return { id };
   }),
 
@@ -57,7 +58,7 @@ export const supplierRouter = createRouter({
     .mutation(async ({ input }) => {
       await getDb()
         .update(suppliers)
-        .set(input.data)
+        .set({ ...input.data, kategorieId: input.data.kategorieId ?? null })
         .where(eq(suppliers.id, input.id));
       return { ok: true };
     }),

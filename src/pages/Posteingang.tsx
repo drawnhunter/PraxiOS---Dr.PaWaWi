@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { trpc } from "@/providers/trpc";
+import { useSortierung } from "@/lib/sortierung";
 import { geld, datum as fmtDatum } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,14 +36,23 @@ import {
   ArchiveRestore,
   BookCheck,
   FileText,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   ScanSearch,
+  Search,
   Trash2,
   Upload,
 } from "lucide-react";
 
 type Status = "neu" | "gebucht" | "abgelegt";
-type Typ = "rechnung" | "sonstiges";
+type Typ = "rechnung" | "lieferschein" | "gutschrift" | "sonstiges";
+const TYP_LABEL: Record<Typ, string> = {
+  rechnung: "Rechnung",
+  lieferschein: "Lieferschein",
+  gutschrift: "Gutschrift",
+  sonstiges: "Sonstiges",
+};
 type Konfidenz = "hoch" | "mittel" | "niedrig";
 
 interface FormZustand {
@@ -95,6 +106,13 @@ export default function Posteingang() {
   const [form, setForm] = useState<FormZustand>(LEER);
   const [konfidenz, setKonfidenz] = useState<Record<string, Konfidenz>>({});
 
+  // Deeplink: /posteingang?beleg=ID oeffnet das Dokument direkt (v1.5)
+  const [params] = useSearchParams();
+  useEffect(() => {
+    const b = Number(params.get("beleg"));
+    if (Number.isFinite(b) && b > 0) setOffen(b);
+  }, [params]);
+
   const liste = trpc.posteingang.liste.useQuery({
     status: statusFilter === "alle" ? undefined : statusFilter,
     typ: typFilter === "alle" ? undefined : typFilter,
@@ -136,12 +154,10 @@ export default function Posteingang() {
     utils.einrechnung.list.invalidate();
   };
 
-  const anlegen = trpc.posteingang.anlegen.useMutation({
-    onSuccess: (d) => {
-      invalidieren();
-      setOffen(d.id);
-    },
-  });
+  const anlegenBatch = trpc.posteingang.anlegenBatch.useMutation();
+  const [uploadTyp, setUploadTyp] = useState<Typ>("rechnung");
+  const [batchFortschritt, setBatchFortschritt] = useState<{ fertig: number; gesamt: number } | null>(null);
+  const [uploadFehler, setUploadFehler] = useState<string[]>([]);
   const speichern = trpc.posteingang.aktualisieren.useMutation({ onSuccess: invalidieren });
   const buchen = trpc.posteingang.buchen.useMutation({ onSuccess: invalidieren });
   const setStatus = trpc.posteingang.setStatus.useMutation({ onSuccess: invalidieren });
@@ -181,20 +197,75 @@ export default function Posteingang() {
         return n;
       });
       setKonfidenz(k);
+      // v1.6 Regelwerk: Standard-Kategorie des Lieferanten uebernehmen
+      if (d.regelwerk) {
+        setForm((alt) => ({
+          ...alt,
+          kategorieId: d.regelwerk!.kategorieId,
+          konto: d.regelwerk!.konto ?? alt.konto,
+          ustSatz: d.regelwerk!.ustSatz,
+        }));
+      }
     },
   });
 
-  const dateiHochladen = (datei: File) => {
-    const r = new FileReader();
-    r.onload = () => {
-      anlegen.mutate({
-        originalname: datei.name,
-        mime: datei.type || undefined,
-        base64: (r.result as string).split(",")[1],
-        typ: "rechnung",
-      });
-    };
-    r.readAsDataURL(datei);
+  /** v1.6: Regelwerk auch bei manueller Lieferantenwahl anwenden (wenn Felder leer). */
+  const lieferantGewaehlt = (v: string) => {
+    const id = v === "0" ? null : Number(v);
+    const lf = (lieferanten.data ?? []).find((l) => l.id === id);
+    setForm((alt) => {
+      const neu = { ...alt, absenderLieferantId: id };
+      if (lf?.kategorieId) {
+        const kat = (kategorien.data ?? []).find((k) => k.id === lf.kategorieId);
+        if (kat) {
+          neu.kategorieId = alt.kategorieId ?? kat.id;
+          neu.konto = alt.konto || kat.konto || alt.konto;
+          neu.ustSatz = kat.ustSatz ?? alt.ustSatz;
+        }
+      }
+      return neu;
+    });
+  };
+
+  /** v1.4: Massen-Upload — ganze Scan-Stapel, in 10er-Paketen mit Fortschritt. */
+  const dateienHochladen = async (dateien: File[]) => {
+    const CHUNK = 10;
+    setUploadFehler([]);
+    setBatchFortschritt({ fertig: 0, gesamt: dateien.length });
+    const fehler: string[] = [];
+    let ersteId: number | null = null;
+    for (let i = 0; i < dateien.length; i += CHUNK) {
+      const teil = dateien.slice(i, i + CHUNK);
+      try {
+        const payload = await Promise.all(
+          teil.map(
+            (d) =>
+              new Promise<{ originalname: string; mime?: string; base64: string }>((ok, err) => {
+                const r = new FileReader();
+                r.onload = () =>
+                  ok({
+                    originalname: d.name,
+                    mime: d.type || undefined,
+                    base64: (r.result as string).split(",")[1],
+                  });
+                r.onerror = () => err(new Error(d.name));
+                r.readAsDataURL(d);
+              }),
+          ),
+        );
+        const res = await anlegenBatch.mutateAsync({ dateien: payload, typ: uploadTyp });
+        fehler.push(...res.fehler);
+        if (ersteId === null && res.ids.length > 0) ersteId = res.ids[0];
+      } catch (e) {
+        fehler.push(e instanceof Error ? e.message : String(e));
+      }
+      setBatchFortschritt({ fertig: Math.min(i + CHUNK, dateien.length), gesamt: dateien.length });
+    }
+    setBatchFortschritt(null);
+    setUploadFehler(fehler);
+    invalidieren();
+    // Direkt in den Erfassungs-Workflow: ersten neuen Beleg oeffnen
+    if (ersteId !== null && fehler.length === 0) setOffen(ersteId);
   };
 
   const kategorieGewaehlt = (id: string) => {
@@ -207,10 +278,8 @@ export default function Posteingang() {
     }));
   };
 
-  const speichernJetzt = () => {
-    if (!offen) return;
-    speichern.mutate({
-      id: offen,
+  const formPayload = () => ({
+      id: offen!,
       ...form,
       absenderLieferantId: form.absenderLieferantId ?? undefined,
       absenderFreitext: form.absenderFreitext || null,
@@ -225,7 +294,10 @@ export default function Posteingang() {
       gegenkonto: form.gegenkonto || null,
       kategorieId: form.kategorieId ?? undefined,
       notizen: form.notizen || null,
-    });
+  });
+  const speichernJetzt = () => {
+    if (!offen) return;
+    speichern.mutate(formPayload());
   };
 
   const konfFarbe = (feld: string) =>
@@ -241,6 +313,55 @@ export default function Posteingang() {
   const istGebuchtet = d?.status === "gebucht";
   const dataUrl = d ? `data:${d.mime};base64,${d.dateiInhalt}` : "";
 
+  const [q, setQ] = useState("");
+  const sort = useSortierung<NonNullable<typeof liste.data>[number]>("createdAt");
+  const gefiltert = (liste.data ?? []).filter(
+    (r) => !q.trim() ||
+      r.originalname.toLowerCase().includes(q.toLowerCase()) ||
+      (r.lieferantName ?? "").toLowerCase().includes(q.toLowerCase()) ||
+      (r.absenderFreitext ?? "").toLowerCase().includes(q.toLowerCase()) ||
+      (r.stichwort ?? "").toLowerCase().includes(q.toLowerCase()) ||
+      (r.rechnungsnummer ?? "").toLowerCase().includes(q.toLowerCase()),
+  );
+  const zeilen = sort.sortiere(gefiltert, (r, key) =>
+    key === "dokument" ? r.originalname
+    : key === "absender" ? r.lieferantName ?? r.absenderFreitext ?? r.stichwort ?? ""
+    : key === "betrag" ? (r.betrag !== null ? Number(r.betrag) : null)
+    : key === "faellig" ? r.faelligAm ?? r.wiedervorlageAm
+    : key === "quelle" ? r.quelle
+    : key === "status" ? r.status
+    : key === "eingang" ? String(r.createdAt)
+    : null,
+  );
+
+  // Durchraster-Navigation durch die aktuell gefilterte Liste (v1.4)
+  const geordneteIds = zeilen.map((r) => r.id);
+  const aktIdx = offen !== null ? geordneteIds.indexOf(offen) : -1;
+  const nav = (dir: number) => {
+    if (aktIdx < 0) return;
+    const n = geordneteIds[aktIdx + dir];
+    if (n !== undefined) setOffen(n);
+  };
+  const naechsterNeuer = (): number | null => {
+    const danach = geordneteIds
+      .slice(aktIdx + 1)
+      .find((id) => zeilen.find((r) => r.id === id)?.status === "neu");
+    if (danach !== undefined) return danach;
+    return geordneteIds.find((id) => id !== offen && zeilen.find((r) => r.id === id)?.status === "neu") ?? null;
+  };
+  const buchenUndWeiter = async () => {
+    if (!offen || !d) return;
+    const ziel = naechsterNeuer();
+    try {
+      await speichern.mutateAsync(formPayload());
+      await buchen.mutateAsync({ id: offen });
+      invalidieren();
+      setOffen(ziel);
+    } catch {
+      /* Fehlertext wird ueber speichern/buchen.error angezeigt */
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -250,18 +371,43 @@ export default function Posteingang() {
             Eingescannte Post erfassen, prüfen, buchen — mit Zahlungsziel und Wiedervorlage.
           </p>
         </div>
-        <Button onClick={() => dateiRef.current?.click()} disabled={anlegen.isPending}>
-          {anlegen.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-          Beleg hochladen
-        </Button>
-        <input
-          ref={dateiRef}
-          type="file"
-          className="hidden"
-          accept=".pdf,.jpg,.jpeg,.png"
-          onChange={(e) => e.target.files?.[0] && dateiHochladen(e.target.files[0])}
-        />
+        <div className="flex items-center gap-2">
+          <Select value={uploadTyp} onValueChange={(v) => setUploadTyp(v as Typ)}>
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rechnung">Rechnung</SelectItem>
+              <SelectItem value="lieferschein">Lieferschein</SelectItem>
+              <SelectItem value="gutschrift">Gutschrift</SelectItem>
+              <SelectItem value="sonstiges">Sonstiges</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={() => dateiRef.current?.click()} disabled={batchFortschritt !== null}>
+            {batchFortschritt !== null ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+            {batchFortschritt !== null
+              ? `Hochladen ${batchFortschritt.fertig}/${batchFortschritt.gesamt}`
+              : "Belege hochladen"}
+          </Button>
+          <input
+            ref={dateiRef}
+            type="file"
+            multiple
+            className="hidden"
+            accept=".pdf,.jpg,.jpeg,.png"
+            onChange={(e) => {
+              const fs = Array.from(e.target.files ?? []);
+              if (fs.length > 0) dateienHochladen(fs);
+              e.target.value = "";
+            }}
+          />
+        </div>
       </div>
+
+      {uploadFehler.length > 0 && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {uploadFehler.length} Datei(en) fehlgeschlagen: {uploadFehler.slice(0, 3).join(" · ")}
+          <button type="button" className="ml-2 underline" onClick={() => setUploadFehler([])}>schließen</button>
+        </p>
+      )}
 
       {/* Filter */}
       <div className="flex flex-wrap gap-2">
@@ -276,11 +422,16 @@ export default function Posteingang() {
           </Button>
         ))}
         <span className="mx-2 border-l border-neutral-200" />
-        {(["alle", "rechnung", "sonstiges"] as const).map((t) => (
+        {(["alle", "rechnung", "lieferschein", "gutschrift", "sonstiges"] as const).map((t) => (
           <Button key={t} size="sm" variant={typFilter === t ? "default" : "outline"} onClick={() => setTypFilter(t)}>
-            {t === "alle" ? "Alle Typen" : t === "rechnung" ? "Rechnungen" : "Sonstiges"}
+            {t === "alle" ? "Alle Typen" : TYP_LABEL[t]}
           </Button>
         ))}
+      </div>
+
+      <div className="relative mb-3 max-w-xs">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen …" className="pl-8" />
       </div>
 
       {/* Liste */}
@@ -288,17 +439,17 @@ export default function Posteingang() {
         <table className="w-full text-sm">
           <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
             <tr>
-              <th className="px-3 py-2 font-medium">Dokument</th>
-              <th className="px-3 py-2 font-medium">Absender</th>
-              <th className="px-3 py-2 font-medium text-right">Betrag</th>
-              <th className="px-3 py-2 font-medium">Fällig / WV</th>
-              <th className="px-3 py-2 font-medium">Quelle</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Eingang</th>
+              <th className="cursor-pointer select-none px-3 py-2 font-medium" onClick={() => sort.umschalten("dokument")}>Dokument<sort.KopfIcon k="dokument" /></th>
+              <th className="cursor-pointer select-none px-3 py-2 font-medium" onClick={() => sort.umschalten("absender")}>Absender<sort.KopfIcon k="absender" /></th>
+              <th className="cursor-pointer select-none px-3 py-2 font-medium text-right" onClick={() => sort.umschalten("betrag")}>Betrag<sort.KopfIcon k="betrag" /></th>
+              <th className="cursor-pointer select-none px-3 py-2 font-medium" onClick={() => sort.umschalten("faellig")}>Fällig / WV<sort.KopfIcon k="faellig" /></th>
+              <th className="cursor-pointer select-none px-3 py-2 font-medium" onClick={() => sort.umschalten("quelle")}>Quelle<sort.KopfIcon k="quelle" /></th>
+              <th className="cursor-pointer select-none px-3 py-2 font-medium" onClick={() => sort.umschalten("status")}>Status<sort.KopfIcon k="status" /></th>
+              <th className="cursor-pointer select-none px-3 py-2 font-medium" onClick={() => sort.umschalten("eingang")}>Eingang<sort.KopfIcon k="eingang" /></th>
             </tr>
           </thead>
           <tbody>
-            {(liste.data ?? []).map((r) => (
+            {zeilen.map((r) => (
               <tr
                 key={r.id}
                 className="cursor-pointer border-b border-neutral-100 last:border-0 hover:bg-neutral-50"
@@ -308,7 +459,12 @@ export default function Posteingang() {
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 shrink-0 text-neutral-400" />
                     <div>
-                      <div className="font-medium text-neutral-800">{r.stichwort ?? r.originalname}</div>
+                      <div className="flex items-center gap-2 font-medium text-neutral-800">
+                        {r.stichwort ?? r.originalname}
+                        {r.typ !== "rechnung" && (
+                          <Badge variant="outline" className="text-[10px]">{TYP_LABEL[r.typ as Typ] ?? r.typ}</Badge>
+                        )}
+                      </div>
                       <div className="text-xs text-neutral-400">{r.originalname}</div>
                     </div>
                   </div>
@@ -322,7 +478,7 @@ export default function Posteingang() {
                 <td className="px-3 py-2">
                   <Badge variant={STATUS_VARIANT[r.status]}>{STATUS_LABEL[r.status]}</Badge>
                 </td>
-                <td className="px-3 py-2 text-xs text-neutral-500">{fmtDatum(r.createdAt.toString().slice(0, 10))}</td>
+                <td className="px-3 py-2 text-xs text-neutral-500">{fmtDatum(r.createdAt instanceof Date ? r.createdAt.toISOString().slice(0, 10) : String(r.createdAt).slice(0, 10))}</td>
               </tr>
             ))}
             {liste.data?.length === 0 && (
@@ -341,8 +497,22 @@ export default function Posteingang() {
         <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
+              <span className="flex items-center gap-0.5">
+                <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={aktIdx <= 0} onClick={() => nav(-1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-xs font-normal text-neutral-400">
+                  {aktIdx >= 0 ? `${aktIdx + 1}/${geordneteIds.length}` : "–"}
+                </span>
+                <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={aktIdx < 0 || aktIdx >= geordneteIds.length - 1} onClick={() => nav(1)}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </span>
               {d?.originalname ?? "Dokument"}
               {d && <Badge variant={STATUS_VARIANT[d.status]}>{STATUS_LABEL[d.status]}</Badge>}
+              {d && d.typ !== "rechnung" && (
+                <Badge variant="outline">{TYP_LABEL[d.typ as Typ] ?? d.typ}</Badge>
+              )}
             </DialogTitle>
           </DialogHeader>
           {d && (
@@ -384,6 +554,8 @@ export default function Posteingang() {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="rechnung">Rechnung</SelectItem>
+                        <SelectItem value="lieferschein">Lieferschein</SelectItem>
+                        <SelectItem value="gutschrift">Gutschrift</SelectItem>
                         <SelectItem value="sonstiges">Sonstiges</SelectItem>
                       </SelectContent>
                     </Select>
@@ -409,7 +581,7 @@ export default function Posteingang() {
                     <Label>Absender (Lieferant)</Label>
                     <Select
                       value={form.absenderLieferantId?.toString() ?? "0"}
-                      onValueChange={(v) => setForm({ ...form, absenderLieferantId: v === "0" ? null : Number(v) })}
+                      onValueChange={lieferantGewaehlt}
                       disabled={istGebuchtet}
                     >
                       <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
@@ -529,10 +701,16 @@ export default function Posteingang() {
                         Speichern
                       </Button>
                       {form.typ === "rechnung" && (
-                        <Button size="sm" variant="outline" onClick={() => buchen.mutate({ id: d.id })} disabled={buchen.isPending}>
-                          {buchen.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookCheck className="mr-2 h-4 w-4" />}
-                          Buchen
-                        </Button>
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => buchen.mutate({ id: d.id })} disabled={buchen.isPending}>
+                            {buchen.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookCheck className="mr-2 h-4 w-4" />}
+                            Buchen
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={buchenUndWeiter} disabled={speichern.isPending || buchen.isPending}>
+                            {speichern.isPending || buchen.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookCheck className="mr-2 h-4 w-4" />}
+                            Buchen &amp; nächster
+                          </Button>
+                        </>
                       )}
                       <Button
                         size="sm"

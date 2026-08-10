@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Upload, CheckCircle2, FileDown } from "lucide-react";
+import { DateiImport } from "@/components/DateiImport";
 
 type Mapping = Record<string, string | undefined>;
 const FELDER: { key: string; label: string; pflicht?: boolean }[] = [
@@ -35,6 +36,7 @@ const FELDER: { key: string; label: string; pflicht?: boolean }[] = [
 export default function InvoiceImport() {
   const utils = trpc.useUtils();
   const dateiRef = useRef<HTMLInputElement>(null);
+  const [modus, setModus] = useState<"datei" | "csv">("datei");
   const [csvText, setCsvText] = useState<string | null>(null);
   const [dateiname, setDateiname] = useState("");
   const [mapping, setMapping] = useState<Mapping | null>(null);
@@ -84,13 +86,31 @@ export default function InvoiceImport() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Rechnungen importieren</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Altbestand aus einer Rechnungs-CSV (z. B. SumUp) übernehmen. Die Belege
-          behalten ihre <strong>Original-Nummern</strong> und werden als
-          finalisiert importiert — dein laufender Nummernkreis bleibt unberührt.
-          Zeilen mit gleicher Rechnungsnummer werden als Positionen gruppiert.
+          Altbestand übernehmen — am vollständigsten aus den <strong>Rechnungs-PDFs</strong> (SumUp)
+          oder XRechnungen; alternativ aus einer Rechnungs-CSV. Die Belege behalten ihre{" "}
+          <strong>Original-Nummern</strong> und werden als finalisiert importiert — dein laufender
+          Nummernkreis bleibt unberührt.
         </p>
       </div>
 
+      {/* Modus-Wahl */}
+      <div className="flex gap-2">
+        <Button size="sm" variant={modus === "datei" ? "default" : "outline"} onClick={() => setModus("datei")}>
+          PDF & XRechnung (vollständig)
+        </Button>
+        <Button size="sm" variant={modus === "csv" ? "default" : "outline"} onClick={() => setModus("csv")}>
+          CSV-Export
+        </Button>
+      </div>
+
+      {modus === "datei" && (
+        <section className="rounded-lg border border-neutral-200 bg-white p-5">
+          <DateiImport />
+        </section>
+      )}
+
+      {modus === "csv" && (
+        <>
       {/* ── Schritt 1 ── */}
       <section className="rounded-lg border border-neutral-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-medium text-neutral-700">1. Datei wählen</h2>
@@ -232,6 +252,8 @@ export default function InvoiceImport() {
             <Link to="/rechnungen">Zu den Rechnungen</Link>
           </Button>
         </section>
+      )}
+        </>
       )}
     </div>
   );

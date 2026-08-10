@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
+import { useSortierung } from "@/lib/sortierung";
 import { geld, parseGeldInput } from "@/lib/format";
 import { UST_SAETZE, EINHEITEN } from "@contracts/invoicing";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,7 @@ export default function Products() {
   const [form, setForm] = useState<FormState>(leeresFormular);
 
   const utils = trpc.useUtils();
+  const sort = useSortierung<NonNullable<typeof liste.data>[number]>("name");
   const liste = trpc.products.list.useQuery({ suche: suche || undefined });
   const speichern = trpc.products.create.useMutation({
     onSuccess: () => {
@@ -180,11 +182,11 @@ export default function Products() {
           <table className="w-full min-w-[600px] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
-              <th className="px-4 py-2.5 font-medium">Bezeichnung</th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("name")}>Bezeichnung<sort.KopfIcon k="name" /></th>
               <th className="px-4 py-2.5 font-medium">Einheit</th>
               <th className="px-4 py-2.5 font-medium">USt</th>
-              <th className="px-4 py-2.5 text-right font-medium">VK netto</th>
-              <th className="px-4 py-2.5 text-right font-medium">EK netto</th>
+              <th className="cursor-pointer select-none px-4 py-2.5 text-right font-medium" onClick={() => sort.umschalten("vk")}>VK netto<sort.KopfIcon k="vk" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 text-right font-medium" onClick={() => sort.umschalten("ek")}>EK netto<sort.KopfIcon k="ek" /></th>
               <th className="px-4 py-2.5 text-right font-medium">Aktionen</th>
             </tr>
           </thead>
@@ -196,7 +198,9 @@ export default function Products() {
                 </td>
               </tr>
             )}
-            {(liste.data ?? []).map((p) => (
+            {sort.sortiere(liste.data ?? [], (p, key) =>
+              key === "name" ? p.name : key === "vk" ? Number(p.preisNetto) : key === "ek" ? Number(p.ekPreisNetto ?? 0) : key === "ust" ? p.ustSatz : null,
+            ).map((p) => (
               <tr key={p.id} className="border-b border-neutral-100 last:border-0">
                 <td className="px-4 py-2.5">
                   <div className="font-medium text-neutral-900">
