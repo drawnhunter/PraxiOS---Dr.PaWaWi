@@ -1,5 +1,30 @@
 # Changelog — PraxiOS
 
+## [1.6.0] — 2026-08-11 — Demo-Kit (demopa): Landingpage, XP-Desktop, Musterdaten-Seed
+
+### Demo-Instanz vorbereitet
+- **Seriöse Landingpage** unter `/demo/` (statisch): Login-Daten, Feature-
+  Überblick, Reset-Hinweis, Links zur App, zum Retro-Modus und zu GitHub
+- **Retro-Demo-PC** unter `/xp-desktop/` (aus ReWaWi portiert, komplett auf
+  Dr.PaWaWi umgebrandet): Windows-XP-Illusion mit App-Iframe (gleiche Origin),
+  Demo-Dateien-Ordner (XRechnung, SumUp-CSV, Scan-PDF, Kunden-CSV),
+  dynamische Version aus `ping`
+- **Demo-Seed** (`db/demoSeed.ts`, idempotent): Praxis-Stammdaten + age-Keys,
+  Demo-Login (`demo` / `pawawi-demo`) + zwei Therapeuten mit Kalenderfarben,
+  6 Muster-Patienten, dokumentierter Therapieplan (laufende Woche, gemischte
+  Status), Protokoll-Vorlage + ausgefülltes Infusionsprotokoll mit
+  Diagramm-Daten, Dr.-X-Musterbogen, finalisierte Rechnung, bezahlte Vorkasse
+  + Schlussrechnung mit Depot-Abzug, Post-Manager-Beleg (OCR-Übungsstück),
+  Kollege für den Austausch, Chronik-Einträge
+- **Demo-Betrieb**: `demo/docker-compose.yml` (eigener Stack `demopa`, Port
+  3202, eigene Volumes, bewusst ohne zweiten LibreTranslate-Container wegen
+  RAM), `scripts/demo-reset.sh` (DB-Drop + Migration + Re-Seed + Uploads leeren,
+  für täglichen Cron), `demo/README.md` mit kompletter Einrichtung inkl.
+  dynv6-Zone, Caddy-Block und SupportHub-Registrierung (`produktVon: praxiswerk`,
+  `behalten`-Liste)
+
+---
+
 ## [1.5.0] — 2026-08-10 — ReWaWi-v1.7.0-Sync (Post Manager, Eingangsbelege, Company Control, Banking)
 
 > Cherry-Pick-Sync aus ReWaWi v1.2.1–v1.7.0 nach Handover-Empfehlung.

@@ -1,0 +1,53 @@
+name: demopa
+
+# Dr.PaWaWi DEMO-Instanz (demopa.praxios.dynv6.net)
+# Eigener Stack neben der Produktiv-Instanz: eigene Volumes, eigener Port.
+# Secrets kommen aus .env (Listen-Syntax, wie Produktiv) — cp .env.example .env.
+#
+# HINWEIS RAM: Ohne eigenen LibreTranslate-Container (die Produktiv-Instanz
+# hat bereits einen; ein zweiter lädt ein zweites Modell-Set in den RAM).
+# Mehrsprachige Bögen zeigen in der Demo deshalb nur Deutsch — alle anderen
+# Features laufen voll. Bei Bedarf den translate-Service unten einkommentieren.
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD        # aus .env (Pflicht)
+      - MYSQL_DATABASE=demopa
+    volumes:
+      - db-daten:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Optional (RAM!): eigener Übersetzungs-Sidecar für mehrsprachige Bögen
+  # translate:
+  #   image: libretranslate/libretranslate:latest
+  #   restart: unless-stopped
+  #   environment:
+  #     - LT_LOAD_ONLY=de,en,tr,ar,ru,uk,sk
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL               # aus .env — mysql://root:<pw>@db:3306/demopa
+      - APP_SECRET                 # aus .env
+      - PORT=3000
+      - UPLOAD_DIR=/app/dokumente
+      - TRANSLATE_URL=http://translate:5000   # ohne translate-Service wirkungslos
+    volumes:
+      - dokumente:/app/dokumente
+    ports:
+      - "3202:3000"                # demopa-Port (3201 ist demore/ReWaWi)
+
+volumes:
+  db-daten:
+  dokumente:
