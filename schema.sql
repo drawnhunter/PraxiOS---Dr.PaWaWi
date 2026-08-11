@@ -204,7 +204,10 @@ DROP TABLE IF EXISTS `invoices`;
 CREATE TABLE `invoices` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `nummer` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `typ` enum('standard','proforma') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'standard',
   `status` enum('entwurf','finalisiert','storniert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'entwurf',
+  `abschlag_betrag` decimal(12,2) DEFAULT NULL,
+  `proforma_von_id` bigint unsigned DEFAULT NULL,
   `customer_id` bigint unsigned NOT NULL,
   `rechnungsdatum` date NOT NULL,
   `faelligkeitsdatum` date NOT NULL,
@@ -403,9 +406,11 @@ CREATE TABLE `suppliers` (
   `ust_id_nr` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `notizen` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `archiviert` tinyint(1) NOT NULL DEFAULT '0',
+  `kategorie_id` bigint unsigned DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,
-  KEY `suppliers_name_idx` (`name`)
+  KEY `suppliers_name_idx` (`name`),
+  CONSTRAINT `suppliers_kategorie_fk` FOREIGN KEY (`kategorie_id`) REFERENCES `kategorien` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=2000001;
 
 DROP TABLE IF EXISTS `users`;

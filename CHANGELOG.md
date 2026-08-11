@@ -1,5 +1,20 @@
 # Changelog — PraxiOS
 
+## [1.6.1] — 2026-08-11 — Fix: Demo-Reset ohne Basis-Schema, schema.sql-Sync
+
+### Fixes
+- **demo-reset.sh**: Nach dem `DROP DATABASE` wird jetzt auch die
+  `schema.sql` wieder eingespielt — das MySQL-Init läuft nur beim allerersten
+  Volume-Start, ohne Reimport blieb die Demo-DB nach einem Reset leer
+  (Login-Fehler `Table 'demopa.users' doesn't exist`, FK-Fehler in der
+  Migration). Zusätzlich wartet der Reset jetzt vor dem Seed auf die Migration.
+- **schema.sql ↔ migrate.ts synchronisiert**: Frische Installationen bekamen
+  `invoices.typ/abschlag_betrag/proforma_von_id` und `suppliers.kategorie_id`
+  bisher nur nachträglich per Migration — stehen jetzt direkt im Basis-Schema
+  (Verifikation: automatischer Abgleich aller Migrations-Einträge = 0 Abweichungen)
+
+---
+
 ## [1.6.0] — 2026-08-11 — Demo-Kit (demopa): Landingpage, XP-Desktop, Musterdaten-Seed
 
 ### Demo-Instanz vorbereitet

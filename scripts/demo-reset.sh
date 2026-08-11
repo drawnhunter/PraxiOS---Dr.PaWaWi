@@ -19,16 +19,21 @@ echo "[$(date -Is)] demopa-Reset startet"
 docker compose exec -T db mysql -uroot -p"$DB_PASS" \
   -e "DROP DATABASE IF EXISTS demopa; CREATE DATABASE demopa;"
 
-# 2) App neu starten — Migration (Tabellen + Leistungskatalog) läuft frisch
+# 1b) Basis-Schema wieder einspielen — das Init (schema.sql) läuft bei MySQL
+# nur beim ALLERERSTEN Volume-Start; nach einem Drop bleibt die DB sonst leer
+# und die Migration kann nur inkrementelle Ergänzungen (keine Basistabellen!).
+docker compose exec -T db sh -c "mysql -uroot -p\"$DB_PASS\" demopa" < "$PROJEKT_DIR/schema.sql"
+
+# 2) App neu starten — Migration (Lücken + Leistungskatalog) läuft frisch
 docker compose restart app
 echo "Warte auf Migration …"
 for i in $(seq 1 24); do
-  if docker compose logs app --tail=200 2>/dev/null | grep -q "\[migrate\]\|Server läuft\|listening"; then
+  if docker compose logs app --tail=200 2>/dev/null | grep -q "\[seed\] Leistungskatalog\|\[seed\] Gruppen\|Server running"; then
     break
   fi
   sleep 5
 done
-sleep 10   # Sicherheitszugabe, bis migrate durch ist
+sleep 5
 
 # 3) Musterdaten seeden (tsx ist über vitest im Image vorhanden)
 docker compose exec -T app npx tsx db/demoSeed.ts
