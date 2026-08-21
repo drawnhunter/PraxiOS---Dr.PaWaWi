@@ -162,6 +162,7 @@ CREATE TABLE `delivery_notes` (
   `status` enum('entwurf','finalisiert','storniert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'entwurf',
   `abschlag_betrag` decimal(12,2) DEFAULT NULL,
   `proforma_von_id` bigint unsigned DEFAULT NULL,
+  `therapieplan_id` bigint unsigned DEFAULT NULL,
   `customer_id` bigint unsigned NOT NULL,
   `invoice_id` bigint unsigned DEFAULT NULL,
   `datum` date NOT NULL,

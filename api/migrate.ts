@@ -65,6 +65,8 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "invoices", spalte: "proforma_von_id", ddl: "ALTER TABLE invoices ADD COLUMN proforma_von_id BIGINT UNSIGNED NULL AFTER abschlag_betrag" },
   // ReWaWi-Sync (1.5): Archivieren statt Löschen
   { tabelle: "invoices", spalte: "archiviert", ddl: "ALTER TABLE invoices ADD COLUMN archiviert TINYINT(1) NOT NULL DEFAULT 0 AFTER bereits_bezahlt" },
+  // Plan→Rechnung-Rückbezug (1.6.2)
+  { tabelle: "invoices", spalte: "therapieplan_id", ddl: "ALTER TABLE invoices ADD COLUMN therapieplan_id BIGINT UNSIGNED NULL AFTER proforma_von_id" },
   // ReWaWi-Sync (1.5): Regelwerk — Standard-Kategorie je Lieferant
   { tabelle: "suppliers", spalte: "kategorie_id", ddl: "ALTER TABLE suppliers ADD COLUMN kategorie_id BIGINT UNSIGNED NULL AFTER archiviert, ADD CONSTRAINT suppliers_kategorie_fk FOREIGN KEY (kategorie_id) REFERENCES kategorien(id) ON DELETE SET NULL" },
   // ReWaWi-Sync (1.5): Company Control — registrierte Kennnummern

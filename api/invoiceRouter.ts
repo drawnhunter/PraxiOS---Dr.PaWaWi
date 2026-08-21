@@ -15,7 +15,9 @@ import {
   bankAccounts,
   bankTransaktionen,
   mailLog,
+  therapyPlans,
 } from "@db/schema";
+import { schreibeTimeline } from "./lib/timeline";
 import { eq, desc, and, ne, inArray } from "drizzle-orm";
 import {
   computeTotals,
@@ -555,6 +557,25 @@ export const invoiceRouter = createRouter({
           .where(eq(invoiceTherapieWochen.invoiceId, input.id));
         await tx.delete(invoices).where(eq(invoices.id, input.id));
       });
+      // Plan→Rechnung: Entwurf gelöscht → Herkunfts-Plan zurück auf „dokumentiert",
+      // damit die Rechnung neu erzeugt werden kann (war sonst Endstation).
+      if (rechnung.therapieplanId) {
+        const plan = await db.query.therapyPlans.findFirst({
+          where: eq(therapyPlans.id, rechnung.therapieplanId),
+        });
+        if (plan && plan.status === "abgerechnet") {
+          await db
+            .update(therapyPlans)
+            .set({ status: "dokumentiert" })
+            .where(eq(therapyPlans.id, plan.id));
+          await schreibeTimeline({
+            patientId: plan.patientId,
+            typ: "status",
+            titel: `Rechnungsentwurf gelöscht — Therapieplan #${plan.id} zurück auf „dokumentiert"`,
+            beschreibung: `Gelöschter Entwurf #${rechnung.id}; der Plan kann erneut abgerechnet werden.`,
+          });
+        }
+      }
       return { ok: true };
     }),
 

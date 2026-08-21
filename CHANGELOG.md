@@ -1,5 +1,23 @@
 # Changelog — PraxiOS
 
+## [1.6.2] — 2026-08-11 — Fix: Plan→Rechnung-Fallen (Teilwoche + Endstation)
+
+### Fixes aus dem Praxis-Alltag
+- **Teilwochen-Warnung**: Wenn beim „Rechnung erstellen" aus einem dokumentierten
+  Plan noch Einträge ohne Status „stattgefunden" existieren, warnt das System
+  jetzt mit Anzahl und Tagen — bewusst bestätigen (nur stattgefundenen Teil
+  verrechnen) oder erst die Tage markieren. Vorher wurde still eine unvollständige
+  Rechnung erzeugt
+- **Kopf-Datum = Plan-Zeitraum**: Die Rechnung aus einem Plan zeigt jetzt oben
+  den vollen Plan-Zeitraum (von–bis), nicht nur die Spanne der abgerechneten Tage
+- **Entwurf löschen setzt den Plan zurück**: Wird ein aus einem Therapieplan
+  erzeugter Rechnungsentwurf gelöscht, geht der Plan automatisch zurück auf
+  „dokumentiert" (inkl. Chronik-Eintrag) und kann erneut abgerechnet/editiert
+  werden — bisher blieb er unwiderruflich auf „abgerechnet" hängen
+  (Feld `invoices.therapieplan_id` als Rückbezug)
+
+---
+
 ## [1.6.1] — 2026-08-11 — Fix: Demo-Reset ohne Basis-Schema, schema.sql-Sync
 
 ### Fixes

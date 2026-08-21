@@ -580,7 +580,7 @@ export const planRouter = createRouter({
 
   // ── Direkt verrechnen: Plan → Rechnungsentwurf (der Fusion-Weg) ──────────
   rechnungErstellen: rechtQuery("plaene")
-    .input(z.object({ id: z.number().int() }))
+    .input(z.object({ id: z.number().int(), bestehendeWocheBestaetigen: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
       const plan = await db.query.therapyPlans.findFirst({
@@ -612,12 +612,34 @@ export const planRouter = createRouter({
         });
       }
 
+      // Falle aus der Praxis: Plan dokumentiert, aber nicht alle Tage als
+      // „stattgefunden" markiert → Rechnung enthielte nur einen Teil der Woche.
+      // Abgesagt/ausgefallen zählen nicht (die sind bewusst nicht zu verrechnen).
+      const offene = plan.entries.filter(
+        (e) => e.status !== "stattgefunden" && e.status !== "ausgefallen" && e.status !== "abgesagt",
+      );
+      if (offene.length > 0 && !input.bestehendeWocheBestaetigen) {
+        const tage = [...new Set(offene.map((e) => datumDe(e.datum)))].join(", ");
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            `Achtung: ${offene.length} Einträge an ${tage} sind nicht als „stattgefunden" markiert ` +
+            `und würden in der Rechnung fehlen (abgerechnet werden ${eintraege.length} von ${plan.entries.length} Einträgen). ` +
+            `Entweder erst die fehlenden Tage markieren — oder bewusst nur den stattgefundenen Teil verrechnen.`,
+        });
+      }
+
       const quelle = `Therapieplan #${plan.id} (${datumDe(plan.vonDatum)}–${datumDe(plan.bisDatum)})`;
       const ergebnis = await erstelleEntwurfAusEintraegen(
         plan.patientId,
         eintraege,
         quelle,
         ctx.user.id,
+        {
+          therapieplanId: plan.id,
+          // Kopf-Datum = Plan-Zeitraum (nicht nur die abgerechneten Tage)
+          leistungsdatum: `${datumDe(plan.vonDatum)}–${datumDe(plan.bisDatum)}`,
+        },
       );
 
       // Plan ist damit abgerechnet + Chronik

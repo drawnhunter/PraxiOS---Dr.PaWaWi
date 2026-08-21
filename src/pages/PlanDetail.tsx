@@ -442,7 +442,26 @@ export default function PlanDetail() {
           )}
           {p.status === "dokumentiert" && (
             <Button
-              onClick={() => rechnungErstellen.mutate({ id: planId })}
+              onClick={() => {
+                rechnungErstellen.reset();
+                rechnungErstellen.mutate(
+                  { id: planId },
+                  {
+                    onError: (e) => {
+                      // Teilwoche-Warnung vom Server: bewusst bestätigen oder markieren
+                      if (e.data?.code === "PRECONDITION_FAILED") {
+                        const ja = window.confirm(
+                          e.message +
+                            "\n\nJetzt Rechnung nur über die stattgefundenen Einträge erstellen?\n(Abbrechen = erst die fehlenden Tage markieren)",
+                        );
+                        if (ja) {
+                          rechnungErstellen.mutate({ id: planId, bestehendeWocheBestaetigen: true });
+                        }
+                      }
+                    },
+                  },
+                );
+              }}
               disabled={rechnungErstellen.isPending}
             >
               {rechnungErstellen.isPending ? "Erstelle …" : "Rechnung erstellen"}

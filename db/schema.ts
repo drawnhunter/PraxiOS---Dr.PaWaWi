@@ -291,6 +291,9 @@ export const invoices = mysqlTable(
     abschlagBetrag: decimal("abschlag_betrag", { precision: 12, scale: 2 }),
     // Schlussrechnung → verrechnete Proforma (gegen Doppel-Verrechnung geprüft)
     proformaVonId: bigint("proforma_von_id", { mode: "number", unsigned: true }),
+    // Herkunft: Rechnung wurde aus diesem Therapieplan erzeugt (für Rücksetzung
+    // des Plan-Status, wenn der Entwurf gelöscht wird)
+    therapieplanId: bigint("therapieplan_id", { mode: "number", unsigned: true }),
     customerId: bigint("customer_id", { mode: "number", unsigned: true }).notNull(),
     rechnungsdatum: date("rechnungsdatum", { mode: "string" }).notNull(),
     faelligkeitsdatum: date("faelligkeitsdatum", { mode: "string" }).notNull(),

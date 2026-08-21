@@ -68,6 +68,12 @@ export async function erstelleEntwurfAusEintraegen(
   eintraege: AbrechnungsEintrag[],
   quelle: string, // z. B. „Therapieplan #42 (28.09.–09.10.2026)"
   erstelltVon: number | null,
+  optionen?: {
+    /** Herkunfts-Plan (Plan→Rechnung): ermöglicht Rücksetzung beim Löschen des Entwurfs. */
+    therapieplanId?: number;
+    /** Kopf-Datum explizit setzen (z. B. Plan-Zeitraum statt nur abgerechnete Tage). */
+    leistungsdatum?: string;
+  },
 ): Promise<AbrechnungsErgebnis> {
   const db = getDb();
   const patient = await db.query.customers.findFirst({
@@ -249,9 +255,10 @@ export async function erstelleEntwurfAusEintraegen(
   const daten = eintraege.map((e) => e.datum).sort();
   const kwListe = wochen.map((w) => w.kw).sort((a, b) => a - b).join("/");
   const leistungsdatum =
-    daten.length > 1
+    optionen?.leistungsdatum ??
+    (daten.length > 1
       ? `${fmtDe(daten[0])}–${fmtDe(daten[daten.length - 1])} (KW ${kwListe})`
-      : `${fmtDe(daten[0])} (KW ${kwListe})`;
+      : `${fmtDe(daten[0])} (KW ${kwListe})`);
 
   const heute = new Date();
   const zielTage = patient.zahlungszielTage ?? settings?.standardZahlungsziel ?? 14;
@@ -278,6 +285,7 @@ export async function erstelleEntwurfAusEintraegen(
       ust: centToDecimal(totals.ustCent),
       brutto: centToDecimal(totals.bruttoCent),
       bemerkung: `Erstellt aus ${quelle}`,
+      therapieplanId: optionen?.therapieplanId ?? null,
     })
     .$returningId();
 
