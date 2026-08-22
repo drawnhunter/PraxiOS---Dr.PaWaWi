@@ -358,7 +358,40 @@ export default function InvoiceDetail() {
           )}
           {statusBadge(r.status)}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Primär-Aktionen des Entwurfs stehen bewusst OBEN (nicht am Seitenende) */}
+          {istEntwurf && (
+            <>
+              <Button size="sm" variant="outline" onClick={speichernKlick} disabled={speichern.isPending}>
+                {speichern.isPending ? "Speichere …" : "Entwurf speichern"}
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" disabled={items.filter((i) => i.bezeichnung.trim()).length === 0}>
+                    {r.typ === "proforma" ? "Proforma ausstellen" : "Finalisieren & Nummer vergeben"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {r.typ === "proforma" ? "Proforma ausstellen?" : "Rechnung finalisieren?"}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {r.typ === "proforma"
+                        ? "Der Entwurf wird gespeichert und eingefroren. Es wird keine Rechnungsnummer vergeben — eine Proforma/Vorkasse ist kein GoBD-Beleg. Nach Zahlungseingang wandelst du sie über „In Rechnung umwandeln“ in die Schlussrechnung um."
+                        : "Der Entwurf wird gespeichert, die nächste Rechnungsnummer vergeben und der Beleg eingefroren. Danach ist er GoBD-konform nicht mehr veränderbar — Korrekturen nur noch per Gutschrift/Storno."}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                    <AlertDialogAction onClick={speichernUndFinalisieren}>
+                      Jetzt finalisieren
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
           <PdfVorschauButton art="invoice" id={r.id} titel={`Rechnung ${r.nummer ?? "Entwurf"}`} />
           <MailDialog art="invoice" id={r.id} />
           <PdfButton art="invoice" id={r.id} />
@@ -583,6 +616,17 @@ export default function InvoiceDetail() {
                   />
                 ) : (
                   <div className="mt-1 text-sm">{r.kundeOrt}</div>
+                )}
+              </div>
+              <div>
+                <Label>Land</Label>
+                {istEntwurf ? (
+                  <Input
+                    value={kopf.kundeLand}
+                    onChange={(e) => setKopf({ ...kopf, kundeLand: e.target.value })}
+                  />
+                ) : (
+                  <div className="mt-1 text-sm">{r.kundeLand}</div>
                 )}
               </div>
             </div>
@@ -1052,39 +1096,6 @@ export default function InvoiceDetail() {
           {vorkasseSetzen.error && (
             <span className="text-sm text-red-600">{vorkasseSetzen.error.message}</span>
           )}
-        </div>
-      )}
-
-      {istEntwurf && (
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" onClick={speichernKlick} disabled={speichern.isPending}>
-            {speichern.isPending ? "Speichere …" : "Entwurf speichern"}
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button disabled={items.filter((i) => i.bezeichnung.trim()).length === 0}>
-                {r.typ === "proforma" ? "Proforma ausstellen" : "Finalisieren & Nummer vergeben"}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  {r.typ === "proforma" ? "Proforma ausstellen?" : "Rechnung finalisieren?"}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {r.typ === "proforma"
-                    ? "Der Entwurf wird gespeichert und eingefroren. Es wird keine Rechnungsnummer vergeben — eine Proforma/Vorkasse ist kein GoBD-Beleg. Nach Zahlungseingang wandelst du sie über „In Rechnung umwandeln“ in die Schlussrechnung um."
-                    : "Der Entwurf wird gespeichert, die nächste Rechnungsnummer vergeben und der Beleg eingefroren. Danach ist er GoBD-konform nicht mehr veränderbar — Korrekturen nur noch per Gutschrift/Storno."}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                <AlertDialogAction onClick={speichernUndFinalisieren}>
-                  Jetzt finalisieren
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </div>
       )}
 

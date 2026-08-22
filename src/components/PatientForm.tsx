@@ -208,6 +208,14 @@ export function PatientForm({ offen, onOpenChange, patient }: Props) {
             />
           </div>
           <div>
+            <Label>Land</Label>
+            <Input
+              placeholder="Deutschland"
+              value={form.land}
+              onChange={(e) => setForm({ ...form, land: e.target.value })}
+            />
+          </div>
+          <div>
             <Label>Telefon</Label>
             <Input
               value={form.telefon}

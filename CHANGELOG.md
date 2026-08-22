@@ -1,5 +1,18 @@
 # Changelog — PraxiOS
 
+## [1.6.3] — 2026-08-22 — Land-Feld editierbar + Aktions-Buttons nach oben
+
+### Fixes & UX
+- **Land ist jetzt überall editierbar**: im Patientenformular (Stammdaten) und
+  im Rechnungskopf „Empfänger & Belegdaten" — bisher stand fest „Deutschland"
+  drin, was Auslandspatienten (z. B. Slowakei) unbelegbar machte
+- **Aktions-Buttons des Entwurfs nach oben**: „Entwurf speichern" und
+  „Finalisieren & Nummer vergeben" stehen jetzt prominent in der Kopfzeile der
+  Rechnungsansicht (nicht mehr am Seitenende) — deutlich übersichtlicher,
+  besonders für neue Anwender
+
+---
+
 ## [1.6.2] — 2026-08-11 — Fix: Plan→Rechnung-Fallen (Teilwoche + Endstation)
 
 ### Fixes aus dem Praxis-Alltag
