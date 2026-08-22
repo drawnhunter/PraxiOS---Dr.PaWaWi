@@ -1,5 +1,20 @@
 # Changelog — PraxiOS
 
+## [1.7.3] — 2026-08-23 — Sicherheit: Keine rohen DB-Fehler mehr am Client
+
+### Security (Handover-Baustelle „Login zeigt rohe SQL-Fehler")
+- **DB-Treiberfehler werden jetzt maskiert**: Bei Datenbank-Ausfällen landeten
+  bisher komplette SQL-Queries **inkl. Parameterwerte** (z. B. Benutzernamen)
+  im Browser — Tabellen-/Spaltennamen und Daten sichtbar. Ab jetzt zeigt der
+  Client eine generische Meldung; die vollen Details stehen nur noch im
+  Server-Log (`[db-treiberfehler]`).
+- **Fachliche Fehlermeldungen bleiben unverändert** (Validierungen,
+  „nicht gefunden"-Hinweise etc. gehen weiterhin verständlich an den Client —
+  die Maskierung greift nur bei echten Treiberfehlern: DrizzleQueryError,
+  MySQL-`ER_*`-Codes, Connection-Fehler)
+
+---
+
 ## [1.7.2] — 2026-08-22 — Fix: Migrations-Reihenfolge (AFTER-Verweis)
 
 ### Fix

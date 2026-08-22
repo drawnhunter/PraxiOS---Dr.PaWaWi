@@ -6,8 +6,35 @@ import { gruppen } from "@db/schema";
 import { getDb } from "./queries/connection";
 import type { TrpcContext } from "./context";
 
+/** Erkennt DB-Treiberfehler (DrizzleQueryError / MySQL ER_*). Nur diese
+ *  werden maskiert — fachliche Fehler (throw new Error/TRPCError mit
+ *  verständlicher Meldung) gehen unverändert zum Client. */
+export function istTreiberFehler(err: unknown): boolean {
+  const e = err as { name?: string; sqlMessage?: string; code?: string; cause?: unknown };
+  if (!e || typeof e !== "object") return false;
+  if (e.name === "DrizzleQueryError") return true;
+  if (typeof e.sqlMessage === "string") return true;
+  if (typeof e.code === "string" && (e.code.startsWith("ER_") || e.code === "ECONNREFUSED" || e.code === "PROTOCOL_CONNECTION_LOST")) return true;
+  if (e.cause) return istTreiberFehler(e.cause);
+  return false;
+}
+
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    // Sicherheit (Handover-Baustelle): NIE Query-Text + Params an den Client —
+    // bei DB-Ausfällen landeten sonst Tabellen-/Spaltennamen und Werte (z. B.
+    // Benutzernamen) im Browser. Volle Details bleiben im Server-Log.
+    if (istTreiberFehler(error.cause ?? error)) {
+      console.error("[db-treiberfehler]", error.cause ?? error);
+      return {
+        ...shape,
+        message:
+          "Datenbank momentan nicht erreichbar oder Abfrage fehlgeschlagen — bitte erneut versuchen. Details stehen im Server-Log.",
+      };
+    }
+    return shape;
+  },
 });
 
 export const createRouter = t.router;
