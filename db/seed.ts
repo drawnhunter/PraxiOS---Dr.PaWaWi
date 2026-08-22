@@ -15,6 +15,7 @@ export async function seedNummernkreise() {
       { typ: "invoice", jahr, letzteNummer: 0 },
       { typ: "credit_note", jahr: 0, letzteNummer: 0 },
       { typ: "offer", jahr, letzteNummer: 0 },
+      { typ: "patient", jahr: 0, letzteNummer: 0 },
     ])
     .onDuplicateKeyUpdate({ set: { letzteNummer: 0 } });
 }

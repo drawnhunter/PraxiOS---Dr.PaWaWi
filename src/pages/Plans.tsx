@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Copy, Plus, Search, Trash2 } from "lucide-react";
 import { datumZuKw, heuteIso } from "./Kalender";
 
 /** Badge-Farben je Planstatus (geplant neutral, aktiv petrol, dokumentiert blau, abgerechnet dezent). */
@@ -87,6 +87,23 @@ export default function Plans() {
   const loeschen = trpc.plaene.loeschen.useMutation({
     onSuccess: () => utils.plaene.list.invalidate(),
   });
+
+  // ── Plan duplizieren (Patient + Zeitfenster vorab wählbar) ──
+  const [dup, setDup] = useState<{
+    planId: number;
+    titel: string;
+    patientId: string;
+    vonDatum: string;
+    bisDatum: string;
+  } | null>(null);
+  const duplizieren = trpc.plaene.planDuplizieren.useMutation({
+    onSuccess: (r) => {
+      setDup(null);
+      utils.plaene.list.invalidate();
+      navigate(`/plaene/${r.id}`);
+    },
+  });
+  const patientenListe = trpc.customers.list.useQuery();
   const wiederherstellen = trpc.plaene.wiederherstellen.useMutation({
     onSuccess: () => utils.plaene.list.invalidate(),
   });
@@ -211,6 +228,24 @@ export default function Plans() {
                   )}
                 </td>
                 <td className="px-4 py-2.5 text-right">
+                  {!p.geloeschtAm && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Plan duplizieren (Patient/Zeitfenster wählbar)"
+                      onClick={() =>
+                        setDup({
+                          planId: p.id,
+                          titel: p.titel ?? `Therapieplan #${p.id}`,
+                          patientId: String(p.patient.id),
+                          vonDatum: p.vonDatum,
+                          bisDatum: p.bisDatum,
+                        })
+                      }
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  )}
                   {p.geloeschtAm ? (
                     p.restorable && (
                       <Button
@@ -347,6 +382,80 @@ export default function Plans() {
               disabled={!formGueltig || anlegen.isPending}
             >
               Anlegen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Plan duplizieren ── */}
+      <Dialog open={dup !== null} onOpenChange={(o) => !o && setDup(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Plan duplizieren</DialogTitle>
+          </DialogHeader>
+          {dup && (
+            <div className="space-y-3">
+              <p className="text-sm text-neutral-500">
+                „{dup.titel}" wird mit allen Einträgen kopiert — Patient und
+                Zeitfenster kannst du vorab ändern (Einträge werden verschoben;
+                außerhalb des Fensters liegende bleiben weg). Status startet bei
+                „geplant".
+              </p>
+              <div>
+                <Label>Patient</Label>
+                <Select value={dup.patientId} onValueChange={(v) => setDup({ ...dup, patientId: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(patientenListe.data ?? []).map((k) => (
+                      <SelectItem key={k.id} value={String(k.id)}>
+                        {k.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Von</Label>
+                  <Input
+                    type="date"
+                    value={dup.vonDatum}
+                    onChange={(e) => setDup({ ...dup, vonDatum: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Bis</Label>
+                  <Input
+                    type="date"
+                    value={dup.bisDatum}
+                    onChange={(e) => setDup({ ...dup, bisDatum: e.target.value })}
+                  />
+                </div>
+              </div>
+              {duplizieren.error && (
+                <p className="text-sm text-red-600">{duplizieren.error.message}</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDup(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              disabled={duplizieren.isPending || !dup?.vonDatum || !dup?.bisDatum}
+              onClick={() =>
+                dup &&
+                duplizieren.mutate({
+                  id: dup.planId,
+                  patientId: Number(dup.patientId),
+                  vonDatum: dup.vonDatum,
+                  bisDatum: dup.bisDatum,
+                })
+              }
+            >
+              {duplizieren.isPending ? "Dupliziere …" : "Duplizieren & öffnen"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -133,6 +133,9 @@ export default function PlanDetail() {
   };
 
   const setStatus = trpc.plaene.setStatus.useMutation({ onSuccess: invalidate });
+  const reihenfolge = trpc.plaene.reihenfolgeVerschieben.useMutation({
+    onSuccess: invalidate,
+  });
   const rechnungErstellen = trpc.plaene.rechnungErstellen.useMutation({
     onSuccess: (r) => {
       if (r.nichtUebernommen.length > 0) {
@@ -808,6 +811,40 @@ export default function PlanDetail() {
               {eintragForm && ` — ${datum(eintragForm.datum)}`}
             </DialogTitle>
           </DialogHeader>
+          {eintragForm?.id && (
+            <div className="mb-1 flex items-center gap-2 rounded-md bg-neutral-50 px-3 py-2">
+              <span className="text-xs text-neutral-500">Reihenfolge im Tag:</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7"
+                disabled={reihenfolge.isPending}
+                title="Einen Platz nach oben"
+                onClick={() =>
+                  eintragForm.id &&
+                  reihenfolge.mutate({ id: eintragForm.id, richtung: -1 })
+                }
+              >
+                ▲ nach oben
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7"
+                disabled={reihenfolge.isPending}
+                title="Einen Platz nach unten"
+                onClick={() =>
+                  eintragForm.id &&
+                  reihenfolge.mutate({ id: eintragForm.id, richtung: 1 })
+                }
+              >
+                ▼ nach unten
+              </Button>
+              {reihenfolge.data && !reihenfolge.data.ok && (
+                <span className="text-xs text-neutral-400">{reihenfolge.data.grund}</span>
+              )}
+            </div>
+          )}
           {eintragForm && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="col-span-2">

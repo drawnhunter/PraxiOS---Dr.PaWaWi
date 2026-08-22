@@ -1,7 +1,7 @@
-// ── PraxiOS: Privat-Rezept & Attest als PDF ─────────────────────────────────
-// A4, klassisches Privatrezept-Layout: Praxis-Kopf, Patient, „Rp.“-Block mit
-// Verordnungszeilen, Hinweis, Unterschrifts-Stempel (Bild aus den Einstellungen
-// oder Name/Datum als Text).
+// ── PraxiOS: Privat-Rezept & Attest als PDF (A5-Rezeptpapier-Look) ─────────
+// A5 hochkant wie der klassische Rezeptblock: Praxis-Kopf, Patient, „Rp.",
+// Medikamenten-Feld als leicht graue Box mit dem Arzt-/Praxisnamen groß und
+// dezent weiß im Hintergrund, Unterschrifts-Stempel.
 import PDFDocument from "pdfkit";
 import * as fs from "fs";
 import * as path from "path";
@@ -14,9 +14,13 @@ function fontPath(name: string): string {
 }
 
 const PETROL = "#0F766E";
-const GRAU = "#555555";
-const MARGIN = 56;
-const PAGE_W = 595.28;
+const DUNKEL = "#1c1917";
+const GRAU = "#57534e";
+const BOX_GRAU = "#E9E9E7";
+const WASSERZEICHEN = "#FFFFFF";
+const PAGE_W = 419.53; // A5 hochkant
+const PAGE_H = 595.28;
+const MARGIN = 28;
 const W = PAGE_W - 2 * MARGIN;
 
 export interface RezeptPdfInput {
@@ -37,62 +41,24 @@ export interface RezeptPdfInput {
     telefon?: string | null;
     email?: string | null;
   };
-  /** base64-Data-URL (PNG/JPG) oder null → Text-Stempel. */
+  /** base64-Data-URL (PNG/JPG) oder null → nur Unterschriftszeile. */
   signaturBild?: string | null;
   /** Ausstellungsdatum TT.MM.JJJJ. */
   datum: string;
 }
 
-function signaturBlock(
-  doc: PDFKit.PDFDocument,
-  praxis: RezeptPdfInput["praxis"],
-  signaturBild: string | null | undefined,
-  datum: string,
-) {
-  const y = Math.max(doc.y + 40, 640);
-  if (y > 720) doc.addPage();
-  const x = MARGIN + W - 230;
-
-  // Ort/Datum links neben der Unterschriftszeile
-  doc
-    .font("Regular")
-    .fontSize(10)
-    .fillColor("#000000")
-    .text(`${praxis.ort}, den ${datum}`, MARGIN, y + 34, { width: 240 });
-
-  // Unterschriftsbild über der Linie
-  if (signaturBild) {
-    try {
-      const b64 = signaturBild.split(",")[1] ?? "";
-      const buf = Buffer.from(b64, "base64");
-      if (buf.length > 100) {
-        doc.image(buf, x + 15, y - 34, { fit: [170, 62] });
-      }
-    } catch {
-      // defektes Bild → nur Linie
-    }
-  }
-  doc
-    .moveTo(x, y + 40)
-    .lineTo(x + 230, y + 40)
-    .lineWidth(0.8)
-    .strokeColor("#000000")
-    .stroke();
-  doc
-    .font("Regular")
-    .fontSize(8.5)
-    .fillColor(GRAU)
-    .text("Unterschrift Arzt/Ärztin", x, y + 44, { width: 230, align: "center" });
+function wasserzeichenName(name: string): string {
+  // „Praxis Dr. X" → kurze Form für den Hintergrund (max. ~22 Zeichen)
+  return name.length > 24 ? name.slice(0, 24) : name;
 }
 
 export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: "A4",
+    size: [PAGE_W, PAGE_H],
     margin: MARGIN,
-    // Pflicht: eigener Font als Default — sonst lädt pdfkit beim Konstruktor
-    // die eingebaute Helvetica via __dirname (gibt's im ESM-Bundle nicht!)
+    // Pflicht: eigener Font als Default (ESM-Bundle, siehe rezeptPdf.test.ts)
     font: fontPath("DejaVuSans.ttf"),
-    info: { Title: "Verordnung" },
+    info: { Title: input.typ === "rezept" ? "Privatrezept" : "Attest" },
   });
   doc.registerFont("Regular", fontPath("DejaVuSans.ttf"));
   doc.registerFont("Bold", fontPath("DejaVuSans-Bold.ttf"));
@@ -105,117 +71,166 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
 
   const { praxis, patient, datum } = input;
 
-  // ── Praxis-Kopf ───────────────────────────────────────────────────────────
-  doc.font("Bold").fontSize(15).fillColor(PETROL).text(praxis.name, MARGIN, MARGIN);
+  // ── Praxis-Kopf (kompakt) ─────────────────────────────────────────────────
+  doc.font("Bold").fontSize(11.5).fillColor(PETROL).text(praxis.name, MARGIN, MARGIN);
   doc
     .font("Regular")
-    .fontSize(9.5)
+    .fontSize(7.5)
     .fillColor(GRAU)
-    .text(`${praxis.strasse} · ${praxis.plz} ${praxis.ort}`, MARGIN, doc.y + 2);
+    .text(`${praxis.strasse} · ${praxis.plz} ${praxis.ort}`, MARGIN, doc.y + 1);
   const kontakt = [praxis.telefon ? `Tel. ${praxis.telefon}` : null, praxis.email]
     .filter(Boolean)
     .join(" · ");
   if (kontakt) doc.text(kontakt);
+  const kopfEnde = doc.y + 6;
   doc
-    .moveTo(MARGIN, doc.y + 8)
-    .lineTo(MARGIN + W, doc.y + 8)
-    .lineWidth(1.4)
+    .moveTo(MARGIN, kopfEnde)
+    .lineTo(MARGIN + W, kopfEnde)
+    .lineWidth(1)
     .strokeColor(PETROL)
     .stroke();
-  doc.moveDown(1.2);
 
   // ── Patient ───────────────────────────────────────────────────────────────
   const geb = patient.geburtsdatum ? `, geb. am ${patient.geburtsdatum}` : "";
   const adresse = [patient.strasse, [patient.plz, patient.ort].filter(Boolean).join(" ")]
     .filter(Boolean)
     .join(", ");
+  let y = kopfEnde + 10;
+  doc.font("Bold").fontSize(10).fillColor(DUNKEL).text(`${patient.name}${geb}`, MARGIN, y);
+  if (adresse) {
+    doc.font("Regular").fontSize(8).fillColor(GRAU).text(adresse, MARGIN, doc.y + 1);
+  }
+  y = doc.y + 10;
+
+  // ── Graue Box mit Wasserzeichen-Arztname ──────────────────────────────────
+  const boxOben = y;
+  const boxUnten = input.typ === "rezept" ? PAGE_H - 150 : PAGE_H - 170;
+  const boxHoehe = boxUnten - boxOben;
+  doc.save();
+  doc.roundedRect(MARGIN, boxOben, W, boxHoehe, 8).fill(BOX_GRAU);
+  // Arztname groß und dezent weiß im Hintergrund
   doc
     .font("Bold")
-    .fontSize(11)
-    .fillColor("#000000")
-    .text(`${patient.name}${geb}`);
-  if (adresse) doc.font("Regular").fontSize(9.5).fillColor(GRAU).text(adresse);
-  doc.moveDown(1.2);
+    .fontSize(input.praxis.name.length > 18 ? 26 : 32)
+    .fillColor(WASSERZEICHEN)
+    .fillOpacity(0.95)
+    .text(wasserzeichenName(praxis.name), MARGIN + 14, boxOben + boxHoehe / 2 - 30, {
+      width: W - 28,
+      align: "center",
+    });
+  doc.fillOpacity(1);
+  doc.restore();
+
+  const inhaltX = MARGIN + 16;
+  const inhaltW = W - 32;
 
   if (input.typ === "rezept") {
     const inhalt = input.inhalt as RezeptInhalt;
-    // ── Titel ──────────────────────────────────────────────────────────────
-    doc.font("Bold").fontSize(17).fillColor("#000000").text("Privatrezept");
-    doc.moveDown(0.8);
-    // ── Rp.-Block ──────────────────────────────────────────────────────────
-    doc.font("Bold").fontSize(26).fillColor(PETROL).text("Rp.", MARGIN, doc.y + 4);
-    doc.moveDown(0.6);
+    // ── Rp. + Verordnungen ──────────────────────────────────────────────────
+    let ry = boxOben + 14;
+    doc.font("Bold").fontSize(20).fillColor(PETROL).text("Rp.", inhaltX, ry);
+    ry += 26;
     inhalt.medikamente.forEach((m, i) => {
       const zeile1 = [m.name, m.staerke].filter(Boolean).join(" ");
       doc
         .font("Bold")
-        .fontSize(12)
-        .fillColor("#000000")
-        .text(`${inhalt.medikamente.length > 1 ? `${i + 1}. ` : ""}${zeile1}`, MARGIN + 16, doc.y + 6, {
-          continued: false,
-        });
+        .fontSize(10.5)
+        .fillColor(DUNKEL)
+        .text(`${inhalt.medikamente.length > 1 ? `${i + 1}. ` : ""}${zeile1}`, inhaltX, ry, { width: inhaltW });
+      ry = doc.y + 2;
       if (m.menge) {
-        doc.font("Regular").fontSize(10.5).fillColor(GRAU).text(m.menge, MARGIN + 16, doc.y + 1);
+        doc.font("Regular").fontSize(9).fillColor(GRAU).text(m.menge, inhaltX, ry, { width: inhaltW });
+        ry = doc.y + 1;
       }
       if (m.dosierung) {
-        doc
-          .font("Italic")
-          .fontSize(10.5)
-          .fillColor("#000000")
-          .text(`Einnahme: ${m.dosierung}`, MARGIN + 16, doc.y + 2);
+        doc.font("Italic").fontSize(9).fillColor(DUNKEL).text(`Einnahme: ${m.dosierung}`, inhaltX, ry, { width: inhaltW });
+        ry = doc.y + 1;
       }
-      doc.moveDown(0.5);
+      ry += 6;
     });
     if (inhalt.hinweis?.trim()) {
-      doc.moveDown(0.4);
       doc
         .font("Regular")
-        .fontSize(9.5)
+        .fontSize(8)
         .fillColor(GRAU)
-        .text(`Hinweis: ${inhalt.hinweis.trim()}`, MARGIN, doc.y, { width: W });
+        .text(`Hinweis: ${inhalt.hinweis.trim()}`, inhaltX, Math.min(ry + 2, boxUnten - 30), {
+          width: inhaltW,
+        });
     }
-    doc.moveDown(1);
-    doc
-      .font("Regular")
-      .fontSize(8.5)
-      .fillColor(GRAU)
-      .text(
-        "Privat verordnet — die Kosten dieser Verordnung werden nicht von der gesetzlichen Krankenversicherung übernommen.",
-        MARGIN,
-        Math.max(doc.y + 8, 600),
-        { width: W },
-      );
   } else {
     const inhalt = input.inhalt as AttestInhalt;
     const istAU = inhalt.art === "krankschreibung";
+    // ── Attest-Text ─────────────────────────────────────────────────────────
+    let ay = boxOben + 16;
     doc
       .font("Bold")
-      .fontSize(17)
-      .fillColor("#000000")
-      .text(istAU ? "Arbeitsunfähigkeitsbescheinigung" : "Ärztliches Attest");
-    doc.moveDown(1);
-    doc.font("Regular").fontSize(11.5).fillColor("#000000");
+      .fontSize(13)
+      .fillColor(DUNKEL)
+      .text(istAU ? "Arbeitsunfähigkeitsbescheinigung" : "Ärztliches Attest", inhaltX, ay, {
+        width: inhaltW,
+      });
+    ay = doc.y + 12;
+    doc.font("Regular").fontSize(10).fillColor(DUNKEL);
     if (istAU) {
       const von = inhalt.auVon || datum;
       const bis = inhalt.auBis || "…";
       doc.text(
         `${patient.name}${geb} ist vom ${von} bis voraussichtlich einschließlich ${bis} arbeitsunfähig erkrankt.`,
-        MARGIN,
-        doc.y + 4,
-        { width: W, lineGap: 3 },
+        inhaltX,
+        ay,
+        { width: inhaltW, lineGap: 3 },
       );
-      doc.moveDown(0.8);
+      ay = doc.y + 10;
     }
     if (inhalt.text.trim()) {
-      doc.text(inhalt.text.trim(), MARGIN, doc.y + (istAU ? 0 : 4), {
-        width: W,
-        lineGap: 3,
-      });
+      doc.text(inhalt.text.trim(), inhaltX, ay, { width: inhaltW, lineGap: 3 });
     }
   }
 
-  // ── Unterschrift ──────────────────────────────────────────────────────────
-  signaturBlock(doc, praxis, input.signaturBild, datum);
+  // ── Fußbereich: Hinweis (nur Rezept) + Ort/Datum + Unterschrift ──────────
+  if (input.typ === "rezept") {
+    doc
+      .font("Regular")
+      .fontSize(6.8)
+      .fillColor(GRAU)
+      .text(
+        "Privat verordnet — die Kosten dieser Verordnung werden nicht von der gesetzlichen Krankenversicherung übernommen.",
+        MARGIN,
+        boxUnten + 8,
+        { width: W },
+      );
+  }
+
+  const sigY = PAGE_H - 86;
+  doc
+    .font("Regular")
+    .fontSize(9)
+    .fillColor(DUNKEL)
+    .text(`${praxis.ort}, den ${datum}`, MARGIN, sigY + 26);
+
+  const sigX = PAGE_W - MARGIN - 170;
+  if (input.signaturBild) {
+    try {
+      const b64 = input.signaturBild.split(",")[1] ?? "";
+      const buf = Buffer.from(b64, "base64");
+      if (buf.length > 100) {
+        doc.image(buf, sigX + 8, sigY - 30, { fit: [130, 48] });
+      }
+    } catch {
+      /* defektes Bild → nur Linie */
+    }
+  }
+  doc
+    .moveTo(sigX, sigY + 32)
+    .lineTo(sigX + 170, sigY + 32)
+    .lineWidth(0.8)
+    .strokeColor(DUNKEL)
+    .stroke();
+  doc
+    .font("Regular")
+    .fontSize(7)
+    .fillColor(GRAU)
+    .text("Unterschrift Arzt/Ärztin", sigX, sigY + 36, { width: 170, align: "center" });
 
   doc.end();
   return fertig;

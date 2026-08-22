@@ -69,6 +69,12 @@ export const companySettings = mysqlTable("company_settings", {
   kalenderToken: varchar("kalender_token", { length: 64 }),
   // Geheimer Schlüssel — verlässt den Server NIE (wird in der API nicht ausgeliefert)
   ageSecret: varchar("age_secret", { length: 100 }),
+  // Backup-Erinnerung: Zeitpunkt der letzten bestätigten Sicherung
+  backupZuletztAm: timestamp("backup_zuletzt_am"),
+  // Patientennummern-Nummernkreis: Startzahl + optionaler freier Präfix
+  patientenNrStart: int("patienten_nr_start").notNull().default(1),
+  patientenNrPrefixAktiv: boolean("patienten_nr_prefix_aktiv").notNull().default(false),
+  patientenNrPrefix: varchar("patienten_nr_prefix", { length: 20 }).notNull().default("P"),
   // Unterschrift des Arztes (base64-Data-URL, PNG/JPG) — wird auf Rezepte/
   // Atteste gestempelt. Wird in settings.get NICHT ausgeliefert (nur Flag).
   signaturBild: mediumtext("signatur_bild"),
@@ -772,6 +778,8 @@ export const planEntries = mysqlTable(
       { onDelete: "set null" },
     ),
     raum: varchar("raum", { length: 100 }),
+    // Manuelle Reihenfolge innerhalb des Tages (hoch/runter); 0 = noch nicht sortiert
+    reihenfolge: int("reihenfolge").notNull().default(0),
     status: mysqlEnum("status", ["geplant", "stattgefunden", "abgesagt", "ausgefallen"])
       .notNull()
       .default("geplant"),

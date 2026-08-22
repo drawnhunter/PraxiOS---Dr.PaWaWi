@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import {
   createRouter,
   rechtQuery,
@@ -102,6 +102,7 @@ export const planRouter = createRouter({
         .select({
           plan: therapyPlans,
           patientName: customers.name,
+          patientId: customers.id,
         })
         .from(therapyPlans)
         .innerJoin(customers, eq(therapyPlans.patientId, customers.id))
@@ -109,7 +110,7 @@ export const planRouter = createRouter({
         .orderBy(asc(therapyPlans.vonDatum));
       return rows.map((r) => ({
         ...r.plan,
-        patient: { name: r.patientName },
+        patient: { id: r.patientId, name: r.patientName },
         restorable:
           r.plan.geloeschtAm !== null &&
           r.plan.geloeschtAm.getTime() > Date.now() - 48 * 60 * 60 * 1000,
@@ -204,9 +205,46 @@ export const planRouter = createRouter({
 
   // ── Planeinträge ────────────────────────────────────────────────────────
   addEntry: rechtQuery("plaene").input(entryInput).mutation(async ({ input }) => {
-    const [{ id }] = await getDb().insert(planEntries).values(input).$returningId();
+    const db = getDb();
+    // Reihenfolge im Tag: neue Einträge landen ans Ende des Tages
+    const [maxRow] = await db
+      .select({ max: sql<string | null>`MAX(reihenfolge)` })
+      .from(planEntries)
+      .where(and(eq(planEntries.planId, input.planId), eq(planEntries.datum, input.datum)));
+    const reihenfolge = Number(maxRow?.max ?? 0) + 1;
+    const [{ id }] = await db
+      .insert(planEntries)
+      .values({ ...input, reihenfolge })
+      .$returningId();
     return { id };
   }),
+
+  // ── Reihenfolge im Tag: Eintrag mit seinem Nachbarn tauschen (hoch/runter) ─
+  reihenfolgeVerschieben: rechtQuery("plaene")
+    .input(z.object({ id: z.number().int(), richtung: z.union([z.literal(-1), z.literal(1)]) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const eintrag = await db.query.planEntries.findFirst({
+        where: eq(planEntries.id, input.id),
+      });
+      if (!eintrag) throw new TRPCError({ code: "NOT_FOUND", message: "Eintrag nicht gefunden." });
+      const tag = await db.query.planEntries.findMany({
+        where: and(eq(planEntries.planId, eintrag.planId), eq(planEntries.datum, eintrag.datum)),
+        orderBy: [asc(planEntries.reihenfolge), asc(planEntries.id)],
+      });
+      const idx = tag.findIndex((e) => e.id === eintrag.id);
+      const tauschIdx = idx + input.richtung;
+      if (idx < 0 || tauschIdx < 0 || tauschIdx >= tag.length) {
+        return { ok: false, grund: "Kein Nachbar in dieser Richtung." };
+      }
+      const a = tag[idx];
+      const b = tag[tauschIdx];
+      await db.transaction(async (tx) => {
+        await tx.update(planEntries).set({ reihenfolge: b.reihenfolge }).where(eq(planEntries.id, a.id));
+        await tx.update(planEntries).set({ reihenfolge: a.reihenfolge }).where(eq(planEntries.id, b.id));
+      });
+      return { ok: true };
+    }),
 
   updateEntry: rechtQuery("plaene")
     .input(z.object({ id: z.number().int(), data: entryInput.omit({ planId: true }).partial() }))
@@ -331,6 +369,84 @@ export const planRouter = createRouter({
         .where(and(eq(planEntries.planId, input.planId), eq(planEntries.datum, input.datum)));
       void res;
       return { ok: true };
+    }),
+
+  // ── Ganzen Plan duplizieren (Patient + Zeitfenster wählbar, Einträge werden
+  // um das Datums-Delta verschoben; Status startet bei „geplant") ────────────
+  planDuplizieren: rechtQuery("plaene")
+    .input(
+      z.object({
+        id: z.number().int(),
+        patientId: z.number().int().optional(),
+        vonDatum: datumInput.optional(),
+        bisDatum: datumInput.optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const plan = await db.query.therapyPlans.findFirst({
+        where: eq(therapyPlans.id, input.id),
+        with: { entries: true },
+      });
+      if (!plan) throw new TRPCError({ code: "NOT_FOUND", message: "Therapieplan nicht gefunden." });
+      const zielPatient = input.patientId ?? plan.patientId;
+      const patient = await db.query.customers.findFirst({
+        where: eq(customers.id, zielPatient),
+        columns: { id: true },
+      });
+      if (!patient) throw new TRPCError({ code: "NOT_FOUND", message: "Ziel-Patient nicht gefunden." });
+
+      const von = input.vonDatum ?? plan.vonDatum;
+      const bis = input.bisDatum ?? plan.bisDatum;
+      if (bis < von) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Das Bis-Datum liegt vor dem Von-Datum." });
+      }
+
+      const deltaMs = Date.parse(von) - Date.parse(plan.vonDatum);
+      const shift = (iso: string) =>
+        new Date(Date.parse(iso) + deltaMs).toISOString().slice(0, 10);
+      const uebernommen = plan.entries
+        .map((e) => ({ ...e, datum: shift(e.datum) }))
+        .filter((e) => e.datum >= von && e.datum <= bis);
+
+      const [{ id: neuId }] = await db
+        .insert(therapyPlans)
+        .values({
+          patientId: zielPatient,
+          titel: `${plan.titel ?? "Therapieplan"} (Kopie)`,
+          vonDatum: von,
+          bisDatum: bis,
+          diagnoseZiele: plan.diagnoseZiele,
+          status: "geplant",
+          rechnungsempfaengerAbweichend: plan.rechnungsempfaengerAbweichend,
+          abweichenderEmpfaenger: plan.abweichenderEmpfaenger,
+          notizen: plan.notizen,
+          createdBy: ctx.user.id,
+        })
+        .$returningId();
+
+      if (uebernommen.length > 0) {
+        await db.insert(planEntries).values(
+          uebernommen.map((e) => ({
+            planId: neuId,
+            datum: e.datum,
+            zeitVon: e.zeitVon,
+            zeitBis: e.zeitBis,
+            leistungId: e.leistungId,
+            leistungText: e.leistungText,
+            menge: e.menge,
+            therapeutId: e.therapeutId,
+            raum: e.raum,
+            status: "geplant" as const,
+            bemerkung: e.bemerkung,
+          })),
+        );
+      }
+      return {
+        id: neuId,
+        eintraege: uebernommen.length,
+        uebersprungen: plan.entries.length - uebernommen.length,
+      };
     }),
 
   // ── Block-Aktionen: markierte Einträge gemeinsam löschen/duplizieren ─────

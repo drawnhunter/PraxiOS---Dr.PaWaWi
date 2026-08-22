@@ -1,5 +1,46 @@
 # Changelog — PraxiOS
 
+## [1.7.0] — 2026-08-22 — Patientennummern-Kreis, Plan-Duplikat, Rezept-A5, Reihenfolge, Backup-Erinnerung
+
+### Patientennummern fortlaufend geregelt (dringend gewünscht)
+- **Automatischer Nummernkreis** beim Anlegen: Patientennummer-Feld leer lassen
+  → die nächste freie Nummer wird kollisionssicher vergeben (Transaktion, keine
+  Duplikate). Wer selbst eine Nummer einträgt, überschreibt die Automatik gezielt
+- **Einstellungen → Patientennummern**: Startzahl frei wählbar; optional
+  „mit Präfix" — Präfix ist frei einstellbar (z. B. P, IMTZ, Praxis2, Klinik …),
+  Format dann `PRÄFIX-NUMMER` (z. B. `IMTZ-1001`). Live-Vorschau der nächsten
+  Nummer (wird nicht verbraucht)
+
+### Therapieplan duplizieren
+- In der Plan-Liste neuer Knopf **„Duplizieren"**: Dialog mit Patienten-Wahl
+  (beliebiger Zielpatient) und Zeitfenster (von/bis frei wählbar) — Einträge
+  werden um das Datums-Delta verschoben, außerhalb des Fensters liegende
+  entfallen (mit Zähler), Status startet bei „geplant". Danach landet man
+  direkt im Editor der Kopie
+
+### Rezept & Attest im Rezeptpapier-Look (A5 hochkant)
+- **Neues A5-Format** für Privatrezepte und Atteste: klassische
+  Rezeptblock-Anmutung — Medikamenten-Feld als leicht graue Box mit dem
+  Arzt-/Praxisnamen **groß und dezent weiß im Hintergrund** (Wasserzeichen),
+  Unterschrifts-Stempel aus den Einstellungen, „Privat verordnet"-Hinweis
+
+### Reihenfolge im Tag (Therapieplan)
+- Einträge lassen sich jetzt **manuell innerhalb eines Tages ordnen**: im
+  Eintrag-Dialog die Buttons „▲ nach oben" / „▼ nach unten" (Tausch mit dem
+  Nachbarn). Neue Einträge landen unten; die bisherige Anzeige-Reihenfolge
+  wird bei der Migration exakt übernommen (nichts verändert sich ungewollt)
+
+### Backup-Erinnerung
+- **Dashboard-Banner**, wenn die letzte bestätigte Sicherung länger als 14 Tage
+  her ist (oder nie bestätigt wurde) — mit dem konkreten Backup-Kommando für
+  den Server und „Habe ich erledigt"-Bestätigung (danach ruht das Banner
+  wieder 14 Tage)
+
+### Technik
+- 82 Tests grün (neu: Reihenfolge-Sortierung, Versions-Sync-Wache)
+
+---
+
 ## [1.6.3] — 2026-08-22 — Land-Feld editierbar + Aktions-Buttons nach oben
 
 ### Fixes & UX

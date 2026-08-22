@@ -35,4 +35,22 @@ describe("eintraegeSortieren (Tagesreihenfolge)", () => {
     eintraegeSortieren(liste);
     expect(liste.map((x) => x.id)).toEqual([2, 1]);
   });
+
+  it("manuelle Reihenfolge (reihenfolge) schlägt Uhrzeit, 0/unsortiert fällt nach hinten", () => {
+    const sortiert = eintraegeSortieren([
+      { id: 1, datum: "2026-09-28", zeitVon: "08:00", reihenfolge: 3 },
+      { id: 2, datum: "2026-09-28", zeitVon: "12:00", reihenfolge: 1 },
+      { id: 3, datum: "2026-09-28", zeitVon: "07:00", reihenfolge: 2 },
+      { id: 4, datum: "2026-09-28", zeitVon: "06:00", reihenfolge: 0 },
+    ]);
+    expect(sortiert.map((x) => x.id)).toEqual([2, 3, 1, 4]);
+  });
+
+  it("fehlende reihenfolge-Felder (Altbestand) bleiben zeitbasiert sortiert", () => {
+    const sortiert = eintraegeSortieren([
+      { id: 1, datum: "2026-09-28", zeitVon: "12:00" },
+      { id: 2, datum: "2026-09-28", zeitVon: "08:00" },
+    ]);
+    expect(sortiert.map((x) => x.id)).toEqual([2, 1]);
+  });
 });

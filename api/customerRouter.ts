@@ -6,6 +6,7 @@ import {
 } from "./middleware";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./queries/connection";
+import { naechstePatientenNr } from "./lib/patientenNr";
 import {
   customers,
   patientContacts,
@@ -124,7 +125,15 @@ export const customerRouter = createRouter({
 
   create: rechtQuery("akte").input(customerInput).mutation(async ({ input }) => {
     try {
-      const [{ id }] = await getDb().insert(customers).values(input).$returningId();
+      const [{ id }] = await getDb().transaction(async (tx) => {
+        // Patientennummer automatisch aus dem Nummernkreis, wenn leer gelassen
+        const patientenNr =
+          input.patientenNr?.trim() || (await naechstePatientenNr(tx));
+        return tx
+          .insert(customers)
+          .values({ ...input, patientenNr })
+          .$returningId();
+      });
       return { id };
     } catch (e) {
       if (istUniqueVerletzung(e)) {

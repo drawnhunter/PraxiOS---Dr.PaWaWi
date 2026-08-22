@@ -36,12 +36,15 @@ export interface AbrechnungsErgebnis {
   nichtUebernommen: { datum: string; name: string; grund: string }[];
 }
 
-/** Sortierung innerhalb eines Tages: mit Uhrzeit zuerst, dann ohne, dann id. */
-export function eintraegeSortieren<T extends { datum: string; zeitVon: string | null; id: number }>(
-  liste: T[],
-): T[] {
+/** Sortierung innerhalb eines Tages: manuelle Reihenfolge zuerst (falls
+ *  gesetzt), dann Uhrzeit, dann id. */
+export function eintraegeSortieren<
+  T extends { datum: string; zeitVon: string | null; id: number; reihenfolge?: number | null },
+>(liste: T[]): T[] {
+  const rf = (e: T) => (e.reihenfolge && e.reihenfolge > 0 ? e.reihenfolge : Number.MAX_SAFE_INTEGER);
   return [...liste].sort((a, b) => {
     if (a.datum !== b.datum) return a.datum.localeCompare(b.datum);
+    if (rf(a) !== rf(b)) return rf(a) - rf(b);
     const az = a.zeitVon ?? null;
     const bz = b.zeitVon ?? null;
     if (az && !bz) return -1;

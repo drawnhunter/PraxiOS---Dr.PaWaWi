@@ -7,6 +7,7 @@ import {
 } from "./middleware";
 import { getDb } from "./queries/connection";
 import { verschluesseln } from "./lib/secrets";
+import { patientenNrVorschau } from "./lib/patientenNr";
 import crypto from "node:crypto";
 import { companySettings, numberSequences } from "@db/schema";
 import { eq, and } from "drizzle-orm";
@@ -40,6 +41,10 @@ const settingsInput = z.object({
   bgMitgliedsnummer: z.string().max(50).nullable().optional(),
   ihk: z.string().max(60).nullable().optional(),
   glaeubigerId: z.string().max(30).nullable().optional(),
+  // Patientennummern-Nummernkreis (1.7.0)
+  patientenNrStart: z.number().int().min(1).optional(),
+  patientenNrPrefixAktiv: z.boolean().optional(),
+  patientenNrPrefix: z.string().trim().min(1).max(20).optional(),
   akzentfarbe: z
     .enum(["petrol", "neutral", "blau", "gruen", "bernstein", "violett", "rot"])
     .default("petrol"),
@@ -121,6 +126,20 @@ export const settingsRouter = createRouter({
       .insert(companySettings)
       .values({ id: 1, ...werte } as never)
       .onDuplicateKeyUpdate({ set: werte as never });
+    return { ok: true };
+  }),
+
+  /** Vorschau der nächsten Patientennummer (zählt nicht hoch). */
+  patientenNrVorschau: authedQuery.query(async () => {
+    return { vorschau: await patientenNrVorschau() };
+  }),
+
+  /** Backup-Erinnerung: Nutzer bestätigt „Backup erledigt" (Banner ruht 14 Tage). */
+  backupErledigt: authedQuery.mutation(async () => {
+    await getDb()
+      .insert(companySettings)
+      .values({ id: 1, backupZuletztAm: new Date() } as never)
+      .onDuplicateKeyUpdate({ set: { backupZuletztAm: new Date() } as never });
     return { ok: true };
   }),
 

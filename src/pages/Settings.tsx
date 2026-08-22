@@ -58,6 +58,9 @@ interface FirmenForm {
   smtpPasswort: string;
   erinnerungAktiv: boolean;
   erinnerungTageVorher: number;
+  patientenNrStart: number;
+  patientenNrPrefixAktiv: boolean;
+  patientenNrPrefix: string;
 }
 
 interface BankForm {
@@ -105,6 +108,9 @@ export default function SettingsPage() {
       smtpPasswort: "",
       erinnerungAktiv: s.erinnerungAktiv ?? false,
       erinnerungTageVorher: s.erinnerungTageVorher,
+      patientenNrStart: s.patientenNrStart ?? 1,
+      patientenNrPrefixAktiv: s.patientenNrPrefixAktiv ?? false,
+      patientenNrPrefix: s.patientenNrPrefix ?? "P",
       handelsregister: s.handelsregister ?? "",
       steuernummer: s.steuernummer ?? "",
       ustIdNr: s.ustIdNr ?? "",
@@ -299,6 +305,9 @@ export default function SettingsPage() {
                 smtpAbsender: firma.smtpAbsender || null,
                 erinnerungAktiv: firma.erinnerungAktiv,
                 erinnerungTageVorher: firma.erinnerungTageVorher,
+                patientenNrStart: firma.patientenNrStart,
+                patientenNrPrefixAktiv: firma.patientenNrPrefixAktiv,
+                patientenNrPrefix: firma.patientenNrPrefix,
                 ...(firma.smtpPasswort ? { smtpPasswort: firma.smtpPasswort } : {}),
                 handelsregister: firma.handelsregister || null,
                 steuernummer: firma.steuernummer || null,
@@ -462,6 +471,9 @@ export default function SettingsPage() {
 
       {/* ── Unterschrift (Rezepte/Atteste) ── */}
       <SignaturAbschnitt />
+
+      {/* ── Patientennummern (Nummernkreis) ── */}
+      <PatientenNrAbschnitt firma={firma} setFirma={setFirma} />
 
       {/* ── DATEV & Kontierung ── */}
       <section className="rounded-lg border border-neutral-200 bg-white p-5">
@@ -947,6 +959,82 @@ function SignaturAbschnitt() {
           </Button>
         )}
         {fehler && <span className="text-sm text-red-600">{fehler}</span>}
+      </div>
+    </section>
+  );
+}
+
+// ── Patientennummern-Nummernkreis ───────────────────────────────────────────
+function PatientenNrAbschnitt({
+  firma,
+  setFirma,
+}: {
+  firma: FirmenForm;
+  setFirma: (f: FirmenForm) => void;
+}) {
+  const vorschau = trpc.settings.patientenNrVorschau.useQuery();
+  const utils = trpc.useUtils();
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-5">
+      <h2 className="mb-1 text-sm font-medium text-neutral-700">
+        Patientennummern (Nummernkreis)
+      </h2>
+      <p className="mb-4 text-xs text-neutral-400">
+        Neue Patienten bekommen automatisch die nächste freie Nummer — geregelt
+        fortlaufend, ohne Raten und Duplikate. Wer selbst eine Nummer einträgt,
+        überschreibt die Automatik für diesen Patienten. Speichern erfolgt oben
+        über „Firmendaten speichern".
+      </p>
+      <div className="flex flex-wrap items-end gap-6">
+        <div>
+          <Label>Startzahl</Label>
+          <Input
+            type="number"
+            min={1}
+            className="w-32"
+            value={firma.patientenNrStart}
+            onChange={(e) =>
+              setFirma({ ...firma, patientenNrStart: Number(e.target.value) || 1 })
+            }
+          />
+        </div>
+        <label className="flex items-center gap-2 pb-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[#0F766E]"
+            checked={firma.patientenNrPrefixAktiv}
+            onChange={(e) =>
+              setFirma({ ...firma, patientenNrPrefixAktiv: e.target.checked })
+            }
+          />
+          mit Präfix
+        </label>
+        {firma.patientenNrPrefixAktiv && (
+          <div>
+            <Label>Präfix (frei wählbar)</Label>
+            <Input
+              className="w-40"
+              placeholder="P, IMTZ, Praxis2, Klinik …"
+              value={firma.patientenNrPrefix}
+              onChange={(e) =>
+                setFirma({ ...firma, patientenNrPrefix: e.target.value })
+              }
+            />
+          </div>
+        )}
+        <div className="pb-1 text-sm text-neutral-500">
+          Nächste Nummer:{" "}
+          <button
+            type="button"
+            className="font-mono font-semibold text-teal-700"
+            title="Vorschau aktualisieren"
+            onClick={() => utils.settings.patientenNrVorschau.invalidate()}
+          >
+            {vorschau.data?.vorschau ?? "…"}
+          </button>
+          <span className="ml-2 text-xs text-neutral-400">(Vorschau, wird nicht verbraucht)</span>
+        </div>
       </div>
     </section>
   );

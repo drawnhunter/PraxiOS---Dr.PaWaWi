@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { geld, datum } from "@/lib/format";
@@ -84,6 +85,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-semibold tracking-tight">Übersicht</h1>
+
+      <BackupErinnerung />
 
       {/* ── Praxis-Kennzahlen ── */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -221,6 +224,52 @@ export default function Dashboard() {
           )}
         </section>
       )}
+    </div>
+  );
+}
+
+// ── Backup-Erinnerung (Banner, wenn letzte Sicherung > 14 Tage her) ─────────
+function BackupErinnerung() {
+  const settings = trpc.settings.get.useQuery();
+  const utils = trpc.useUtils();
+  const erledigt = trpc.settings.backupErledigt.useMutation({
+    onSuccess: () => utils.settings.get.invalidate(),
+  });
+  const [wege, setWege] = useState(false);
+
+  if (wege || !settings.data) return null;
+  const letzte = settings.data.backupZuletztAm
+    ? new Date(settings.data.backupZuletztAm as unknown as string)
+    : null;
+  const tage = letzte
+    ? Math.floor((Date.now() - letzte.getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+  if (tage !== null && tage <= 14) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-amber-900">
+          {tage === null
+            ? "Noch kein Backup bestätigt — Datenbank & Dokumente sichern!"
+            : `Letztes Backup vor ${tage} Tagen — Zeit für eine neue Sicherung.`}
+        </div>
+        <div className="mt-0.5 text-xs text-amber-800">
+          Auf dem Server einmalig: <code className="rounded bg-amber-100 px-1">~/praxiswerk/scripts/backup.sh</code>{" "}
+          (oder den täglichen Cron aus der Server-Anleitung prüfen). Danach hier bestätigen.
+        </div>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={erledigt.isPending}
+        onClick={() => erledigt.mutate()}
+      >
+        {erledigt.isPending ? "Merke …" : "Habe ich erledigt"}
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => setWege(true)}>
+        Später
+      </Button>
     </div>
   );
 }

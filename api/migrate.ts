@@ -65,6 +65,14 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "invoices", spalte: "proforma_von_id", ddl: "ALTER TABLE invoices ADD COLUMN proforma_von_id BIGINT UNSIGNED NULL AFTER abschlag_betrag" },
   // ReWaWi-Sync (1.5): Archivieren statt Löschen
   { tabelle: "invoices", spalte: "archiviert", ddl: "ALTER TABLE invoices ADD COLUMN archiviert TINYINT(1) NOT NULL DEFAULT 0 AFTER bereits_bezahlt" },
+  // Reihenfolge im Tag (1.7.0)
+  { tabelle: "plan_entries", spalte: "reihenfolge", ddl: "ALTER TABLE plan_entries ADD COLUMN reihenfolge INT NOT NULL DEFAULT 0 AFTER raum" },
+  // Backup-Erinnerung (1.7.0)
+  { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
+  // Patientennummern-Nummernkreis (1.7.0)
+  { tabelle: "company_settings", spalte: "patienten_nr_start", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_start INT NOT NULL DEFAULT 1 AFTER signatur_bild" },
+  { tabelle: "company_settings", spalte: "patienten_nr_prefix_aktiv", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_prefix_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER patienten_nr_start" },
+  { tabelle: "company_settings", spalte: "patienten_nr_prefix", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_prefix VARCHAR(20) NOT NULL DEFAULT 'P' AFTER patienten_nr_prefix_aktiv" },
   // Plan→Rechnung-Rückbezug (1.6.2)
   { tabelle: "invoices", spalte: "therapieplan_id", ddl: "ALTER TABLE invoices ADD COLUMN therapieplan_id BIGINT UNSIGNED NULL AFTER proforma_von_id" },
   // ReWaWi-Sync (1.5): Regelwerk — Standard-Kategorie je Lieferant
@@ -540,6 +548,24 @@ const SPALTEN_AENDERUNGEN: { tabelle: string; spalte: string; ddl: string; pruef
   },
 ];
 
+// Einmalige Daten-Nachschübe (idempotent, nach den Spalten)
+const NACHSCHUB: { name: string; ddl: string }[] = [
+  {
+    // Reihenfolge im Tag: Bestand in bisheriger Anzeige-Reihenfolge nummerieren
+    // (nur Zeilen mit reihenfolge = 0 → läuft nie über manuelle Sortierungen)
+    name: "plan_entries-reihenfolge-backfill",
+    ddl: `UPDATE plan_entries e
+      JOIN (
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY plan_id, datum ORDER BY (zeit_von IS NULL), zeit_von, id
+        ) AS rn
+        FROM plan_entries
+      ) x ON e.id = x.id
+      SET e.reihenfolge = x.rn
+      WHERE e.reihenfolge = 0`,
+  },
+];
+
 // SOP §8.5: Jeder Migrationsschritt läuft isoliert — ein Fehler blockiert
 // nie die restliche Kette (wird geloggt und gemeldet).
 async function schritt(db: ReturnType<typeof getDb>, ddl: string, label: string): Promise<boolean> {
@@ -600,5 +626,9 @@ export async function migriereFehlendeSpalten(): Promise<void> {
     if (typ && !typ.includes(a.pruefWert)) {
       await schritt(db, a.ddl, `~ ${a.tabelle}.${a.spalte}`);
     }
+  }
+
+  for (const n of NACHSCHUB) {
+    await schritt(db, n.ddl, `Nachschub ${n.name}`);
   }
 }
