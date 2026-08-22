@@ -68,11 +68,12 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   // Reihenfolge im Tag (1.7.0)
   { tabelle: "plan_entries", spalte: "reihenfolge", ddl: "ALTER TABLE plan_entries ADD COLUMN reihenfolge INT NOT NULL DEFAULT 0 AFTER raum" },
   // Backup-Erinnerung (1.7.0)
-  { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
   // Patientennummern-Nummernkreis (1.7.0)
   { tabelle: "company_settings", spalte: "patienten_nr_start", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_start INT NOT NULL DEFAULT 1 AFTER signatur_bild" },
   { tabelle: "company_settings", spalte: "patienten_nr_prefix_aktiv", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_prefix_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER patienten_nr_start" },
   { tabelle: "company_settings", spalte: "patienten_nr_prefix", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_prefix VARCHAR(20) NOT NULL DEFAULT 'P' AFTER patienten_nr_prefix_aktiv" },
+  // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
+  { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
   // Plan→Rechnung-Rückbezug (1.6.2)
   { tabelle: "invoices", spalte: "therapieplan_id", ddl: "ALTER TABLE invoices ADD COLUMN therapieplan_id BIGINT UNSIGNED NULL AFTER proforma_von_id" },
   // ReWaWi-Sync (1.5): Regelwerk — Standard-Kategorie je Lieferant

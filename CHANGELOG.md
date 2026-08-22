@@ -1,5 +1,34 @@
 # Changelog — PraxiOS
 
+## [1.7.2] — 2026-08-22 — Fix: Migrations-Reihenfolge (AFTER-Verweis)
+
+### Fix
+- **`backup_zuletzt_am` wurde auf Bestands-DBs nicht angelegt**: Die Spalte
+  stand in der Migrationsliste VOR `patienten_nr_prefix`, referenzierte sie
+  aber per `AFTER` — das ALTER schlug fehl (isoliert geloggt), danach
+  scheiterte `settings.get` mit „Unknown column". Reihenfolge korrigiert.
+- **Neue Ordnungs-Wache** (`api/migrate.test.ts`): prüft statisch, dass jeder
+  AFTER-Verweis in der Migration auflösbar ist (Basis-Schema oder früherer
+  Eintrag) und keine Spalte doppelt angelegt wird — diese Fehlerklasse kann
+  nicht mehr unbemerkt durchrutschen
+
+---
+
+## [1.7.1] — 2026-08-22 — KRITISCHER Fix: Nummernkreis-Reset bei jedem Start
+
+### Fix (produktionskritisch)
+- **Rechnungsnummern-Kreis wurde bei jedem App-Start auf 0 zurückgesetzt** —
+  der Seed nutzte `onDuplicateKeyUpdate({ letzteNummer: 0 })` und lief bei
+  jedem Boot. Nach jeder Aktivierung kollidierte die nächste Finalisierung mit
+  bereits vergebenen Nummern (`ER_DUP_ENTRY` beim „Finalisieren & Nummer
+  vergeben"). Jetzt: bestehende Zählerstände bleiben unangetastet (GoBD).
+- **Selbstheilung beim Start**: der Rechnungskreis des laufenden Jahres wird
+  automatisch auf mindestens die höchste real vergebene Nummer angehoben —
+  Installationen, die der alte Bug schon zurückgesetzt hatte, reparieren sich
+  beim nächsten Start selbst (kein SQL-Eingriff nötig)
+
+---
+
 ## [1.7.0] — 2026-08-22 — Patientennummern-Kreis, Plan-Duplikat, Rezept-A5, Reihenfolge, Backup-Erinnerung
 
 ### Patientennummern fortlaufend geregelt (dringend gewünscht)
