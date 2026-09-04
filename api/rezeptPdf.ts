@@ -48,8 +48,9 @@ export interface RezeptPdfInput {
 }
 
 function wasserzeichenName(name: string): string {
-  // „Praxis Dr. X" → kurze Form für den Hintergrund (max. ~22 Zeichen)
-  return name.length > 24 ? name.slice(0, 24) : name;
+  // Kein Abschneiden — die Schriftgrößen-Schleife beim Rendern verkleinert
+  // den Namen, bis er in eine Zeile passt.
+  return name;
 }
 
 export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
@@ -108,15 +109,24 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
   const boxHoehe = boxUnten - boxOben;
   doc.save();
   doc.roundedRect(MARGIN, boxOben, W, boxHoehe, 8).fill(BOX_GRAU);
-  // Arztname groß und dezent weiß im Hintergrund
+  // Arztname groß und dezent weiß im Hintergrund — Schriftgröße wird
+  // automatisch verkleinert, bis der Name in EINE Zeile passt (kein Umbruch)
+  const wz = wasserzeichenName(praxis.name);
+  let wzGroesse = 32;
+  doc.font("Bold");
+  doc.fontSize(wzGroesse);
+  while (wzGroesse > 12 && doc.widthOfString(wz) > W - 40) {
+    wzGroesse -= 1;
+    doc.fontSize(wzGroesse);
+  }
   doc
-    .font("Bold")
-    .fontSize(input.praxis.name.length > 18 ? 26 : 32)
+    .fontSize(wzGroesse)
     .fillColor(WASSERZEICHEN)
     .fillOpacity(0.95)
-    .text(wasserzeichenName(praxis.name), MARGIN + 14, boxOben + boxHoehe / 2 - 30, {
+    .text(wz, MARGIN + 14, boxOben + boxHoehe / 2 - wzGroesse / 2 - 4, {
       width: W - 28,
       align: "center",
+      lineBreak: false,
     });
   doc.fillOpacity(1);
   doc.restore();
@@ -169,7 +179,19 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
       .text(istAU ? "Arbeitsunfähigkeitsbescheinigung" : "Ärztliches Attest", inhaltX, ay, {
         width: inhaltW,
       });
-    ay = doc.y + 12;
+    ay = doc.y + 10;
+
+    // Feststellung: Datum, Erst-/Folgebescheinigung, Ort (Pflichtangaben AU)
+    const festDatum = inhalt.feststellungsdatum || datum;
+    const festZeile: string[] = [`Festgestellt am ${festDatum}`];
+    if (istAU) {
+      festZeile.push(inhalt.erstbescheinigung === false ? "Folgebescheinigung" : "Erstbescheinigung");
+    }
+    const ort = (inhalt.feststellungsOrt ?? "Praxis").trim();
+    if (ort) festZeile.push(`Ort: ${ort}`);
+    doc.font("Regular").fontSize(8.5).fillColor(GRAU).text(festZeile.join(" · "), inhaltX, ay, { width: inhaltW });
+    ay = doc.y + 10;
+
     doc.font("Regular").fontSize(10).fillColor(DUNKEL);
     if (istAU) {
       const von = inhalt.auVon || datum;
@@ -184,6 +206,17 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
     }
     if (inhalt.text.trim()) {
       doc.text(inhalt.text.trim(), inhaltX, ay, { width: inhaltW, lineGap: 3 });
+      ay = doc.y + 8;
+    }
+
+    // Diagnose/ICD nur wenn ausdrücklich ausgewiesen (Arbeitgeber-Exemplar-Regel)
+    if (inhalt.diagnoseAusweisen && inhalt.icdCodes && inhalt.icdCodes.length > 0) {
+      doc.font("Bold").fontSize(8.5).fillColor(DUNKEL).text("Diagnose(n) nach ICD-10-GM:", inhaltX, ay, { width: inhaltW });
+      ay = doc.y + 2;
+      for (const c of inhalt.icdCodes) {
+        doc.font("Regular").fontSize(8.5).fillColor(DUNKEL).text(`${c.code} — ${c.text}`, inhaltX, ay, { width: inhaltW });
+        ay = doc.y + 1;
+      }
     }
   }
 

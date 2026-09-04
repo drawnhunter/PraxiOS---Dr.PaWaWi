@@ -14,6 +14,7 @@ import { getDb } from "./queries/connection";
 import { companySettings, customers, documents, loeschprotokoll, rezepte } from "@db/schema";
 import { env } from "./lib/env";
 import { renderRezeptPdf } from "./rezeptPdf";
+import { icdSuche } from "./lib/icd";
 import { schreibeTimeline } from "./lib/timeline";
 import type { AttestInhalt, RezeptInhalt } from "@contracts/rezepte";
 
@@ -43,6 +44,14 @@ const erstellenInput = z.discriminatedUnion("typ", [
       auVon: z.string().regex(DATUM_RE, "Format TT.MM.JJJJ").optional(),
       auBis: z.string().regex(DATUM_RE, "Format TT.MM.JJJJ").optional(),
       text: z.string().max(4000).default(""),
+      feststellungsdatum: z.string().regex(DATUM_RE, "Format TT.MM.JJJJ").optional(),
+      erstbescheinigung: z.boolean().optional(),
+      feststellungsOrt: z.string().trim().max(120).optional(),
+      diagnoseAusweisen: z.boolean().optional(),
+      icdCodes: z
+        .array(z.object({ code: z.string().trim().min(2).max(10), text: z.string().trim().min(1).max(300) }))
+        .max(10)
+        .optional(),
     }),
   }),
 ]);
@@ -60,6 +69,11 @@ function isoNachDe(iso: string | null | undefined): string | null {
 }
 
 export const rezeptRouter = createRouter({
+  /** ICD-10-GM-Katalog-Suche (lokal, kodierbare Endpunkte). */
+  icdSuche: rechtQuery("dokumente")
+    .input(z.object({ q: z.string().trim().min(2).max(100) }))
+    .query(async ({ input }) => icdSuche(input.q)),
+
   liste: rechtQuery("dokumente")
     .input(z.object({ patientId: z.number().int() }))
     .query(async ({ input }) => {

@@ -1,5 +1,27 @@
 # Changelog — PraxiOS
 
+## [1.8.0] — 2026-09-04 — Attest v2: ICD-10-Suche, Feststellung, Ort
+
+### Atteste & Krankschreibungen (große Ausbaustufe)
+- **ICD-10-GM-Katalog 2026 lokal im System** (amtlicher BfArM-Katalog,
+  kostenfreie Lizenz): ~10.000 Diagnose-Einträge, Suche per Code-Präfix
+  (z. B. „J06") oder Krankheitsname — inkl. umgangssprachlicher Synonyme
+  („Durchfall" findet Diarrhoe/Gastroenteritis, „Borreliose" findet
+  Lyme-Krankheit, „Hexenschuss" → Lumbago …). Kein Online-Zugriff nötig
+- **Diagnose optional pro Attest ausweisbar** (Schalter „Diagnose mit
+  ICD-10-Code ausweisen" + Chips je gewähltem Code): Standard bleibt ohne
+  Diagnose — sauber für Arbeitgeber-Exemplare; für Kasse/Patientin aktivierbar
+- **Feststellung komplett**: Feststellungsdatum (Standard: heute),
+  Erst-/Folgebescheinigung-Umschalter (nur AU), **Ort der Feststellung**
+  (Praxis / Hausbesuch / Videosprechstunde / anderer Ort als Freitext) —
+  abgebildet als Pflichtzeile „Festgestellt am … · Erstbescheinigung · Ort: …"
+  auf dem PDF (Anforderungen § 5 EFZG)
+- **A5-Layout verfeinert**: das Wasserzeichen (Arzt-/Praxisname groß in Weiß
+  auf der grauen Box) wird jetzt automatisch verkleinert, bis der Name in
+  eine Zeile passt — kein unschöner Umbruch mehr
+
+---
+
 ## [1.7.3] — 2026-08-23 — Sicherheit: Keine rohen DB-Fehler mehr am Client
 
 ### Security (Handover-Baustelle „Login zeigt rohe SQL-Fehler")

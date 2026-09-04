@@ -65,6 +65,19 @@ export function RezepteSection({ patientId }: { patientId: number }) {
   const [auVon, setAuVon] = useState("");
   const [auBis, setAuBis] = useState("");
   const [attestText, setAttestText] = useState("");
+  // v1.8.0: Feststellung + Ort + Diagnose/ICD
+  const heuteIso = () => new Date().toISOString().slice(0, 10);
+  const [festDatum, setFestDatum] = useState(heuteIso());
+  const [erstbescheinigung, setErstbescheinigung] = useState(true);
+  const [ortWahl, setOrtWahl] = useState("Praxis");
+  const [ortFrei, setOrtFrei] = useState("");
+  const [diagAusweisen, setDiagAusweisen] = useState(false);
+  const [icdSucheText, setIcdSucheText] = useState("");
+  const [icdGewaehlt, setIcdGewaehlt] = useState<{ code: string; text: string }[]>([]);
+  const icdTreffer = trpc.rezepte.icdSuche.useQuery(
+    { q: icdSucheText.trim() },
+    { enabled: icdSucheText.trim().length >= 2 },
+  );
 
   const erstellen = trpc.rezepte.erstellen.useMutation({
     onSuccess: () => {
@@ -75,6 +88,13 @@ export function RezepteSection({ patientId }: { patientId: number }) {
       setAttestText("");
       setAuVon("");
       setAuBis("");
+      setFestDatum(heuteIso());
+      setErstbescheinigung(true);
+      setOrtWahl("Praxis");
+      setOrtFrei("");
+      setDiagAusweisen(false);
+      setIcdGewaehlt([]);
+      setIcdSucheText("");
       utils.rezepte.liste.invalidate({ patientId });
       utils.customers.get.invalidate({ id: patientId });
     },
@@ -122,6 +142,11 @@ export function RezepteSection({ patientId }: { patientId: number }) {
         auVon: art === "krankschreibung" ? isoNachDe(auVon) : undefined,
         auBis: art === "krankschreibung" ? isoNachDe(auBis) : undefined,
         text: attestText.trim(),
+        feststellungsdatum: isoNachDe(festDatum),
+        erstbescheinigung,
+        feststellungsOrt: ortWahl === "anderer Ort" ? ortFrei.trim() || "Praxis" : ortWahl,
+        diagnoseAusweisen: diagAusweisen,
+        icdCodes: diagAusweisen && icdGewaehlt.length > 0 ? icdGewaehlt : undefined,
       },
     });
   };
@@ -314,6 +339,141 @@ export function RezepteSection({ patientId }: { patientId: number }) {
                 </div>
               </div>
             )}
+
+            {/* ── Feststellung: Datum, Erst/Folge, Ort ── */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Festgestellt am</Label>
+                <Input type="date" value={festDatum} onChange={(e) => setFestDatum(e.target.value)} />
+              </div>
+              {art === "krankschreibung" ? (
+                <div>
+                  <Label>Bescheinigung</Label>
+                  <div className="flex gap-1 rounded-md bg-neutral-100 p-0.5 text-xs">
+                    {([true, false] as const).map((erst) => (
+                      <button
+                        key={String(erst)}
+                        type="button"
+                        onClick={() => setErstbescheinigung(erst)}
+                        className={`flex-1 rounded px-2 py-1.5 transition-colors ${
+                          erstbescheinigung === erst ? "bg-white font-medium shadow-sm" : "text-neutral-500"
+                        }`}
+                      >
+                        {erst ? "Erstbescheinigung" : "Folgebescheinigung"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <Label>Ort der Feststellung</Label>
+                  <Select value={ortWahl} onValueChange={setOrtWahl}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Praxis">Praxis</SelectItem>
+                      <SelectItem value="Hausbesuch">Hausbesuch</SelectItem>
+                      <SelectItem value="Videosprechstunde">Videosprechstunde</SelectItem>
+                      <SelectItem value="anderer Ort">Anderer Ort …</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            {art === "krankschreibung" && (
+              <div>
+                <Label>Ort der Feststellung</Label>
+                <Select value={ortWahl} onValueChange={setOrtWahl}>
+                  <SelectTrigger className="w-64">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Praxis">Praxis</SelectItem>
+                    <SelectItem value="Hausbesuch">Hausbesuch</SelectItem>
+                    <SelectItem value="Videosprechstunde">Videosprechstunde</SelectItem>
+                    <SelectItem value="anderer Ort">Anderer Ort …</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {ortWahl === "anderer Ort" && (
+              <div>
+                <Label>Ort (Freitext)</Label>
+                <Input
+                  placeholder="z. B. Praxis am Wohnort des Arztes, unterwegs …"
+                  value={ortFrei}
+                  onChange={(e) => setOrtFrei(e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* ── Diagnose / ICD-10 (optional — Arbeitgeber-Exemplar-Regel) ── */}
+            <div className="rounded-md border border-neutral-200 p-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#0F766E]"
+                  checked={diagAusweisen}
+                  onChange={(e) => setDiagAusweisen(e.target.checked)}
+                />
+                Diagnose mit ICD-10-Code auf dem Attest ausweisen
+              </label>
+              {!diagAusweisen && (
+                <p className="mt-1 text-xs text-neutral-400">
+                  Standard: keine Diagnose auf dem Attest (Arbeitgeber-Exemplar-Regel).
+                </p>
+              )}
+              {diagAusweisen && (
+                <div className="mt-2 space-y-2">
+                  {icdGewaehlt.map((c) => (
+                    <div
+                      key={c.code}
+                      className="flex items-center justify-between gap-2 rounded bg-teal-50 px-2 py-1 text-xs"
+                    >
+                      <span>
+                        <span className="font-mono font-semibold">{c.code}</span> — {c.text}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-red-500"
+                        onClick={() => setIcdGewaehlt(icdGewaehlt.filter((x) => x.code !== c.code))}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <Input
+                    placeholder="ICD-Code oder Krankheit suchen (z. B. J06 oder Durchfall) …"
+                    value={icdSucheText}
+                    onChange={(e) => setIcdSucheText(e.target.value)}
+                  />
+                  {(icdTreffer.data ?? []).length > 0 && (
+                    <div className="max-h-44 overflow-y-auto rounded border border-neutral-200">
+                      {(icdTreffer.data ?? []).map((t) => (
+                        <button
+                          key={t.code}
+                          type="button"
+                          disabled={icdGewaehlt.some((x) => x.code === t.code)}
+                          onClick={() => {
+                            setIcdGewaehlt([...icdGewaehlt, t]);
+                            setIcdSucheText("");
+                          }}
+                          className="flex w-full items-start gap-2 px-2 py-1.5 text-left text-xs hover:bg-teal-50 disabled:opacity-40"
+                        >
+                          <span className="shrink-0 font-mono font-semibold">{t.code}</span>
+                          <span>{t.text}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {icdSucheText.trim().length >= 2 && icdTreffer.data && icdTreffer.data.length === 0 && (
+                    <p className="text-xs text-neutral-400">Kein Treffer im ICD-10-GM-Katalog.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div>
               <Label>
                 {art === "krankschreibung" ? "Zusatztext (optional)" : "Bescheinigungstext"}

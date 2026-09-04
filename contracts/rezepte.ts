@@ -17,6 +17,11 @@ export interface RezeptInhalt {
   hinweis?: string;
 }
 
+export interface IcdCode {
+  code: string;
+  text: string;
+}
+
 export interface AttestInhalt {
   /** krankschreibung = AU-Bescheinigung mit Zeitraum; attest = freies Attest. */
   art: "krankschreibung" | "attest";
@@ -25,6 +30,16 @@ export interface AttestInhalt {
   auBis?: string;
   /** Diagnose-/Bescheinigungstext. */
   text: string;
+  /** Datum der ärztlichen Feststellung (TT.MM.JJJJ), Standard = Ausstellungsdatum. */
+  feststellungsdatum?: string;
+  /** true = Erstbescheinigung, false = Folgebescheinigung (nur AU relevant). */
+  erstbescheinigung?: boolean;
+  /** Ort der Feststellung: Praxis (Standard) / Hausbesuch / Videosprechstunde / Freitext. */
+  feststellungsOrt?: string;
+  /** Diagnose/ICD auf dem Attest ausweisen (Standard: false — Arbeitgeber-Exemplar-Regel). */
+  diagnoseAusweisen?: boolean;
+  /** Gewählte ICD-10-GM-Codes (nur gerendert, wenn diagnoseAusweisen). */
+  icdCodes?: IcdCode[];
 }
 
 export const REZEPT_TYP_LABEL: Record<"rezept" | "attest", string> = {
