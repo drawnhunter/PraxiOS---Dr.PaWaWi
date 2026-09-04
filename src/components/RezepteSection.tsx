@@ -32,6 +32,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { FileDown, Plus, Trash2 } from "lucide-react";
 
 interface MedZeile {
@@ -108,8 +114,8 @@ export function RezepteSection({ patientId }: { patientId: number }) {
     },
   });
 
-  const pdf = async (id: number) => {
-    const r = await utils.rezepte.pdf.fetch({ id });
+  const pdf = async (id: number, format: "a5" | "a4" = "a5") => {
+    const r = await utils.rezepte.pdf.fetch({ id, format });
     pdfHerunterladen(r);
   };
 
@@ -200,9 +206,21 @@ export function RezepteSection({ patientId }: { patientId: number }) {
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="sm" onClick={() => pdf(r.id)}>
-                  <FileDown className="mr-1 h-4 w-4" /> PDF
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm">
+                      <FileDown className="mr-1 h-4 w-4" /> PDF
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => pdf(r.id, "a5")}>
+                      A5 — Rezeptpapier (Standard)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => pdf(r.id, "a4")}>
+                      A4 — klassisches Blatt
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   variant="ghost"
                   size="sm"

@@ -1,5 +1,18 @@
 # Changelog — PraxiOS
 
+## [1.8.1] — 2026-09-04 — Rezept/Attest: Stempel größer, A4 wählbar
+
+### Anpassungen
+- **Unterschrifts-Stempel deutlich größer** auf Rezept/Attest (war zu klein)
+- **Format beim PDF-Download wählbar**: A5 (Rezeptpapier, Standard) oder
+  A4 (klassisches Blatt) — Dropdown am PDF-Button in „Rezepte & Atteste"
+- **Einstellungen**: ehrlicher Hinweis beim Signatur-Upload — eingescannte
+  handschriftliche Unterschrift (auf dem Ausdruck ausreichend), bewusst keine
+  qualifizierte elektronische Signatur, daher auch kein Verwirr-Hinweis auf
+  dem Dokument
+
+---
+
 ## [1.8.0] — 2026-09-04 — Attest v2: ICD-10-Suche, Feststellung, Ort
 
 ### Atteste & Krankschreibungen (große Ausbaustufe)

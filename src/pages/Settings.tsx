@@ -920,6 +920,13 @@ function SignaturAbschnitt() {
         freistellen (zuschneiden). Liegt kein Bild vor, erscheint nur die
         Unterschriftszeile zum handschriftlichen Signieren.
       </p>
+      <p className="mb-4 text-xs text-neutral-400">
+        Rechtlich einordnen: Das ist eine eingescannte handschriftliche Unterschrift
+        — auf dem Ausdruck völlig ausreichend. Es ist bewusst <em>keine</em>{" "}
+        qualifizierte elektronische Signatur (die bräuchte ein Zertifikat eines
+        Vertrauensdienstanbieters) — einen entsprechenden Hinweis auf dem Dokument
+        lassen wir deshalb bewusst weg, er würde nur verwirren.
+      </p>
       <div className="flex flex-wrap items-center gap-4">
         {signatur.data?.dataUrl ? (
           <div className="rounded border border-neutral-200 bg-neutral-50 p-2">

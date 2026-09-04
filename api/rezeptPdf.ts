@@ -18,10 +18,11 @@ const DUNKEL = "#1c1917";
 const GRAU = "#57534e";
 const BOX_GRAU = "#E9E9E7";
 const WASSERZEICHEN = "#FFFFFF";
-const PAGE_W = 419.53; // A5 hochkant
-const PAGE_H = 595.28;
-const MARGIN = 28;
-const W = PAGE_W - 2 * MARGIN;
+// A5 hochkant (Standard, Rezeptpapier) — A4 wählbar beim Download
+const GROESSEN = {
+  a5: { w: 419.53, h: 595.28, margin: 28, skala: 1 },
+  a4: { w: 595.28, h: 841.89, margin: 40, skala: 1.35 },
+} as const;
 
 export interface RezeptPdfInput {
   typ: "rezept" | "attest";
@@ -45,6 +46,8 @@ export interface RezeptPdfInput {
   signaturBild?: string | null;
   /** Ausstellungsdatum TT.MM.JJJJ. */
   datum: string;
+  /** Papierformat: a5 (Standard, Rezeptpapier) oder a4. */
+  format?: "a5" | "a4";
 }
 
 function wasserzeichenName(name: string): string {
@@ -54,6 +57,13 @@ function wasserzeichenName(name: string): string {
 }
 
 export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
+  const G = GROESSEN[input.format ?? "a5"];
+  const PAGE_W = G.w;
+  const PAGE_H = G.h;
+  const MARGIN = G.margin;
+  const W = PAGE_W - 2 * MARGIN;
+  const SK = G.skala;
+
   const doc = new PDFDocument({
     size: [PAGE_W, PAGE_H],
     margin: MARGIN,
@@ -247,7 +257,7 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
       const b64 = input.signaturBild.split(",")[1] ?? "";
       const buf = Buffer.from(b64, "base64");
       if (buf.length > 100) {
-        doc.image(buf, sigX + 8, sigY - 30, { fit: [130, 48] });
+        doc.image(buf, sigX + 6, sigY - 44, { fit: [170 * SK, 66 * SK] });
       }
     } catch {
       /* defektes Bild → nur Linie */

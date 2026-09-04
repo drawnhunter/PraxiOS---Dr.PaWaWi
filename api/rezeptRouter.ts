@@ -196,7 +196,7 @@ export const rezeptRouter = createRouter({
     }),
 
   pdf: rechtQuery("dokumente")
-    .input(z.object({ id: z.number().int() }))
+    .input(z.object({ id: z.number().int(), format: z.enum(["a5", "a4"]).optional() }))
     .query(async ({ input }) => {
       const db = getDb();
       const r = await db.query.rezepte.findFirst({
@@ -206,8 +206,43 @@ export const rezeptRouter = createRouter({
       if (!r?.dokument) {
         throw new TRPCError({ code: "NOT_FOUND", message: "PDF nicht gefunden." });
       }
-      const buf = await readFile(path.join(env.uploadDir, r.dokument.dateipfad));
-      return { dateiname: r.dokument.dateiname, base64: buf.toString("base64") };
+      // A5 (Standard): das beim Erstellen abgelegte PDF; A4: frisch im
+      // Querformat neu gerendert (Inhalt aus der DB)
+      if ((input.format ?? "a5") === "a5") {
+        const buf = await readFile(path.join(env.uploadDir, r.dokument.dateipfad));
+        return { dateiname: r.dokument.dateiname, base64: buf.toString("base64") };
+      }
+      const patient = await db.query.customers.findFirst({
+        where: eq(customers.id, r.patientId),
+      });
+      const praxis = await db.query.companySettings.findFirst({
+        where: eq(companySettings.id, 1),
+      });
+      if (!patient || !praxis) throw new TRPCError({ code: "NOT_FOUND", message: "Daten fehlen." });
+      const datum = r.createdAt.toLocaleDateString("de-DE");
+      const pdfBuf = await renderRezeptPdf({
+        typ: r.typ,
+        inhalt: JSON.parse(r.inhalt),
+        patient: {
+          name: patient.name,
+          geburtsdatum: isoNachDe(patient.geburtsdatum),
+          strasse: patient.strasse,
+          plz: patient.plz,
+          ort: patient.ort,
+        },
+        praxis: {
+          name: praxis.name,
+          strasse: praxis.strasse,
+          plz: praxis.plz,
+          ort: praxis.ort,
+          telefon: praxis.telefon,
+          email: praxis.email,
+        },
+        signaturBild: praxis.signaturBild,
+        datum,
+        format: "a4",
+      });
+      return { dateiname: r.dokument.dateiname, base64: pdfBuf.toString("base64") };
     }),
 
   loeschen: rechtQuery("dokumente")
