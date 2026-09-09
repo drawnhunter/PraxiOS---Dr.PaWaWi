@@ -35,6 +35,8 @@ const itemInput = z.object({
   einheit: z.string().min(1).default("Stück"),
   einzelpreis: z.string().regex(/^-?\d+(\.\d{1,2})?$/, "Preis mit max. 2 Dezimalstellen"),
   ustSatz: z.number().int().refine((v) => [19, 7, 0].includes(v), "Nur 19 %, 7 % oder 0 %"),
+  rabattArt: z.enum(["prozent", "festwert"]).nullable().optional(),
+  rabattWert: z.string().regex(/^\d+(\.\d{1,2})?$/, "Rabatt mit max. 2 Dezimalstellen").nullable().optional(),
 });
 
 const kopfInput = z.object({
@@ -52,6 +54,9 @@ const kopfInput = z.object({
   pdfNotiz: z.string().nullable().optional(),
   bereitsBezahlt: z.boolean().optional(),
   bemerkung: z.string().nullable().optional(),
+  hauptrabattArt: z.enum(["prozent", "festwert"]).nullable().optional(),
+  hauptrabattWert: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+  rabattAddieren: z.boolean().optional(),
 });
 
 async function ladeRechnungMitDetails(id: number) {
@@ -162,7 +167,13 @@ export const invoiceRouter = createRouter({
         throw new Error("Nur Entwürfe können bearbeitet werden (GoBD).");
       }
 
-      const totals = computeTotals(input.items);
+      const totals = computeTotals(
+        input.items,
+        input.kopf.hauptrabattArt && input.kopf.hauptrabattWert
+          ? { art: input.kopf.hauptrabattArt, wert: Number(input.kopf.hauptrabattWert) }
+          : null,
+        input.kopf.rabattAddieren ?? false,
+      );
 
       await db.transaction(async (tx) => {
         await tx
@@ -173,6 +184,9 @@ export const invoiceRouter = createRouter({
             bankAccountId: input.kopf.bankAccountId ?? null,
             pdfNotiz: input.kopf.pdfNotiz ?? null,
             bereitsBezahlt: input.kopf.bereitsBezahlt ?? false,
+            hauptrabattArt: input.kopf.hauptrabattArt ?? null,
+            hauptrabattWert: input.kopf.hauptrabattWert ?? null,
+            rabattAddieren: input.kopf.rabattAddieren ?? false,
             netto: centToDecimal(totals.nettoCent),
             ust: centToDecimal(totals.ustCent),
             brutto: centToDecimal(totals.bruttoCent),
@@ -191,6 +205,8 @@ export const invoiceRouter = createRouter({
               einheit: it.einheit,
               einzelpreis: it.einzelpreis,
               ustSatz: it.ustSatz,
+              rabattArt: it.rabattArt ?? null,
+              rabattWert: it.rabattWert ?? null,
             })),
           );
         }
@@ -299,28 +315,46 @@ export const invoiceRouter = createRouter({
       }
 
       const nummer = await db.transaction(async (tx) => {
-        const n = await nextNumber(tx, "invoice", jahr);
-        const nr = formatInvoiceNumber(jahr, n);
-        // Zahlungsziel „bereits bezahlt“ → direkt als bezahlt verbuchen
-        const bezahltSet = rechnung.bereitsBezahlt
-          ? {
-              bezahltBetrag: rechnung.brutto,
-              bezahltAm: rechnung.rechnungsdatum,
-            }
-          : {};
-        await tx
-          .update(invoices)
-          .set({
-            nummer: nr,
-            status: "finalisiert",
-            finalizedAt: new Date(),
-            firmenSnapshot,
-            bankSnapshot,
-            ...bezahltSet,
-            ...abschlagSet,
-          })
-          .where(eq(invoices.id, input.id));
-        return nr;
+        // Kollisionsschutz (ReWaWi v1.2.2-Muster): Altbestand/Importe können
+        // Nummern im eigenen Format belegt haben — hochzählen bis frei, statt
+        // mit ER_DUP_ENTRY zu scheitern. GoBD: übersprungene Nummern sind durch
+        // importierte Original-Belege belegt, jede vergebene Nummer existiert
+        // genau einmal.
+        let nr = "";
+        for (let versuch = 0; versuch < 1000; versuch++) {
+          const n = await nextNumber(tx, "invoice", jahr);
+          nr = formatInvoiceNumber(jahr, n);
+          const [kollision] = await tx
+            .select({ id: invoices.id })
+            .from(invoices)
+            .where(eq(invoices.nummer, nr))
+            .limit(1);
+          if (kollision) {
+            console.warn(`[finalize] Nummer ${nr} bereits vergeben — überspringe`);
+            continue;
+          }
+          // Zahlungsziel „bereits bezahlt“ → direkt als bezahlt verbuchen
+          const bezahltSet = rechnung.bereitsBezahlt
+            ? {
+                bezahltBetrag: rechnung.brutto,
+                bezahltAm: rechnung.rechnungsdatum,
+              }
+            : {};
+          await tx
+            .update(invoices)
+            .set({
+              nummer: nr,
+              status: "finalisiert",
+              finalizedAt: new Date(),
+              firmenSnapshot,
+              bankSnapshot,
+              ...bezahltSet,
+              ...abschlagSet,
+            })
+            .where(eq(invoices.id, input.id));
+          return nr;
+        }
+        throw new Error("Keine freie Rechnungsnummer gefunden (1000 Versuche).");
       });
 
       return { nummer };
@@ -609,6 +643,9 @@ export const invoiceRouter = createRouter({
           ust: r.ust,
           brutto: r.brutto,
           bereitsBezahlt: false,
+          hauptrabattArt: r.hauptrabattArt,
+          hauptrabattWert: r.hauptrabattWert,
+          rabattAddieren: r.rabattAddieren,
           pdfNotiz: r.pdfNotiz,
           bemerkung: r.bemerkung,
         })
@@ -624,6 +661,8 @@ export const invoiceRouter = createRouter({
             einheit: it.einheit,
             einzelpreis: it.einzelpreis,
             ustSatz: it.ustSatz,
+            rabattArt: it.rabattArt,
+            rabattWert: it.rabattWert,
           })),
         );
       }

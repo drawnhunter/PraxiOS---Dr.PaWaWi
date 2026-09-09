@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Repeat, UserPlus } from "lucide-react";
+import { Plus, Repeat, Search, UserPlus } from "lucide-react";
 
 export function statusBadge(status: InvoiceStatus) {
   const variant =
@@ -49,6 +49,7 @@ interface NeukundeForm {
 export default function Invoices() {
   const [serienOffen, setSerienOffen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("alle");
+  const [q, setQ] = useState("");
   const [panelId, setPanelId] = useState<number | null>(null);
   const [neuDialog, setNeuDialog] = useState(false);
   const [modus, setModus] = useState<"bestehend" | "neu">("bestehend");
@@ -74,13 +75,19 @@ export default function Invoices() {
   );
 
   const heute = new Date().toISOString().slice(0, 10);
-  const zeilenListe = (liste.data ?? []).filter((r) =>
-    statusFilter === "ueberfaellig"
-      ? r.status === "finalisiert" &&
-        Number(r.brutto) - Number(r.bezahltBetrag) > 0.004 &&
-        r.faelligkeitsdatum < heute
-      : true,
-  );
+  const zeilenListe = (liste.data ?? []).filter((r) => {
+    const passtStatus =
+      statusFilter === "ueberfaellig"
+        ? r.status === "finalisiert" &&
+          Number(r.brutto) - Number(r.bezahltBetrag) > 0.004 &&
+          r.faelligkeitsdatum < heute
+        : true;
+    const passtSuche =
+      !q.trim() ||
+      (r.nummer ?? "").toLowerCase().includes(q.toLowerCase()) ||
+      r.kundeName.toLowerCase().includes(q.toLowerCase());
+    return passtStatus && passtSuche;
+  });
   const kunden = trpc.customers.list.useQuery();
 
   const erstellen = trpc.invoices.createDraft.useMutation({
@@ -158,9 +165,18 @@ export default function Invoices() {
         </div>
       </div>
 
-      <div className="mb-4 max-w-xs">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative w-64">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Nummer / Patient suchen …"
+            className="pl-8"
+          />
+        </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger>
+          <SelectTrigger className="w-48">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -5,6 +5,8 @@ import { geld, datum } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TerminKarte } from "./Kalender";
+import { SupportDialog } from "@/components/SupportDialog";
+import { LifeBuoy, BellRing } from "lucide-react";
 import {
   CalendarDays,
   ClipboardList,
@@ -20,6 +22,7 @@ export default function Dashboard() {
   const uebersicht = trpc.dashboard.uebersicht.useQuery();
   const heute = trpc.dashboard.heute.useQuery();
   const stats = trpc.dashboard.stats.useQuery();
+  const [supportOffen, setSupportOffen] = useState(false);
 
   const kennzahlen = [
     {
@@ -84,9 +87,18 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold tracking-tight">Übersicht</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold tracking-tight">Übersicht</h1>
+        <Button variant="outline" size="sm" onClick={() => setSupportOffen(true)}>
+          <LifeBuoy className="mr-1.5 h-4 w-4" /> Support
+        </Button>
+      </div>
+
+      <SupportDialog offen={supportOffen} onSchliessen={() => setSupportOffen(false)} />
 
       <BackupErinnerung />
+
+      <MahnKarte />
 
       {/* ── Praxis-Kennzahlen ── */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -270,6 +282,44 @@ function BackupErinnerung() {
       <Button size="sm" variant="ghost" onClick={() => setWege(true)}>
         Später
       </Button>
+    </div>
+  );
+}
+
+// ── Mahnwesen-Karte (ReWaWi v1.9): fällige Mahnungen mit Stufen-Info ────────
+function MahnKarte() {
+  const mahnungen = trpc.dashboard.mahnFaellig.useQuery();
+  const faellige = (mahnungen.data ?? []).filter((x) => x.faellig);
+  if (faellige.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+      <div className="mb-2 flex items-center gap-2 text-sm font-medium text-amber-900">
+        <BellRing className="h-4 w-4" /> Mahnwesen — Handlungsbedarf
+      </div>
+      <div className="space-y-1.5">
+        {faellige.map((x) => (
+          <div
+            key={x.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-sm"
+          >
+            <span className="text-neutral-700">
+              <strong>{x.kunde}</strong> — Rechnung {x.nummer ?? `#${x.id}`} (fällig seit{" "}
+              {datum(x.faelligkeitsdatum)}) — offen: <strong>{geld(x.offenBetrag)}</strong>
+              <span className="ml-1 text-xs text-neutral-500">
+                {x.anzahlStufen === 0
+                  ? "noch keine Erinnerung versendet"
+                  : `${x.anzahlStufen}× erinnert/angemahnt (zuletzt Stufe ${x.letzteStufe})`}
+              </span>
+            </span>
+            <Button size="sm" variant="outline" asChild>
+              <Link to={`/rechnungen/${x.id}`}>
+                {x.anzahlStufen === 0 ? "Erinnern" : `Anmahnen (Stufe ${x.naechsteStufe})`}
+              </Link>
+            </Button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

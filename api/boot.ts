@@ -264,6 +264,15 @@ if (env.isProduction) {
     // Terminerinnerungen (E-Mail, alle 30 min)
     const { starteErinnerungsScheduler } = await import("./terminErinnerung");
     starteErinnerungsScheduler();
+
+    // SupportHub-Client (Pull-Modell, Auftrag Bus #18): Heartbeat + Befehle —
+    // nur aktiv, wenn ein Support-Schlüssel verbunden ist (prüft er selbst)
+    try {
+      const { starteHubClient } = await import("./lib/hubClient");
+      starteHubClient();
+    } catch (e) {
+      console.error("[hub] Client-Start fehlgeschlagen:", e);
+    }
   } catch (e) {
     console.error("[migrate/seed] fehlgeschlagen:", e);
   }

@@ -1,5 +1,52 @@
 # Changelog — PraxiOS
 
+## [1.9.0] — 2026-09-04 — ReWaWi-v1.8/v1.9-Sync + SupportHub-Anbindung (Pull-Modell)
+
+### SupportHub-Anbindung (Bus-Auftrag #18)
+- **Support-Button im Dashboard** (Blocker zuerst): Frage/Problem/Idee/Fehler
+  direkt aus der App melden — mit Support-Schlüssel als Ticket im SupportHub
+  (Paket-Status sichtbar), ohne Schlüssel klassisch per SMTP; jede Meldung wird
+  lokal protokolliert (support_meldungen)
+- **FehlerMelder**: fatale App-Fehler ersetzen die Ansicht durch eine ruhige
+  Karte mit „Melden"-Weg (technischer Kontext wird angehängt) statt weißer Seite
+- **Hub-Client (Pull/RMM)**: Heartbeat alle 10 min (Version, Status, Disk-%,
+  Uptime, letztes Backup, Fehler 24 h) — nur wenn ein Support-Schlüssel
+  verbunden ist, bei Hub-Ausfall still weiter. Befehle werden abgeholt und
+  ausgeführt: `backup` (eigener DB-Dump gzipped ins Backups-Verzeichnis),
+  `diagnose` (Metadaten-Paket zurück an den Hub), `update-hinweis` (lokale
+  Registrierung). Keine Patienten-/Buchhaltungsdaten verlassen je den Server.
+
+### ReWaWi-Sync v1.8.0–v1.9.2 (im Praxis-Kontext)
+- **Rabatte**: Positions-Rabatt (% oder Festwert je Zeile) + Haupt-Rabatt auf
+  den Gesamtbeleg (optional additiv zur Zwischensumme) — Largest-Remainder-
+  Verteilung, EN16931-konform in der XRechnung (AllowanceCharges), auf dem PDF
+  und im Entwurfs-Editor sichtbar
+- **Fuzzy-Produktsuche überall**: Bezeichnungsfelder schlagen jetzt den
+  Katalog beim Tippen vor (inkl. Artikelnummer/Barcode), mit Preis-Übernahme
+- **NEM-/Produktlisten-Import**: Word-Preislisten (.docx) werden im Magic
+  Import erkannt → Patient per Fuzzy-Match → Lieferschein-Entwurf direkt
+- **Rechnung aus Lieferschein**: finalisierter Lieferschein → „Rechnung
+  erstellen" (Positionen bekommen Preise aus dem Stamm, Konditionen zuerst)
+- **Liquiditätsplanung** in der Statistik: Jahresmatrix, Monatsbudget mit
+  Ampel, CSV/SVG-Export; **Währung** in den Einstellungen; Statistik mit
+  Erklär-Bubbles, netto/brutto und klickbaren Balken
+- **Mahnwesen-Dashboard-Karte**: fällige Mahnungen mit Stufen-Zähler und
+  „Erinnern/Anmahnen"-Sprung; Mahn-Dialog nutzt Dialog-Adresse +
+  Standard-Speichern
+- **Angebots-Workflow**: Status offen/bestätigt/abgelehnt (+ verstrichen) —
+  3-stufige Enum-Migration (war bereits drin)
+- **Finalize-Kollisionsschutz** (v1.2.2-Muster): belegte Nummern werden
+  übersprungen statt mit ER_DUP_ENTRY zu scheitern
+- **Rechnungsliste mit Suche** (Nummer/Patient) neben dem Status-Filter
+- Proformas werden aus allen Statistik-Zahlen ausgeschlossen (sind keine
+  Einnahmen)
+
+### Technik
+- Keine neuen Dependencies nötig (NEM-Import nutzt node:zlib — die
+  fflate-Falle aus Bus #13 ist damit entschärft)
+
+---
+
 ## [1.8.1] — 2026-09-04 — Rezept/Attest: Stempel größer, A4 wählbar
 
 ### Anpassungen

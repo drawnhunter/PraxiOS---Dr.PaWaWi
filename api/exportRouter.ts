@@ -68,12 +68,18 @@ export const exportRouter = createRouter({
           email: kundeRow?.email ?? null,
         },
         bank,
+        // Rabatte (ReWaWi v1.9): Positions- + Haupt-Rabatt ins EN16931-XML
+        hauptrabattArt: (r.hauptrabattArt as "prozent" | "festwert" | null) ?? null,
+        hauptrabattWert: r.hauptrabattWert,
+        rabattAddieren: r.rabattAddieren ?? false,
         items: r.items.map((it) => ({
           bezeichnung: it.bezeichnung,
           menge: it.menge,
           einheit: it.einheit,
           einzelpreis: it.einzelpreis,
           ustSatz: it.ustSatz,
+          rabattArt: (it.rabattArt as "prozent" | "festwert" | null) ?? null,
+          rabattWert: it.rabattWert,
         })),
       });
 

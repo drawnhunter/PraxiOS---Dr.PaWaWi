@@ -9,8 +9,9 @@ import { bucheEingangsrechnungAusXml } from "./lib/einrechnung";
 import { erzeugePostEingang, mimeAusName } from "./lib/posteingang";
 import { blaetterDesPlans } from "./therapyPlan";
 import { erkenneSumUpMerkmale } from "./lib/sumupPdf";
+import { getDb } from "./queries/connection";
 
-const ROUTEN = ["erechnung", "post", "therapieplan", "altbestand", "kunden", "produkte", "bank", "unbekannt"] as const;
+const ROUTEN = ["erechnung", "post", "therapieplan", "altbestand", "kunden", "produkte", "bank", "nemliste", "unbekannt"] as const;
 type Route = (typeof ROUTEN)[number];
 
 const dateiInput = z.object({
@@ -88,6 +89,7 @@ async function analysiereDatei(name: string, puffer: Buffer): Promise<Analyse> {
       post: "",
       therapieplan: "Therapieplan-CSV (PraxisAkte-Export) erkannt",
       altbestand: "",
+      nemliste: "",
       kunden: "SumUp-Kundenexport erkannt",
       produkte: "SumUp-Produktexport erkannt",
       bank: "Bank-/Kontoauszug erkannt",
@@ -99,6 +101,21 @@ async function analysiereDatei(name: string, puffer: Buffer): Promise<Analyse> {
   // SumUp-Rechnungs-PDF (ausgehender Beleg) → Altbestand-Import (ReWaWi-Sync)
   if (lower.endsWith(".pdf") && (await erkenneSumUpMerkmale(puffer))) {
     return { name, route: "altbestand", hinweis: "SumUp-Rechnung erkannt — komplett importierbar (Altbestand)" };
+  }
+
+  // NEM-/Produktliste (docx mit Tabelle oder Preiszeilen) → Lieferschein-Entwurf
+  if (lower.endsWith(".docx")) {
+    try {
+      const { parseNemDokument } = await import("./lib/nemWord");
+      const dok = parseNemDokument(puffer);
+      return {
+        name,
+        route: "nemliste",
+        hinweis: `Produkt-/NEM-Liste erkannt (${dok.positionen.length} Positionen${dok.name ? `, ${dok.name}` : ""}) — wird als Lieferschein-Entwurf importiert`,
+      };
+    } catch {
+      return { name, route: "unbekannt", hinweis: "Word-Datei ohne erkennbare Produktliste (keine Tabelle, keine Preiszeilen)" };
+    }
   }
 
   // Dr.PaWaWi: IMTZ-Therapieplan (XLSX mit KW-Blättern) → Therapie-Import
@@ -116,6 +133,22 @@ async function analysiereDatei(name: string, puffer: Buffer): Promise<Analyse> {
       /* kein Therapieplan-Layout */
     }
     return { name, route: "unbekannt", hinweis: "Excel ohne KW-Blätter — kein Therapieplan-Layout" };
+  }
+
+  // NEM-/Produktliste als Word-Datei (ReWaWi v1.9.2-Sync) — Wichtig: VOR dem
+  // allgemeinen unbekannt-Fall
+  if (lower.endsWith(".docx")) {
+    try {
+      const { parseNemDokument } = await import("./lib/nemWord");
+      const dok = parseNemDokument(puffer);
+      return {
+        name,
+        route: "nemliste",
+        hinweis: `Produkt-/NEM-Liste erkannt (${dok.positionen.length} Positionen${dok.name ? `, ${dok.name}` : ""}) — wird als Lieferschein-Entwurf importiert`,
+      };
+    } catch {
+      return { name, route: "unbekannt", hinweis: "Word-Datei ohne erkennbare Produktliste (keine Tabelle, keine Preiszeilen)" };
+    }
   }
 
   return { name, route: "unbekannt", hinweis: "Dateityp wird nicht unterstützt" };
@@ -182,6 +215,31 @@ export const magicImportRouter = createRouter({
               quelle: "Magic Import",
             });
             ergebnisse.push({ name: d.name, ok: true, ziel: "im Post Manager abgelegt", id });
+          } else if (d.route === "nemliste") {
+            // NEM-/Produktliste: direkt als Lieferschein-Entwurf anlegen
+            // (Kunde per Fuzzy-Match aus dem Dokumentnamen — sonst Hinweis)
+            const { parseNemDokument, legeLieferscheinAusNemAn } = await import("./lib/nemWord");
+            const { besterTreffer } = await import("@contracts/fuzzy");
+            const dok = parseNemDokument(puffer);
+            const kunden = await getDb().query.customers.findMany();
+            const kt = dok.name ? besterTreffer(kunden, dok.name, (k) => k.name, 60) : null;
+            if (!kt) {
+              ergebnisse.push({
+                name: d.name,
+                ok: true,
+                ziel: `Liste erkannt (${dok.positionen.length} Positionen), aber kein Patient „${dok.name ?? "?"}" gefunden — bitte unter Lieferscheine importieren (Patient wählbar)`,
+                weiter: "/lieferscheine",
+              });
+              continue;
+            }
+            const { id } = await legeLieferscheinAusNemAn(kt.treffer.id, dok, d.name);
+            ergebnisse.push({
+              name: d.name,
+              ok: true,
+              ziel: `Lieferschein-Entwurf #${id} für ${kt.treffer.name} angelegt (${dok.positionen.length} Positionen)`,
+              id,
+              weiter: `/lieferscheine/${id}`,
+            });
           } else if (d.route === "kunden" || d.route === "produkte" || d.route === "bank" || d.route === "therapieplan" || d.route === "altbestand") {
             const ziele: Record<string, string> = {
               kunden: "/kunden",

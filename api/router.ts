@@ -39,6 +39,7 @@ import { rezeptRouter } from "./rezeptRouter";
 import { protokollRouter } from "./protokollRouter";
 import { unternehmenRouter } from "./unternehmenRouter";
 import { bankTransaktionenRouter } from "./bankTransaktionenRouter";
+import { supportRouter } from "./supportRouter";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now(), version: APP_VERSION })),
@@ -79,6 +80,7 @@ export const appRouter = createRouter({
   protokolle: protokollRouter,
   unternehmen: unternehmenRouter,
   bankTrans: bankTransaktionenRouter,
+  support: supportRouter,
   leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 

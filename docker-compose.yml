@@ -61,6 +61,8 @@ services:
       - PORT=3000
       - UPLOAD_DIR=/app/dokumente
       - TRANSLATE_URL=http://translate:5000
+      - SUPPORT_PRODUKT=Dr.PaWaWi
+      - SUPPORT_HUB_URL=https://support.praxios.dynv6.net
       # GEFAHR: Login ueberspringen - nur fuer lokale Tests, niemals oeffentlich!
       # - LOCAL_AUTH_BYPASS=1
     volumes:

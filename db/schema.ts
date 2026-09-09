@@ -27,6 +27,9 @@ export const companySettings = mysqlTable("company_settings", {
   handelsregister: varchar("handelsregister", { length: 100 }),
   steuernummer: varchar("steuernummer", { length: 50 }),
   ustIdNr: varchar("ust_id_nr", { length: 50 }),
+  // Liquiditätsplanung (ReWaWi v1.9): Anzeige-Währung + Monatsbudget
+  waehrung: varchar("waehrung", { length: 10 }).notNull().default("€"),
+  monatsBudget: decimal("monats_budget", { precision: 12, scale: 2 }),
   email: varchar("email", { length: 320 }),
   telefon: varchar("telefon", { length: 50 }),
   webseite: varchar("webseite", { length: 255 }),
@@ -69,6 +72,8 @@ export const companySettings = mysqlTable("company_settings", {
   kalenderToken: varchar("kalender_token", { length: 64 }),
   // Geheimer Schlüssel — verlässt den Server NIE (wird in der API nicht ausgeliefert)
   ageSecret: varchar("age_secret", { length: 100 }),
+  // SupportHub-Verbindung: Support-Schlüssel des Kunden (ps_…)
+  supportSchluessel: varchar("support_schluessel", { length: 80 }),
   // Backup-Erinnerung: Zeitpunkt der letzten bestätigten Sicherung
   backupZuletztAm: timestamp("backup_zuletzt_am"),
   // Patientennummern-Nummernkreis: Startzahl + optionaler freier Präfix
@@ -319,6 +324,10 @@ export const invoices = mysqlTable(
     netto: decimal("netto", { precision: 12, scale: 2 }).notNull().default("0"),
     ust: decimal("ust", { precision: 12, scale: 2 }).notNull().default("0"),
     brutto: decimal("brutto", { precision: 12, scale: 2 }).notNull().default("0"),
+    // Hauptrabatt auf Belegebene (ReWaWi v1.9): Prozent/Festwert, optional additiv
+    hauptrabattArt: varchar("hauptrabatt_art", { length: 10 }),
+    hauptrabattWert: decimal("hauptrabatt_wert", { precision: 12, scale: 2 }),
+    rabattAddieren: boolean("rabatt_addieren").notNull().default(false),
     bezahltBetrag: decimal("bezahlt_betrag", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
@@ -350,6 +359,9 @@ export const invoiceItems = mysqlTable(
     einheit: varchar("einheit", { length: 30 }).notNull().default("Stück"),
     einzelpreis: decimal("einzelpreis", { precision: 12, scale: 2 }).notNull(),
     ustSatz: int("ust_satz").notNull().default(19),
+    // Rabatt je Position (ReWaWi v1.9): prozent | festwert + Wert
+    rabattArt: varchar("rabatt_art", { length: 10 }),
+    rabattWert: decimal("rabatt_wert", { precision: 12, scale: 2 }),
   },
   (t) => ({
     invoiceIdx: index("invoice_items_invoice_idx").on(t.invoiceId),
@@ -625,7 +637,7 @@ export const offers = mysqlTable(
   {
     id: serial("id").primaryKey(),
     nummer: varchar("nummer", { length: 20 }).unique(),
-    status: mysqlEnum("status", ["entwurf", "finalisiert", "umgewandelt", "storniert"])
+    status: mysqlEnum("status", ["entwurf", "offen", "bestaetigt", "abgelehnt", "umgewandelt", "storniert"])
       .notNull()
       .default("entwurf"),
     customerId: bigint("customer_id", { mode: "number", unsigned: true }).notNull(),
@@ -1201,3 +1213,19 @@ export const bankTransaktionen = mysqlTable(
 );
 export type BankImport = typeof bankImporte.$inferSelect;
 export type BankTransaktion = typeof bankTransaktionen.$inferSelect;
+
+// ── Support-Meldungen: In-App-Reports (Frage/Problem/Idee/Fehler) ──────────
+export const supportMeldungen = mysqlTable("support_meldungen", {
+  id: serial("id").primaryKey(),
+  typ: mysqlEnum("typ", ["frage", "problem", "idee", "fehler"]).notNull(),
+  betreff: varchar("betreff", { length: 200 }).notNull(),
+  nachricht: text("nachricht").notNull(),
+  kontext: text("kontext"),
+  benutzer: varchar("benutzer", { length: 255 }).notNull(),
+  instanz: varchar("instanz", { length: 255 }).notNull(),
+  version: varchar("version", { length: 20 }).notNull(),
+  status: mysqlEnum("status", ["gesendet", "fehlgeschlagen"]).notNull(),
+  fehler: varchar("fehler", { length: 500 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type SupportMeldung = typeof supportMeldungen.$inferSelect;

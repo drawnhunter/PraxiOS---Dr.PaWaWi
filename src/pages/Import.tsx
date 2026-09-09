@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { CheckCircle2, FileText, FileUp, Loader2, Trash2, Upload, XCircle } from "lucide-react";
 
-type Route = "erechnung" | "post" | "therapieplan" | "altbestand" | "kunden" | "produkte" | "bank" | "unbekannt";
+type Route = "erechnung" | "post" | "therapieplan" | "altbestand" | "kunden" | "produkte" | "bank" | "nemliste" | "unbekannt";
 
 interface DateiZustand {
   name: string;
@@ -36,6 +36,7 @@ const ROUTE_LABEL: Record<Route, string> = {
   post: "Post Manager",
   therapieplan: "Therapieplan (IMTZ)",
   altbestand: "Altbestand (SumUp)",
+  nemliste: "NEM-/Produktliste (Word)",
   kunden: "Kunden-CSV",
   produkte: "Produkte-CSV",
   bank: "Bank-CSV",
@@ -154,7 +155,7 @@ export default function Import() {
           type="file"
           multiple
           className="hidden"
-          accept=".xml,.pdf,.jpg,.jpeg,.png,.csv,.xlsx,.xls"
+          accept=".xml,.pdf,.jpg,.jpeg,.png,.csv,.xlsx,.xls,.docx"
           onChange={(e) => e.target.files && void aufnehmen(e.target.files)}
         />
       </div>

@@ -1,18 +1,18 @@
 // Statistik-Auswertungen (nur finalisierte Rechnungen; Entwuerfe und
 // Stornos fliessen nicht ein). Datenmengen sind klein — die Aggregation
 // erfolgt bewusst im Speicher statt in SQL.
-import { eq } from "drizzle-orm";
-import {
-  createRouter,
-  rechtQuery,
-} from "./middleware";
+import { and, eq, ne } from "drizzle-orm";
+import { z } from "zod";
+import { createRouter, rechtQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { invoices, invoiceItems } from "@db/schema";
+import { invoices, invoiceItems, incomingInvoices, companySettings } from "@db/schema";
+
+const zodMonat = z.object({ monat: z.string().regex(/^\d{4}-\d{2}$/) });
 
 export const statsRouter = createRouter({
   uebersicht: rechtQuery("abrechnung").query(async () => {
     const db = getDb();
-    const finale = await db.select().from(invoices).where(eq(invoices.status, "finalisiert"));
+    const finale = await db.select().from(invoices).where(and(eq(invoices.status, "finalisiert"), ne(invoices.typ, "proforma")));
 
     const heute = new Date().toISOString().slice(0, 10);
     const jahr = heute.slice(0, 4);
@@ -29,8 +29,10 @@ export const statsRouter = createRouter({
 
     return {
       umsatzJahrNetto: summe(imJahr, (r) => Number(r.netto)),
+      umsatzJahrBrutto: summe(imJahr, (r) => Number(r.brutto)),
       zahlungseingaengeJahr: summe(imJahr, (r) => Number(r.bezahltBetrag)),
       umsatzMonatNetto: summe(imMonat, (r) => Number(r.netto)),
+      umsatzMonatBrutto: summe(imMonat, (r) => Number(r.brutto)),
       anzahlJahr: imJahr.length,
       anzahlGesamt: finale.length,
       schnittBetrag:
@@ -45,11 +47,140 @@ export const statsRouter = createRouter({
     };
   }),
 
+  /** Liquiditätsplanung: Monatsmatrix eines Jahres + Budget + Ampel. */
+  liquiditaet: rechtQuery("abrechnung")
+    .input(z.object({ jahr: z.number().int().min(2000).max(2100) }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const jahr = String(input.jahr);
+      const heute = new Date().toISOString().slice(0, 10);
+      const laufenderMonat = heute.slice(0, 7);
+
+      const finale = await db.select().from(invoices).where(and(eq(invoices.status, "finalisiert"), ne(invoices.typ, "proforma")));
+      const eingehende = await db.select().from(incomingInvoices);
+      const settings = await db.query.companySettings.findFirst({
+        where: eq(companySettings.id, 1),
+      });
+      const budgetMonat = Number(settings?.monatsBudget ?? 0) || null;
+
+      type M = {
+        monat: string; label: string;
+        umsatzNetto: number; umsatzBrutto: number;
+        einnahmen: number; ausgaben: number;
+        rechnungen: number; rechnungenOffen: number; eingangsOffen: number;
+      };
+      const monate = new Map<string, M>();
+      for (let m = 1; m <= 12; m++) {
+        const key = `${jahr}-${String(m).padStart(2, "0")}`;
+        const label = new Date(input.jahr, m - 1, 1).toLocaleDateString("de-DE", { month: "short" });
+        monate.set(key, {
+          monat: key, label, umsatzNetto: 0, umsatzBrutto: 0, einnahmen: 0,
+          ausgaben: 0, rechnungen: 0, rechnungenOffen: 0, eingangsOffen: 0,
+        });
+      }
+
+      for (const r of finale) {
+        if (r.rechnungsdatum.startsWith(jahr)) {
+          const e = monate.get(r.rechnungsdatum.slice(0, 7));
+          if (e) {
+            e.umsatzNetto += Number(r.netto);
+            e.umsatzBrutto += Number(r.brutto);
+            e.rechnungen += 1;
+            if (Number(r.brutto) - Number(r.bezahltBetrag) > 0.004) e.rechnungenOffen += 1;
+          }
+        }
+        if (r.bezahltAm && Number(r.bezahltBetrag) > 0 && r.bezahltAm.startsWith(jahr)) {
+          const e = monate.get(r.bezahltAm.slice(0, 7));
+          if (e) e.einnahmen += Number(r.bezahltBetrag);
+        }
+      }
+      for (const r of eingehende) {
+        // Zahlungsausgang zählt im Monat der Bezahlung, sonst Rechnungsdatum
+        const key = (r.bezahltAm ?? r.rechnungsdatum).slice(0, 7);
+        const e = monate.get(key);
+        if (!e || !key.startsWith(jahr)) continue;
+        e.ausgaben += Number(r.brutto);
+        if (!r.bezahltAm) e.eingangsOffen += 1;
+      }
+
+      const liste = [...monate.values()];
+      // Vergangene Monate des Jahres (für Budget-Erreichung fair rechnen)
+      const vergangene = liste.filter((m) => m.monat <= (input.jahr === Number(heute.slice(0, 4)) ? laufenderMonat : "9999"));
+      const einnahmenJahr = liste.reduce((a, m) => a + m.einnahmen, 0);
+      const ausgabenJahr = liste.reduce((a, m) => a + m.ausgaben, 0);
+      const umsatzJahrNetto = liste.reduce((a, m) => a + m.umsatzNetto, 0);
+      const umsatzJahrBrutto = liste.reduce((a, m) => a + m.umsatzBrutto, 0);
+
+      // Aktuell offen (stichtaggenau, nicht monatsbezogen)
+      const offenKunden = finale
+        .filter((r) => Number(r.brutto) - Number(r.bezahltBetrag) > 0.004)
+        .reduce((a, r) => a + Number(r.brutto) - Number(r.bezahltBetrag), 0);
+      const offenLieferanten = eingehende
+        .filter((r) => !r.bezahltAm)
+        .reduce((a, r) => a + Number(r.brutto), 0);
+
+      // Budget-Erreichung: Einnahmen vs. Budget × vergangene Monate
+      const budgetSoll = budgetMonat ? budgetMonat * vergangene.length : null;
+      const budgetErreichung =
+        budgetSoll && budgetSoll > 0 ? einnahmenJahr / budgetSoll : null;
+
+      // Ampel: gut/mittel/schlecht + Klartext-Satz
+      let ampel: "gut" | "mittel" | "schlecht" = "schlecht";
+      if (einnahmenJahr >= ausgabenJahr && (budgetErreichung === null || budgetErreichung >= 1)) {
+        ampel = "gut";
+      } else if (
+        einnahmenJahr >= ausgabenJahr * 0.85 ||
+        (budgetErreichung !== null && budgetErreichung >= 0.7)
+      ) {
+        ampel = "mittel";
+      }
+      const ampelText =
+        ampel === "gut"
+          ? budgetErreichung !== null
+            ? `Stark: ${Math.round(budgetErreichung * 100)} % des Budgets erreicht — Einnahmen decken die Ausgaben.`
+            : "Gut: Einnahmen decken die Ausgaben."
+          : ampel === "mittel"
+            ? "Solide, aber Luft nach oben — Einnahmen knapp unter Ausgaben-Niveau oder Budget."
+            : budgetSoll
+              ? `Achtung: bislang ${Math.round((budgetErreichung ?? 0) * 100)} % des Budgets — es fehlen noch ${Math.max(0, budgetSoll - einnahmenJahr).toFixed(2)} € bis zum Jahres-Soll.`
+              : "Achtung: Ausgaben übersteigen Einnahmen deutlich.";
+
+      return {
+        jahr: input.jahr,
+        monate: liste,
+        einnahmenJahr,
+        ausgabenJahr,
+        umsatzJahrNetto,
+        umsatzJahrBrutto,
+        differenzJahr: einnahmenJahr - ausgabenJahr,
+        offenKunden,
+        offenLieferanten,
+        budgetMonat,
+        budgetSoll,
+        budgetErreichung,
+        ampel,
+        ampelText,
+      };
+    }),
+
+  /** Monatsbudget setzen (Liquiditätsplanung). */
+  budgetSetzen: rechtQuery("abrechnung")
+    .input(z.object({ monatsBudget: z.number().min(0).nullable() }))
+    .mutation(async ({ input }) => {
+      await getDb()
+        .insert(companySettings)
+        .values({ id: 1, monatsBudget: input.monatsBudget?.toFixed(2) ?? null } as never)
+        .onDuplicateKeyUpdate({
+          set: { monatsBudget: input.monatsBudget?.toFixed(2) ?? null } as never,
+        });
+      return { ok: true };
+    }),
+
   verlauf: rechtQuery("abrechnung").query(async () => {
     const finale = await getDb()
       .select()
       .from(invoices)
-      .where(eq(invoices.status, "finalisiert"));
+      .where(and(eq(invoices.status, "finalisiert"), ne(invoices.typ, "proforma")));
 
     const monate = new Map<string, { umsatz: number; zahlungen: number; anzahl: number }>();
     const eintrag = (key: string) => {
@@ -80,7 +211,7 @@ export const statsRouter = createRouter({
 
   top: rechtQuery("abrechnung").query(async () => {
     const db = getDb();
-    const finale = await db.select().from(invoices).where(eq(invoices.status, "finalisiert"));
+    const finale = await db.select().from(invoices).where(and(eq(invoices.status, "finalisiert"), ne(invoices.typ, "proforma")));
     const items = await db.select().from(invoiceItems);
     const finaleIds = new Set(finale.map((r) => r.id));
 
@@ -132,4 +263,67 @@ export const statsRouter = createRouter({
 
     return { kunden, produkte, ust };
   }),
+
+  // UStVA-Hilfsblatt: Umsatzsteuer (Ausgangsrechnungen) minus Vorsteuer
+  // (Eingangsrechnungen) je Monat — Werte zum Uebertragen in Mein ELSTER.
+  ustva: rechtQuery("abrechnung")
+    .input(zodMonat)
+    .query(async ({ input }) => {
+      const db = getDb();
+      const monat = input.monat; // JJJJ-MM
+
+      const ausgaben = await db
+        .select()
+        .from(invoices)
+        .where(and(eq(invoices.status, "finalisiert"), ne(invoices.typ, "proforma")));
+      const imMonat = ausgaben.filter((r) => r.rechnungsdatum.startsWith(monat));
+      const items = await db.select().from(invoiceItems);
+      const ausMap = new Map<number, { basis: number; ust: number }>();
+      for (const r of imMonat) {
+        const pos = items.filter((it) => it.invoiceId === r.id);
+        const saetze = new Set(pos.map((it) => it.ustSatz));
+        const satz = saetze.size === 1 ? [...saetze][0] : -1;
+        const netto = Number(r.netto);
+        const ust = Number(r.brutto) - netto;
+        const e = ausMap.get(satz) ?? { basis: 0, ust: 0 };
+        e.basis += netto;
+        e.ust += ust;
+        ausMap.set(satz, e);
+      }
+
+      const eingehende = await db.select().from(incomingInvoices);
+      const einMonat = eingehende.filter((r) => r.rechnungsdatum.startsWith(monat));
+      const vorMap = new Map<number, { basis: number; ust: number }>();
+      for (const r of einMonat) {
+        let saetze = new Set<number>();
+        try {
+          const pos = JSON.parse(r.positionenJson ?? "[]") as { ustSatz: number }[];
+          saetze = new Set(pos.map((p) => p.ustSatz));
+        } catch { /* egal */ }
+        const satz = saetze.size === 1 ? [...saetze][0] : -1;
+        const netto = Number(r.netto);
+        const ust = Number(r.ust);
+        const e = vorMap.get(satz) ?? { basis: 0, ust: 0 };
+        e.basis += netto;
+        e.ust += ust;
+        vorMap.set(satz, e);
+      }
+
+      const zuListe = (m: Map<number, { basis: number; ust: number }>) =>
+        [...m.entries()]
+          .map(([satz, v]) => ({ satz, basis: v.basis, ust: v.ust }))
+          .sort((a, b) => b.basis - a.basis);
+
+      const ustGesamt = [...ausMap.values()].reduce((a, v) => a + v.ust, 0);
+      const vorGesamt = [...vorMap.values()].reduce((a, v) => a + v.ust, 0);
+
+      return {
+        monat,
+        ausgangsrechnungen: zuListe(ausMap),
+        eingangsrechnungen: zuListe(vorMap),
+        umsatzsteuer: ustGesamt,
+        vorsteuer: vorGesamt,
+        zahllast: ustGesamt - vorGesamt,
+      };
+    }),
 });

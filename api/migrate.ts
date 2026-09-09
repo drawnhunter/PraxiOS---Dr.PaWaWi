@@ -67,6 +67,8 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "invoices", spalte: "archiviert", ddl: "ALTER TABLE invoices ADD COLUMN archiviert TINYINT(1) NOT NULL DEFAULT 0 AFTER bereits_bezahlt" },
   // Reihenfolge im Tag (1.7.0)
   { tabelle: "plan_entries", spalte: "reihenfolge", ddl: "ALTER TABLE plan_entries ADD COLUMN reihenfolge INT NOT NULL DEFAULT 0 AFTER raum" },
+  // SupportHub-Verbindung (1.9.0)
+  { tabelle: "company_settings", spalte: "support_schluessel", ddl: "ALTER TABLE company_settings ADD COLUMN support_schluessel VARCHAR(80) NULL AFTER backup_zuletzt_am" },
   // Backup-Erinnerung (1.7.0)
   // Patientennummern-Nummernkreis (1.7.0)
   { tabelle: "company_settings", spalte: "patienten_nr_start", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_start INT NOT NULL DEFAULT 1 AFTER signatur_bild" },
@@ -74,6 +76,14 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "patienten_nr_prefix", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_prefix VARCHAR(20) NOT NULL DEFAULT 'P' AFTER patienten_nr_prefix_aktiv" },
   // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
   { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
+  // Rabatte (ReWaWi-Sync 1.9): Positions- + Hauptrabatt
+  { tabelle: "invoice_items", spalte: "rabatt_art", ddl: "ALTER TABLE invoice_items ADD COLUMN rabatt_art VARCHAR(10) NULL AFTER ust_satz" },
+  { tabelle: "invoice_items", spalte: "rabatt_wert", ddl: "ALTER TABLE invoice_items ADD COLUMN rabatt_wert DECIMAL(12,2) NULL AFTER rabatt_art" },
+  { tabelle: "invoices", spalte: "hauptrabatt_art", ddl: "ALTER TABLE invoices ADD COLUMN hauptrabatt_art VARCHAR(10) NULL AFTER brutto" },
+  { tabelle: "invoices", spalte: "hauptrabatt_wert", ddl: "ALTER TABLE invoices ADD COLUMN hauptrabatt_wert DECIMAL(12,2) NULL AFTER hauptrabatt_art" },
+  { tabelle: "invoices", spalte: "rabatt_addieren", ddl: "ALTER TABLE invoices ADD COLUMN rabatt_addieren TINYINT(1) NOT NULL DEFAULT 0 AFTER hauptrabatt_wert" },
+  { tabelle: "company_settings", spalte: "waehrung", ddl: "ALTER TABLE company_settings ADD COLUMN waehrung VARCHAR(10) NOT NULL DEFAULT '€' AFTER ust_id_nr" },
+  { tabelle: "company_settings", spalte: "monats_budget", ddl: "ALTER TABLE company_settings ADD COLUMN monats_budget DECIMAL(12,2) NULL AFTER waehrung" },
   // Plan→Rechnung-Rückbezug (1.6.2)
   { tabelle: "invoices", spalte: "therapieplan_id", ddl: "ALTER TABLE invoices ADD COLUMN therapieplan_id BIGINT UNSIGNED NULL AFTER proforma_von_id" },
   // ReWaWi-Sync (1.5): Regelwerk — Standard-Kategorie je Lieferant
@@ -481,6 +491,23 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
     )`,
   },
   {
+    // SupportHub (1.9.0): In-App-Reports, lokal protokolliert
+    tabelle: "support_meldungen",
+    ddl: `CREATE TABLE IF NOT EXISTS support_meldungen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      typ ENUM('frage','problem','idee','fehler') NOT NULL,
+      betreff VARCHAR(200) NOT NULL,
+      nachricht TEXT NOT NULL,
+      kontext TEXT NULL,
+      benutzer VARCHAR(255) NOT NULL,
+      instanz VARCHAR(255) NOT NULL,
+      version VARCHAR(20) NOT NULL,
+      status ENUM('gesendet','fehlgeschlagen') NOT NULL,
+      fehler VARCHAR(500) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
     // ReWaWi-Sync (1.5): Banking (bank_importe VOR bank_transaktionen — FK!)
     tabelle: "bank_importe",
     ddl: `CREATE TABLE IF NOT EXISTS bank_importe (
@@ -546,6 +573,33 @@ const SPALTEN_AENDERUNGEN: { tabelle: string; spalte: string; ddl: string; pruef
     spalte: "typ",
     ddl: "ALTER TABLE post_eingang MODIFY COLUMN typ ENUM('rechnung','lieferschein','gutschrift','sonstiges') NOT NULL DEFAULT 'rechnung'",
     pruefWert: "lieferschein",
+  },
+];
+
+// Struktur-Updates mit Check-Query (ReWaWi-Mechanismus, ReWaWi v1.8):
+// check liefert eine Zeile, wenn der Schritt NICHT nötig ist.
+const SCHEMA_UPDATES: { name: string; check: (db: string) => string; ddl: string }[] = [
+  {
+    // Angebots-Status-Workflow: Enum um offen/bestaetigt/abgelehnt erweitern
+    // (Union-Enum, damit Bestandsdaten 'finalisiert' gültig bleiben)
+    name: "offers.status Enum erweitern",
+    check: (db) =>
+      `SELECT COLUMN_TYPE AS v FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${db}' AND TABLE_NAME='offers' AND COLUMN_NAME='status' AND COLUMN_TYPE LIKE '%offen%'`,
+    ddl: "ALTER TABLE offers MODIFY status ENUM('entwurf','finalisiert','offen','bestaetigt','abgelehnt','umgewandelt','storniert') NOT NULL DEFAULT 'entwurf'",
+  },
+  {
+    // Bestandsdaten finalisiert → offen
+    name: "offers.status finalisiert→offen",
+    check: (db) =>
+      `SELECT COLUMN_TYPE AS v FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${db}' AND TABLE_NAME='offers' AND COLUMN_NAME='status' AND COLUMN_TYPE NOT LIKE '%finalisiert%'`,
+    ddl: "UPDATE offers SET status='offen' WHERE status='finalisiert'",
+  },
+  {
+    // Enum auf Endzustand (ohne 'finalisiert')
+    name: "offers.status Enum final",
+    check: (db) =>
+      `SELECT COLUMN_TYPE AS v FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${db}' AND TABLE_NAME='offers' AND COLUMN_NAME='status' AND COLUMN_TYPE NOT LIKE '%finalisiert%'`,
+    ddl: "ALTER TABLE offers MODIFY status ENUM('entwurf','offen','bestaetigt','abgelehnt','umgewandelt','storniert') NOT NULL DEFAULT 'entwurf'",
   },
 ];
 
@@ -631,5 +685,18 @@ export async function migriereFehlendeSpalten(): Promise<void> {
 
   for (const n of NACHSCHUB) {
     await schritt(db, n.ddl, `Nachschub ${n.name}`);
+  }
+
+  // Schema-Updates mit Check-Query (ReWaWi-Mechanismus): check liefert eine
+  // Zeile, wenn der Schritt NICHT nötig ist — sonst läuft das ddl.
+  for (const u of SCHEMA_UPDATES) {
+    try {
+      const [rows] = (await db.execute(sql.raw(u.check(dbName)))) as unknown as [{ v: string }[], unknown];
+      if (rows.length === 0) {
+        await schritt(db, u.ddl, `Update ${u.name}`);
+      }
+    } catch (e) {
+      console.error(`[migrate] FEHLER bei Update ${u.name}:`, e instanceof Error ? e.message : e);
+    }
   }
 }

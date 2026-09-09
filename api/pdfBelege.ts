@@ -83,6 +83,9 @@ export async function ladeRechnungsBeleg(id: number): Promise<{ beleg: PdfBeleg;
       istEntwurf: r.status === "entwurf",
       istProforma,
       abschlagCent: r.abschlagBetrag ? Math.round(Number(r.abschlagBetrag) * 100) : 0,
+      hauptrabattArt: r.hauptrabattArt as "prozent" | "festwert" | null,
+      hauptrabattWert: r.hauptrabattWert,
+      rabattAddieren: r.rabattAddieren,
       datum: r.rechnungsdatum,
       faellig: r.faelligkeitsdatum,
       leistungsdatum: r.leistungsdatum,
@@ -105,6 +108,8 @@ export async function ladeRechnungsBeleg(id: number): Promise<{ beleg: PdfBeleg;
         einheit: it.einheit,
         einzelpreis: it.einzelpreis,
         ustSatz: it.ustSatz,
+        rabattArt: it.rabattArt as "prozent" | "festwert" | null,
+        rabattWert: it.rabattWert,
       })),
     },
   };

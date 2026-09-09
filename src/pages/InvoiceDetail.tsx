@@ -46,6 +46,7 @@ import { MailDialog } from "@/components/MailDialog";
 import { SerieSpeichernDialog } from "@/components/SerienDialog";
 import { XrechnungButton } from "@/components/XrechnungButton";
 import { Mahnwesen } from "@/components/Mahnwesen";
+import { ProduktComboInput } from "@/components/ProduktSuche";
 import BankZuordnung from "@/components/BankZuordnung";
 
 interface EditItem {
@@ -55,6 +56,8 @@ interface EditItem {
   einheit: string;
   einzelpreis: string;
   ustSatz: number;
+  rabattArt: "prozent" | "festwert" | "";
+  rabattWert: string;
 }
 
 interface EditKopf {
@@ -71,6 +74,9 @@ interface EditKopf {
   pdfNotiz: string;
   bereitsBezahlt: boolean;
   bemerkung: string;
+  hauptrabattArt: "prozent" | "festwert" | "";
+  hauptrabattWert: string;
+  rabattAddieren: boolean;
 }
 
 function addTage(iso: string, tage: number): string {
@@ -126,6 +132,11 @@ export default function InvoiceDetail() {
       pdfNotiz: r.pdfNotiz ?? "",
       bereitsBezahlt: r.bereitsBezahlt,
       bemerkung: r.bemerkung ?? "",
+      hauptrabattArt: (r.hauptrabattArt as "prozent" | "festwert" | "") ?? "",
+      hauptrabattWert: r.hauptrabattWert
+        ? new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2 }).format(Number(r.hauptrabattWert))
+        : "",
+      rabattAddieren: r.rabattAddieren ?? false,
     });
     setItems(
       r.items.map((it) => ({
@@ -139,6 +150,10 @@ export default function InvoiceDetail() {
           minimumFractionDigits: 2,
         }).format(Number(it.einzelpreis)),
         ustSatz: it.ustSatz,
+        rabattArt: (it.rabattArt as "prozent" | "festwert" | "") ?? "",
+        rabattWert: it.rabattWert
+          ? new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2 }).format(Number(it.rabattWert))
+          : "",
       })),
     );
   }, [r, kopf]);
@@ -150,9 +165,15 @@ export default function InvoiceDetail() {
           menge: parseMengeInput(it.menge || "0"),
           einzelpreis: parseGeldInput(it.einzelpreis || "0"),
           ustSatz: it.ustSatz,
+          rabattArt: it.rabattArt || null,
+          rabattWert: it.rabattWert ? parseGeldInput(it.rabattWert) : null,
         })),
+        kopf?.hauptrabattArt && kopf.hauptrabattWert
+          ? { art: kopf.hauptrabattArt, wert: Number(parseGeldInput(kopf.hauptrabattWert)) }
+          : null,
+        kopf?.rabattAddieren ?? false,
       ),
-    [items],
+    [items, kopf?.hauptrabattArt, kopf?.hauptrabattWert, kopf?.rabattAddieren],
   );
 
   const inval = () => {
@@ -205,6 +226,9 @@ export default function InvoiceDetail() {
       pdfNotiz: kopf.pdfNotiz || null,
       bereitsBezahlt: kopf.bereitsBezahlt,
       bemerkung: kopf.bemerkung || null,
+      hauptrabattArt: kopf.hauptrabattArt || null,
+      hauptrabattWert: kopf.hauptrabattWert ? parseGeldInput(kopf.hauptrabattWert) : null,
+      rabattAddieren: kopf.rabattAddieren,
     },
     items: items
       .filter((it) => it.bezeichnung.trim())
@@ -215,6 +239,8 @@ export default function InvoiceDetail() {
         einheit: it.einheit,
         einzelpreis: parseGeldInput(it.einzelpreis || "0"),
         ustSatz: it.ustSatz,
+        rabattArt: it.rabattArt || null,
+        rabattWert: it.rabattWert ? parseGeldInput(it.rabattWert) : null,
       })),
   });
 
@@ -313,6 +339,8 @@ export default function InvoiceDetail() {
         beschreibung: p.beschreibung ?? "",
         menge: "1",
         einheit: p.einheit,
+        rabattArt: "" as const,
+        rabattWert: "",
         einzelpreis: new Intl.NumberFormat("de-DE", {
           minimumFractionDigits: 2,
         }).format(Number(__PREIS__)),
@@ -805,6 +833,8 @@ export default function InvoiceDetail() {
                       bezeichnung: "",
                       beschreibung: "",
                       menge: "1",
+                      rabattArt: "" as const,
+                      rabattWert: "",
                       einheit: "Stück",
                       einzelpreis: "",
                       ustSatz: 19,
@@ -827,6 +857,7 @@ export default function InvoiceDetail() {
               <th className="w-24 px-2 py-2 text-right font-medium">Menge</th>
               <th className="w-28 px-2 py-2 font-medium">Einheit</th>
               <th className="w-28 px-2 py-2 text-right font-medium">Preis netto</th>
+              <th className="w-36 px-2 py-2 text-right font-medium">Rabatt</th>
               <th className="w-20 px-2 py-2 text-right font-medium">USt</th>
               <th className="w-28 px-2 py-2 text-right font-medium">Betrag</th>
               {istEntwurf && <th className="w-10" />}
@@ -835,7 +866,7 @@ export default function InvoiceDetail() {
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-2 py-6 text-center text-neutral-400">
+                <td colSpan={9} className="px-2 py-6 text-center text-neutral-400">
                   Noch keine Positionen.
                 </td>
               </tr>
@@ -848,16 +879,35 @@ export default function InvoiceDetail() {
                   <td className="px-2 py-2">
                     {istEntwurf ? (
                       <div className="space-y-1.5">
-                        <Input
+                        <ProduktComboInput
+                          produkte={produkte.data ?? []}
                           value={it.bezeichnung}
-                          onChange={(e) =>
+                          onChange={(v) =>
                             setItems(
                               items.map((x, xi) =>
-                                xi === i ? { ...x, bezeichnung: e.target.value } : x,
+                                xi === i ? { ...x, bezeichnung: v } : x,
                               ),
                             )
                           }
-                          placeholder="Bezeichnung"
+                          onUebernehmen={(p) =>
+                            setItems(
+                              items.map((x, xi) =>
+                                xi === i
+                                  ? {
+                                      ...x,
+                                      bezeichnung: p.name,
+                                      einzelpreis: p.preisNetto
+                                        ? new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2 }).format(Number(p.preisNetto))
+                                        : x.einzelpreis,
+                                      einheit: p.einheit ?? x.einheit,
+                                      ustSatz: p.ustSatz ?? x.ustSatz,
+                                      beschreibung: x.beschreibung || p.beschreibung || x.beschreibung,
+                                    }
+                                  : x,
+                              ),
+                            )
+                          }
+                          placeholder="Bezeichnung (Katalog-Vorschläge beim Tippen)"
                         />
                         <Textarea
                           value={it.beschreibung}
@@ -946,6 +996,52 @@ export default function InvoiceDetail() {
                   </td>
                   <td className="px-2 py-2 text-right">
                     {istEntwurf ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <Input
+                          className="h-8 w-20 text-right"
+                          value={it.rabattWert}
+                          onChange={(e) =>
+                            setItems(
+                              items.map((x, xi) =>
+                                xi === i ? { ...x, rabattWert: e.target.value } : x,
+                              ),
+                            )
+                          }
+                          placeholder="0"
+                          disabled={!it.rabattArt}
+                        />
+                        <Select
+                          value={it.rabattArt || "keiner"}
+                          onValueChange={(v) =>
+                            setItems(
+                              items.map((x, xi) =>
+                                xi === i
+                                  ? { ...x, rabattArt: v === "keiner" ? "" : (v as "prozent" | "festwert") }
+                                  : x,
+                              ),
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-16">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="keiner">—</SelectItem>
+                            <SelectItem value="prozent">%</SelectItem>
+                            <SelectItem value="festwert">EUR</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      it.rabattWert && (
+                        <span className="text-xs text-green-700 tabular-nums">
+                          −{it.rabattWert} {it.rabattArt === "prozent" ? "%" : "€"}
+                        </span>
+                      )
+                    )}
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    {istEntwurf ? (
                       <Select
                         value={String(it.ustSatz)}
                         onValueChange={(v) =>
@@ -995,8 +1091,67 @@ export default function InvoiceDetail() {
         {/* ── Summen ── */}
         <div className="mt-5 flex justify-end">
           <div className="w-72 space-y-1.5 text-sm">
+            {(totals.rabattPositionenCent > 0 || totals.hauptrabattCent > 0) && (
+              <div className="flex justify-between text-neutral-600">
+                <span>Zwischensumme (vor Rabatten)</span>
+                <span className="tabular-nums">{geld(totals.zwischensummeCent / 100)}</span>
+              </div>
+            )}
+            {totals.rabattPositionenCent > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span>Positionsrabatte</span>
+                <span className="tabular-nums">− {geld(totals.rabattPositionenCent / 100)}</span>
+              </div>
+            )}
+            {istEntwurf && (
+              <div className="rounded-md border border-neutral-200 p-2">
+                <div className="mb-1 text-xs text-neutral-500">Hauptrabatt (gesamte Rechnung)</div>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    className="w-24 text-right"
+                    value={kopf.hauptrabattWert}
+                    onChange={(e) => setKopf({ ...kopf, hauptrabattWert: e.target.value })}
+                    placeholder="0"
+                    disabled={!kopf.hauptrabattArt}
+                  />
+                  <Select
+                    value={kopf.hauptrabattArt || "keiner"}
+                    onValueChange={(v) =>
+                      setKopf({ ...kopf, hauptrabattArt: v === "keiner" ? "" : (v as "prozent" | "festwert") })
+                    }
+                  >
+                    <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="keiner">—</SelectItem>
+                      <SelectItem value="prozent">%</SelectItem>
+                      <SelectItem value="festwert">EUR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <label
+                    className="ml-1 flex items-center gap-1 text-xs text-neutral-500"
+                    title="An: Positionsrabatte und Hauptrabatt werden auf dieselbe Zwischensumme gerechnet (addiert). Aus: Hauptrabatt auf die bereits rabattierte Summe."
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5"
+                      checked={kopf.rabattAddieren}
+                      onChange={(e) => setKopf({ ...kopf, rabattAddieren: e.target.checked })}
+                    />
+                    addieren
+                  </label>
+                </div>
+              </div>
+            )}
+            {totals.hauptrabattCent > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span>Hauptrabatt{kopf.rabattAddieren ? " (additiv)" : ""}</span>
+                <span className="tabular-nums">− {geld(totals.hauptrabattCent / 100)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-neutral-600">
-              <span>Zwischensumme ohne USt.</span>
+              <span>
+                Netto{totals.rabattPositionenCent + totals.hauptrabattCent > 0 ? " nach Rabatten" : " ohne USt."}
+              </span>
               <span className="tabular-nums">{geld(totals.nettoCent / 100)}</span>
             </div>
             {totals.ustProSatz.map((u) => (

@@ -41,6 +41,7 @@ const settingsInput = z.object({
   bgMitgliedsnummer: z.string().max(50).nullable().optional(),
   ihk: z.string().max(60).nullable().optional(),
   glaeubigerId: z.string().max(30).nullable().optional(),
+  waehrung: z.string().max(10).optional(),
   // Patientennummern-Nummernkreis (1.7.0)
   patientenNrStart: z.number().int().min(1).optional(),
   patientenNrPrefixAktiv: z.boolean().optional(),

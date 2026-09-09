@@ -30,6 +30,10 @@ CREATE TABLE `company_settings` (
   `handelsregister` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `steuernummer` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `ust_id_nr` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `waehrung` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '€',
+  `monats_budget` decimal(12,2) DEFAULT NULL,
+  `waehrung` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '€',
+  `monats_budget` decimal(12,2) DEFAULT NULL,
   `email` varchar(320) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `telefon` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `webseite` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -60,6 +64,7 @@ CREATE TABLE `company_settings` (
   `patienten_nr_prefix_aktiv` tinyint(1) NOT NULL DEFAULT '0',
   `patienten_nr_prefix` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'P',
   `backup_zuletzt_am` timestamp NULL DEFAULT NULL,
+  `support_schluessel` varchar(80) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `erinnerung_aktiv` tinyint(1) NOT NULL DEFAULT '0',
   `erinnerung_tage_vorher` int NOT NULL DEFAULT '1',
   `kalender_token` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -83,6 +88,8 @@ CREATE TABLE `credit_note_items` (
   `einheit` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Stück',
   `einzelpreis` decimal(12,2) NOT NULL,
   `ust_satz` int NOT NULL DEFAULT '19',
+  `rabatt_art` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `rabatt_wert` decimal(12,2) DEFAULT NULL,
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,
   UNIQUE KEY `id` (`id`),
   KEY `credit_note_items_credit_idx` (`credit_note_id`)
@@ -229,6 +236,9 @@ CREATE TABLE `invoices` (
   `netto` decimal(12,2) NOT NULL DEFAULT '0',
   `ust` decimal(12,2) NOT NULL DEFAULT '0',
   `brutto` decimal(12,2) NOT NULL DEFAULT '0',
+  `hauptrabatt_art` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `hauptrabatt_wert` decimal(12,2) DEFAULT NULL,
+  `rabatt_addieren` tinyint(1) NOT NULL DEFAULT '0',
   `bezahlt_betrag` decimal(12,2) NOT NULL DEFAULT '0',
   `bezahlt_am` date DEFAULT NULL,
   `bereits_bezahlt` tinyint(1) NOT NULL DEFAULT '0',
@@ -289,7 +299,7 @@ DROP TABLE IF EXISTS `offers`;
 CREATE TABLE `offers` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `nummer` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `status` enum('entwurf','finalisiert','umgewandelt','storniert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'entwurf',
+  `status` enum('entwurf','offen','bestaetigt','abgelehnt','umgewandelt','storniert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'entwurf',
   `customer_id` bigint unsigned NOT NULL,
   `datum` date NOT NULL,
   `gueltig_bis` date DEFAULT NULL,
@@ -924,4 +934,18 @@ CREATE TABLE `bank_transaktionen` (
   CONSTRAINT `bank_tx_import_fk` FOREIGN KEY (`import_id`) REFERENCES `bank_importe` (`id`) ON DELETE SET NULL,
   CONSTRAINT `bank_tx_invoice_fk` FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON DELETE SET NULL,
   CONSTRAINT `bank_tx_incoming_fk` FOREIGN KEY (`incoming_invoice_id`) REFERENCES `incoming_invoices` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `support_meldungen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `typ` enum('frage','problem','idee','fehler') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `betreff` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `nachricht` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `kontext` text COLLATE utf8mb4_unicode_ci,
+  `benutzer` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `instanz` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `version` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('gesendet','fehlgeschlagen') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `fehler` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

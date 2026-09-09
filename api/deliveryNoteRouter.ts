@@ -9,7 +9,9 @@ import {
   deliveryNoteItems,
   customers,
   invoices,
+  invoiceItems,
   companySettings,
+  bankAccounts,
 } from "@db/schema";
 import { eq, desc } from "drizzle-orm";
 import { nextNumber } from "./queries/invoicing";
@@ -263,4 +265,176 @@ export const deliveryNoteRouter = createRouter({
       });
       return { ok: true };
     }),
+  wordVorschau: rechtQuery("abrechnung")
+    .input(z.object({ dateiBase64: z.string().min(50).max(20 * 1024 * 1024) }))
+    .mutation(async ({ input }) => {
+      const { parseNemDokument } = await import("./lib/nemWord");
+      const { besterTreffer } = await import("@contracts/fuzzy");
+      const db = getDb();
+
+      const dok = parseNemDokument(Buffer.from(input.dateiBase64, "base64"));
+      const [alleProdukte, alleKunden] = await Promise.all([
+        db.query.products.findMany(),
+        db.query.customers.findMany(),
+      ]);
+      const aktive = alleProdukte.filter((p) => p.aktiv);
+
+      const positionen = dok.positionen.map((pos) => {
+        const t = besterTreffer(aktive, pos.bezeichnung, (p) => p.name);
+        return {
+          ...pos,
+          produktId: t?.treffer.id ?? null,
+          produktName: t?.treffer.name ?? null,
+          score: t?.score ?? 0,
+        };
+      });
+
+      let kundeVorschlag: { id: number; name: string } | null = null;
+      if (dok.name) {
+        const kt = besterTreffer(alleKunden, dok.name, (k) => k.name, 60);
+        if (kt) kundeVorschlag = { id: kt.treffer.id, name: kt.treffer.name };
+      }
+
+      return {
+        name: dok.name,
+        geburtsdatum: dok.geburtsdatum,
+        datum: dok.datum,
+        phase: dok.phase,
+        format: dok.format,
+        positionen,
+        kundeVorschlag,
+      };
+    }),
+
+  /** NEM-Word-Import, Schritt 2: Lieferschein-Entwurf anlegen. */
+  wordAnlegen: rechtQuery("abrechnung")
+    .input(
+      z.object({
+        customerId: z.number(),
+        datum: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        phase: z.string().max(100).optional(),
+        dokName: z.string().max(255).optional(),
+        dateiname: z.string().max(255).default("dokument.docx"),
+        items: z
+          .array(
+            z.object({
+              bezeichnung: z.string().min(1).max(255),
+              menge: z.string().min(1),
+              einheit: z.string().min(1).max(30),
+            }),
+          )
+          .min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { legeLieferscheinAusNemAn } = await import("./lib/nemWord");
+      return legeLieferscheinAusNemAn(
+        input.customerId,
+        {
+          name: input.dokName ?? null, geburtsdatum: null, datum: null, phase: input.phase ?? null,
+          positionen: input.items.map((it) => ({
+            bezeichnung: it.bezeichnung,
+            menge: Number(it.menge),
+            einzelpreis: null,
+          })),
+          format: "tabelle",
+        },
+        input.dateiname,
+      );
+    }),
+
+  /** Rechnung aus einem finalisierten Lieferschein (Positionen bekommen
+      Preise aus dem Produktstamm, Kundenkonditionen zuerst). */
+  createInvoice: rechtQuery("abrechnung")
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const { besterTreffer } = await import("@contracts/fuzzy");
+      const ls = await db.query.deliveryNotes.findFirst({
+        where: eq(deliveryNotes.id, input.id),
+        with: { items: true, customer: true },
+      });
+      if (!ls) throw new Error("Lieferschein nicht gefunden.");
+      if (ls.status !== "finalisiert") {
+        throw new Error("Erst finalisieren, dann die Rechnung erstellen (Lieferung vor Rechnung).");
+      }
+      if (ls.invoiceId) throw new Error("Zu diesem Lieferschein existiert bereits eine Rechnung.");
+
+      const alleProdukte = (await db.query.products.findMany()).filter((p) => p.aktiv);
+      const konditionenRows = await db.query.konditionen.findMany({
+        where: (k, { and: a, eq: e }) =>
+          a(e(k.typ, "kunde"), e(k.partnerId, ls.customerId)),
+      });
+
+      const settings = await db.query.companySettings.findFirst({
+        where: eq(companySettings.id, 1),
+      });
+      const zielTage = ls.customer?.zahlungszielTage ?? settings?.standardZahlungsziel ?? 14;
+      const heute = new Date();
+      const faellig = new Date(heute);
+      faellig.setDate(faellig.getDate() + zielTage);
+      const fmt = (d: Date) => d.toISOString().slice(0, 10);
+      const standardBank = await db.query.bankAccounts.findFirst({
+        where: eq(bankAccounts.istStandard, true),
+      });
+
+      const [{ id: rechnungId }] = await db
+        .insert(invoices)
+        .values({
+          customerId: ls.customerId,
+          rechnungsdatum: fmt(heute),
+          faelligkeitsdatum: fmt(faellig),
+          bankAccountId: standardBank?.id ?? null,
+          kundeName: ls.kundeName,
+          kundeZusatz: ls.kundeZusatz,
+          kundeStrasse: ls.kundeStrasse,
+          kundePlz: ls.kundePlz,
+          kundeOrt: ls.kundeOrt,
+          kundeLand: ls.kundeLand,
+          pdfNotiz: `Lieferung laut Lieferschein ${ls.nummer ?? `#${ls.id}`} vom ${ls.datum}`,
+        })
+        .$returningId();
+
+      const { computeTotals, centToDecimal } = await import("./queries/invoicing");
+      const zeilen = ls.items.map((it) => {
+        const t = besterTreffer(alleProdukte, it.bezeichnung, (p) => p.name);
+        const kondition = t
+          ? konditionenRows.find((k) => k.productId === t.treffer.id)
+          : undefined;
+        const preis = kondition?.preisNetto ?? t?.treffer.preisNetto ?? "0.00";
+        return {
+          invoiceId: rechnungId,
+          position: it.position,
+          bezeichnung: it.bezeichnung,
+          beschreibung: it.beschreibung,
+          menge: it.menge,
+          einheit: it.einheit,
+          einzelpreis: preis,
+          ustSatz: t?.treffer.ustSatz ?? 19,
+        };
+      });
+      if (zeilen.length > 0) await db.insert(invoiceItems).values(zeilen);
+
+      const totals = computeTotals(
+        zeilen.map((z) => ({ menge: z.menge, einzelpreis: z.einzelpreis, ustSatz: z.ustSatz })),
+      );
+      await db
+        .update(invoices)
+        .set({
+          netto: centToDecimal(totals.nettoCent),
+          ust: centToDecimal(totals.ustCent),
+          brutto: centToDecimal(totals.bruttoCent),
+        })
+        .where(eq(invoices.id, rechnungId));
+
+      await db
+        .update(deliveryNotes)
+        .set({ invoiceId: rechnungId })
+        .where(eq(deliveryNotes.id, ls.id));
+
+      return { id: rechnungId, positionenOhneTreffer: zeilen.filter((z) => Number(z.einzelpreis) === 0).length };
+    }),
+
+  /** Lieferschein aus einer Rechnung (Positionen ohne Preise). */
+
 });

@@ -61,6 +61,7 @@ interface FirmenForm {
   patientenNrStart: number;
   patientenNrPrefixAktiv: boolean;
   patientenNrPrefix: string;
+  waehrung: string;
 }
 
 interface BankForm {
@@ -111,6 +112,7 @@ export default function SettingsPage() {
       patientenNrStart: s.patientenNrStart ?? 1,
       patientenNrPrefixAktiv: s.patientenNrPrefixAktiv ?? false,
       patientenNrPrefix: s.patientenNrPrefix ?? "P",
+      waehrung: s.waehrung ?? "€",
       handelsregister: s.handelsregister ?? "",
       steuernummer: s.steuernummer ?? "",
       ustIdNr: s.ustIdNr ?? "",
@@ -244,6 +246,16 @@ export default function SettingsPage() {
             />
           </div>
           <div>
+            <Label>Währung (Symbol/Code)</Label>
+            <Input
+              className="w-28"
+              value={firma.waehrung}
+              onChange={(e) => setFirma({ ...firma, waehrung: e.target.value })}
+              placeholder="€"
+            />
+            <p className="mt-1 text-xs text-neutral-400">Wird u. a. bei Rabatt-Festwerten angezeigt (€, $, CHF).</p>
+          </div>
+          <div>
             <Label>E-Mail</Label>
             <Input
               value={firma.email}
@@ -308,6 +320,7 @@ export default function SettingsPage() {
                 patientenNrStart: firma.patientenNrStart,
                 patientenNrPrefixAktiv: firma.patientenNrPrefixAktiv,
                 patientenNrPrefix: firma.patientenNrPrefix,
+                waehrung: firma.waehrung || "€",
                 ...(firma.smtpPasswort ? { smtpPasswort: firma.smtpPasswort } : {}),
                 handelsregister: firma.handelsregister || null,
                 steuernummer: firma.steuernummer || null,

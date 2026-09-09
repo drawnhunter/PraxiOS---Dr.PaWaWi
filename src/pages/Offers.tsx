@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
+import { useSortierung } from "@/lib/sortierung";
 import { datum, geld } from "@/lib/format";
-import { OFFER_STATUS_LABELS, type OfferStatus } from "@contracts/invoicing";
+import { OFFER_ANZEIGE_LABELS, offerAnzeigeStatus, type OfferStatus } from "@contracts/invoicing";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CsvButton } from "@/components/CsvButton";
 import { deZahl } from "@/lib/downloads";
@@ -21,16 +23,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus , Search } from "lucide-react";
 
-export function offerStatusBadge(status: OfferStatus) {
+export function offerStatusBadge(a: { status: OfferStatus; gueltigBis?: string | null }) {
+  const anzeige = offerAnzeigeStatus(a);
   const variant =
-    status === "finalisiert"
+    anzeige === "bestaetigt" || anzeige === "umgewandelt"
       ? "default"
-      : status === "storniert"
+      : anzeige === "abgelehnt" || anzeige === "storniert"
         ? "destructive"
-        : "secondary";
-  return <Badge variant={variant}>{OFFER_STATUS_LABELS[status]}</Badge>;
+        : anzeige === "verstrichen"
+          ? "outline"
+          : "secondary";
+  const cls = anzeige === "bestaetigt" ? "bg-green-600 hover:bg-green-600" : undefined;
+  return (
+    <Badge variant={variant} className={cls}>
+      {OFFER_ANZEIGE_LABELS[anzeige]}
+    </Badge>
+  );
 }
 
 export default function Offers() {
@@ -43,6 +53,17 @@ export default function Offers() {
   const erstellen = trpc.offers.createDraft.useMutation({
     onSuccess: (res) => navigate(`/angebote/${res.id}`),
   });
+
+  const [q, setQ] = useState("");
+  const sort = useSortierung<NonNullable<typeof liste.data>[number]>("datum");
+  const gefiltert = (liste.data ?? []).filter(
+    (a) => !q.trim() || (a.nummer ?? "").toLowerCase().includes(q.toLowerCase()) || a.kundeName.toLowerCase().includes(q.toLowerCase()),
+  );
+  const zeilen = sort.sortiere(gefiltert, (a, key) =>
+    key === "nummer" ? a.nummer : key === "kunde" ? a.kundeName : key === "datum" ? a.datum
+    : key === "gueltigBis" ? a.gueltigBis : key === "status" ? a.status
+    : key === "brutto" ? Number(a.brutto) : null,
+  );
 
   return (
     <div>
@@ -65,17 +86,21 @@ export default function Offers() {
         </div>
       </div>
 
+            <div className="relative mb-3 max-w-xs">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen …" className="pl-8" />
+      </div>
       <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
                 <div className="overflow-x-auto">
           <table className="w-full min-w-[600px] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
-              <th className="px-4 py-2.5 font-medium">Nummer</th>
-              <th className="px-4 py-2.5 font-medium">Kunde</th>
-              <th className="px-4 py-2.5 font-medium">Datum</th>
-              <th className="px-4 py-2.5 font-medium">Gültig bis</th>
-              <th className="px-4 py-2.5 font-medium">Status</th>
-              <th className="px-4 py-2.5 text-right font-medium">Brutto</th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("nummer")}>Nummer<sort.KopfIcon k="nummer" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("kunde")}>Kunde<sort.KopfIcon k="kunde" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("datum")}>Datum<sort.KopfIcon k="datum" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("gueltigBis")}>Gültig bis<sort.KopfIcon k="gueltigBis" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 font-medium" onClick={() => sort.umschalten("status")}>Status<sort.KopfIcon k="status" /></th>
+              <th className="cursor-pointer select-none px-4 py-2.5 text-right font-medium" onClick={() => sort.umschalten("brutto")}>Brutto<sort.KopfIcon k="brutto" /></th>
             </tr>
           </thead>
           <tbody>
@@ -86,7 +111,7 @@ export default function Offers() {
                 </td>
               </tr>
             )}
-            {(liste.data ?? []).map((a) => (
+            {zeilen.map((a) => (
               <tr key={a.id} className="border-b border-neutral-100 last:border-0">
                 <td className="px-4 py-2.5">
                   <Link
@@ -101,8 +126,11 @@ export default function Offers() {
                 <td className="px-4 py-2.5 text-neutral-600">
                   {a.gueltigBis ? datum(a.gueltigBis) : "–"}
                 </td>
-                <td className="px-4 py-2.5">{offerStatusBadge(a.status)}</td>
-                <td className="px-4 py-2.5 text-right tabular-nums">{geld(a.brutto)}</td>
+                <td className="px-4 py-2.5">{offerStatusBadge(a)}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums">
+                  <div>{geld(a.brutto)}</div>
+                  <div className="text-xs text-neutral-400">netto {geld(a.netto)}</div>
+                </td>
               </tr>
             ))}
           </tbody>
