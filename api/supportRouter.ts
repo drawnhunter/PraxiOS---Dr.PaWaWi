@@ -208,4 +208,15 @@ export const supportRouter = createRouter({
       limit: 20,
     });
   }),
+
+  /** Hub-Client: manuellen Takt auslösen + letztes Ergebnis zeigen (Diagnose). */
+  jetztTakten: adminQuery.mutation(async () => {
+    const { hubJetztTakten } = await import("./lib/hubClient");
+    return hubJetztTakten();
+  }),
+
+  hubLetzterTakt: authedQuery.query(async () => {
+    const { hubLetzterTakt } = await import("./lib/hubClient");
+    return hubLetzterTakt();
+  }),
 });

@@ -1,5 +1,17 @@
 # Changelog — PraxiOS
 
+## [1.9.2] — 2026-09-10 — Hub-Client: Sichtbarkeit in den Loop
+
+### Diagnose-Fähigkeit (nach dem „kein Herzschlag kommt an"-Fall)
+- **Log pro Takt**: `[hub] heartbeat ok` / `keine ok-Antwort vom Hub` /
+  `kein Schlüssel verbunden — Takt übersprungen` / `Takt-Fehler: …` — das Log
+  sagt jetzt bei jedem 10-Minuten-Takt, was passiert ist
+- **Manueller Takt** (Admin): `support.jetztTakten` löst einen Takt sofort aus
+  und gibt das Ergebnis zurück; `support.hubLetzterTakt` zeigt Zeitpunkt +
+  Ergebnis des letzten Takts — kein Warten auf den Intervall mehr nötig
+
+---
+
 ## [1.9.1] — 2026-09-09 — Hub-Client exakt auf API-Spezifikation (Bus #18)
 
 ### Fernverwaltung (Hub v0.6.0 ist live)

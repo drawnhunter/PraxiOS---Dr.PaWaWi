@@ -5,11 +5,9 @@
 // keine Patienten-/Buchhaltungsdaten — nur Metadaten.
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { mkdirSync } from "fs";
-import { writeFile } from "fs/promises";
+import { mkdirSync, createWriteStream } from "fs";
 import path from "path";
 import { createGzip } from "zlib";
-import { createReadStream, createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
 import { eq, gte, sql } from "drizzle-orm";
 import { getDb } from "../queries/connection";
@@ -174,10 +172,19 @@ async function updateHinweisAusfuehren(inhalt?: string | null): Promise<{ ok: bo
   return { ok: true, detail: "Update-Hinweis lokal registriert." };
 }
 
+// Letztes Takt-Ergebnis (für die Admin-Abfrage sichtbar)
+let letzterTakt: { zeit: string; ergebnis: string } | null = null;
+export function hubLetzterTakt() {
+  return letzterTakt;
+}
+
 async function zyklus() {
   try {
     const schluessel = await ladeSchluessel();
-    if (!schluessel) return; // nicht verbunden → still weiter
+    if (!schluessel) {
+      letzterTakt = { zeit: new Date().toISOString(), ergebnis: "kein Schlüssel verbunden — Takt übersprungen" };
+      return; // nicht verbunden → still weiter
+    }
 
     const s = await getDb().query.companySettings.findFirst({
       where: eq(companySettings.id, 1),
@@ -198,7 +205,13 @@ async function zyklus() {
       method: "POST",
       body: JSON.stringify(heartbeat),
     });
-    if (!hb?.ok) return; // Hub-Ausfall/Fehler → still weiter (wie bei report)
+    if (!hb?.ok) {
+      letzterTakt = { zeit: new Date().toISOString(), ergebnis: "heartbeat ohne ok-Antwort vom Hub" };
+      console.warn("[hub] heartbeat: keine ok-Antwort vom Hub");
+      return; // Hub-Ausfall/Fehler → still weiter (wie bei report)
+    }
+    letzterTakt = { zeit: new Date().toISOString(), ergebnis: "heartbeat ok" };
+    console.log("[hub] heartbeat ok");
 
     // Befehle abholen
     const befehle = await hubAufruf<HubAntwort & { befehle?: HubBefehl[] }>(
@@ -232,9 +245,19 @@ async function zyklus() {
         }),
       }).catch(() => undefined);
     }
-  } catch {
-    // Nie die App stören — Hub-Fernverwaltung ist best effort.
+  } catch (e) {
+    letzterTakt = {
+      zeit: new Date().toISOString(),
+      ergebnis: `Takt-Fehler: ${e instanceof Error ? e.message : String(e)}`,
+    };
+    console.error("[hub] Takt fehlgeschlagen:", e instanceof Error ? e.message : e);
   }
+}
+
+/** Manueller Takt (Admin-Endpunkt „jetzt takten"). */
+export async function hubJetztTakten(): Promise<{ letzterTakt: { zeit: string; ergebnis: string } | null }> {
+  await zyklus();
+  return { letzterTakt };
 }
 
 /** Startet den Hub-Client (nur Produktion; einmalig beim Boot). */
