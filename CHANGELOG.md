@@ -1,5 +1,20 @@
 # Changelog — PraxiOS
 
+## [1.9.1] — 2026-09-09 — Hub-Client exakt auf API-Spezifikation (Bus #18)
+
+### Fernverwaltung (Hub v0.6.0 ist live)
+- **Hub-Client an die fertige API-Spezifikation angeglichen** (Kommentar zu
+  Bus #18): Befehle lesen jetzt das `payload`-Feld, Ergebnisse gehen als
+  `{schluessel, befehlId, erfolg, details, groesseMb?}` zurück — der Hub setzt
+  damit die Backup-Frische automatisch nach erfolgreichem `backup`
+- **Heartbeat ergänzt um `backupGroesseMb`** (Größe der neuesten Dump-Datei im
+  Backups-Ordner)
+- **`ping`-Befehl** (Premium-Stufe) wird sofort mit `pong` + Metadaten
+  quittiert — damit fliegt der eingereihte Ping des Hubs direkt
+- Paket-Gates bleiben Server-Sache (Hub v0.6.0: keins/basis/standard/premium)
+
+---
+
 ## [1.9.0] — 2026-09-04 — ReWaWi-v1.8/v1.9-Sync + SupportHub-Anbindung (Pull-Modell)
 
 ### SupportHub-Anbindung (Bus-Auftrag #18)

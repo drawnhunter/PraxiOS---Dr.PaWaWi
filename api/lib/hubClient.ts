@@ -28,8 +28,8 @@ interface HubAntwort {
 }
 interface HubBefehl {
   id: number;
-  typ: string; // "backup" | "update-hinweis" | "diagnose"
-  inhalt?: string | null;
+  typ: string; // "backup" | "update-hinweis" | "diagnose" | "ping"
+  payload?: string | null;
 }
 
 async function hubAufruf<T>(pfad: string, init?: RequestInit): Promise<T | null> {
@@ -76,7 +76,24 @@ async function fehler24h(): Promise<number> {
 // DB-Dump via mysqldump aus dem DB-Container ist vom App-Container nicht
 // erreichbar — deshalb: eigner SQL-Dump über die App-DB-Verbindung ins
 // Backups-Verzeichnis (nebengelegen zum persistenten Upload-Volume), gzipped.
-async function backupAusfuehren(): Promise<{ ok: boolean; detail: string }> {
+/** Größe der neuesten Backup-Datei im Backups-Ordner (MB, 1 Dezimale) — für den Heartbeat. */
+async function neuesteBackupGroesseMb(): Promise<number | null> {
+  try {
+    const zielOrdner = path.join(env.uploadDir, "..", "backups");
+    const { readdirSync, statSync } = await import("fs");
+    const dateien = readdirSync(zielOrdner)
+      .filter((d) => d.endsWith(".sql.gz"))
+      .map((d) => ({ d, m: statSync(path.join(zielOrdner, d)).mtimeMs }))
+      .sort((a, b) => b.m - a.m);
+    if (dateien.length === 0) return null;
+    const { size } = statSync(path.join(zielOrdner, dateien[0].d));
+    return Math.round((size / 1024 / 1024) * 10) / 10;
+  } catch {
+    return null;
+  }
+}
+
+async function backupAusfuehren(): Promise<{ ok: boolean; detail: string; groesseMb?: number }> {
   const db = getDb();
   const zielOrdner = path.join(env.uploadDir, "..", "backups");
   mkdirSync(zielOrdner, { recursive: true });
@@ -119,6 +136,7 @@ async function backupAusfuehren(): Promise<{ ok: boolean; detail: string }> {
   return {
     ok: true,
     detail: `DB-Dump erstellt: ${path.basename(ziel)} (${Math.round(size / 1024)} KB) im Backups-Ordner. Hinweis: Dokumente-Dateien deckt der Host-Backup (scripts/backup.sh) ab.`,
+    groesseMb: Math.round((size / 1024 / 1024) * 10) / 10,
   };
 }
 
@@ -173,6 +191,7 @@ async function zyklus() {
       diskProzent: await diskProzent(),
       uptimeSek: Math.round(process.uptime()),
       letztesBackup: s?.backupZuletztAm?.toISOString() ?? null,
+      backupGroesseMb: await neuesteBackupGroesseMb(),
       fehler24h: await fehler24h(),
     };
     const hb = await hubAufruf<HubAntwort>("/heartbeat", {
@@ -188,22 +207,28 @@ async function zyklus() {
     if (!befehle?.ok || !befehle.befehle?.length) return;
 
     for (const b of befehle.befehle) {
-      let ergebnis: { ok: boolean; detail: string };
+      let ergebnis: { ok: boolean; detail: string; groesseMb?: number };
       try {
         if (b.typ === "backup") ergebnis = await backupAusfuehren();
         else if (b.typ === "diagnose") ergebnis = await diagnoseAusfuehren();
-        else if (b.typ === "update-hinweis") ergebnis = await updateHinweisAusfuehren(b.inhalt);
+        else if (b.typ === "update-hinweis") ergebnis = await updateHinweisAusfuehren(b.payload);
+        else if (b.typ === "ping") {
+          // Premium-Ping: sofort mit Metadaten quittieren
+          ergebnis = { ok: true, detail: `pong ${new Date().toISOString()} (v${APP_VERSION}, uptime ${Math.round(process.uptime())}s)` };
+        }
         else ergebnis = { ok: false, detail: `Unbekannter Befehlstyp: ${b.typ}` };
       } catch (e) {
         ergebnis = { ok: false, detail: e instanceof Error ? e.message : String(e) };
       }
+      // API-Spezifikation (Bus #18-Kommentar): {schluessel, befehlId, erfolg, details?, groesseMb?}
       await hubAufruf("/ergebnis", {
         method: "POST",
         body: JSON.stringify({
           schluessel,
           befehlId: b.id,
-          ok: ergebnis.ok,
-          detail: ergebnis.detail.slice(0, 4000),
+          erfolg: ergebnis.ok,
+          details: ergebnis.detail.slice(0, 4000),
+          ...(ergebnis.groesseMb !== undefined ? { groesseMb: ergebnis.groesseMb } : {}),
         }),
       }).catch(() => undefined);
     }
