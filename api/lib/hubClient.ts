@@ -36,8 +36,21 @@ async function hubAufruf<T>(pfad: string, init?: RequestInit): Promise<T | null>
     signal: AbortSignal.timeout(8000),
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
-  const daten = (await res.json()) as T & { ok?: boolean };
-  if (typeof daten?.ok !== "boolean") return null;
+  const roh = await res.text();
+  let daten: (T & { ok?: boolean }) | null = null;
+  try {
+    daten = JSON.parse(roh) as T & { ok?: boolean };
+  } catch {
+    console.warn(`[hub] ${pfad}: keine JSON-Antwort (HTTP ${res.status}) — ${roh.slice(0, 200)}`);
+    return null;
+  }
+  if (typeof daten?.ok !== "boolean") {
+    console.warn(`[hub] ${pfad}: Antwort ohne ok-Feld (HTTP ${res.status}) — ${roh.slice(0, 300)}`);
+    return null;
+  }
+  if (daten.ok === false) {
+    console.warn(`[hub] ${pfad}: Hub lehnt ab (HTTP ${res.status}) — ${roh.slice(0, 300)}`);
+  }
   return daten;
 }
 

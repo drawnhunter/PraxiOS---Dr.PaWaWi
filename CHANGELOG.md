@@ -1,5 +1,14 @@
 # Changelog — PraxiOS
 
+## [1.9.3] — 2026-09-10 — Hub-Client: Hub-Antworten mitloggen
+
+### Diagnose-Nachschärfung
+- Nicht-ok Hub-Antworten (Ablehnung, Paket-Gate, HTML statt JSON, HTTP-Status)
+  werden jetzt mit den ersten 300 Zeichen der Antwort geloggt — der
+  „keine ok-Antwort vom Hub"-Fall ist damit nicht mehr blind
+
+---
+
 ## [1.9.2] — 2026-09-10 — Hub-Client: Sichtbarkeit in den Loop
 
 ### Diagnose-Fähigkeit (nach dem „kein Herzschlag kommt an"-Fall)
