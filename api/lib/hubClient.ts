@@ -203,6 +203,7 @@ async function zyklus() {
       where: eq(companySettings.id, 1),
       columns: { backupZuletztAm: true },
     });
+    const backupGroesse = await neuesteBackupGroesseMb();
     const heartbeat = {
       schluessel,
       produkt: PRODUKT,
@@ -210,8 +211,10 @@ async function zyklus() {
       status: "ok",
       diskProzent: await diskProzent(),
       uptimeSek: Math.round(process.uptime()),
-      letztesBackup: s?.backupZuletztAm?.toISOString() ?? null,
-      backupGroesseMb: await neuesteBackupGroesseMb(),
+      // Optional heißt bei zod: FELD WEGLASSEN, nicht null schicken
+      // (Bug v1.9.2→1.9.3: null wurde vom Hub mit 400 abgelehnt)
+      ...(s?.backupZuletztAm ? { letztesBackup: s.backupZuletztAm.toISOString() } : {}),
+      ...(backupGroesse !== null ? { backupGroesseMb: backupGroesse } : {}),
       fehler24h: await fehler24h(),
     };
     const hb = await hubAufruf<HubAntwort>("/heartbeat", {

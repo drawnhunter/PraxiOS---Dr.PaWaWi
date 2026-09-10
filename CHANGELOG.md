@@ -1,5 +1,16 @@
 # Changelog — PraxiOS
 
+## [1.9.4] — 2026-09-10 — Fix: Heartbeat-Felder weglassen statt null (Hub 400)
+
+### Fix (Fernverwaltung)
+- Der Hub lehnte unseren Heartbeat mit 400 ab, weil wir `letztesBackup: null`
+  und `backupGroesseMb: null` schickten, wenn noch kein Backup bestätigt war —
+  optional heißt bei zod aber „Feld weglassen", nicht „null". Beide Felder
+  werden jetzt nur gesendet, wenn sie einen Wert haben. Damit validiert der
+  Hub den Herzschlag — die Kette ist geschlossen.
+
+---
+
 ## [1.9.3] — 2026-09-10 — Hub-Client: Hub-Antworten mitloggen
 
 ### Diagnose-Nachschärfung
