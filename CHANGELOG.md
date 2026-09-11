@@ -1,5 +1,18 @@
 # Changelog — PraxiOS
 
+## [1.9.5] — 2026-09-10 — Fix: Login über direkte IP / WireGuard (Cookie-Falle)
+
+### Fix
+- **Login-Loop ohne Fehlermeldung** bei direktem Zugriff per LAN-IP (z. B.
+  WireGuard-Diagnose, `http://192.168.x.x:3100`): Das Session-Cookie bekam
+  immer `Secure` + `SameSite=None` — der Browser verwirft solche Cookies über
+  HTTP, also lud die Seite nach dem (erfolgreichen!) Login einfach neu.
+  Jetzt wird `Secure` ans tatsächliche Protokoll gekoppelt (über
+  `x-forwarded-proto` hinter Caddy) — über HTTPS wie gehabt, über direkte
+  IP/localhost funktioniert der Login jetzt. Produktions-Verhalten unverändert.
+
+---
+
 ## [1.9.4] — 2026-09-10 — Fix: Heartbeat-Felder weglassen statt null (Hub 400)
 
 ### Fix (Fernverwaltung)
