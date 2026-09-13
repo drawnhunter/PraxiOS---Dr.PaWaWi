@@ -40,6 +40,8 @@ import { protokollRouter } from "./protokollRouter";
 import { unternehmenRouter } from "./unternehmenRouter";
 import { bankTransaktionenRouter } from "./bankTransaktionenRouter";
 import { supportRouter } from "./supportRouter";
+import { portalRouter } from "./portalRouter";
+import { portalAdminRouter } from "./portalAdminRouter";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now(), version: APP_VERSION })),
@@ -81,6 +83,8 @@ export const appRouter = createRouter({
   unternehmen: unternehmenRouter,
   bankTrans: bankTransaktionenRouter,
   support: supportRouter,
+  portal: portalRouter,
+  portalAdmin: portalAdminRouter,
   leistungen: productRouter, // Alias für Akte-Seiten (gleicher Katalog)
 });
 

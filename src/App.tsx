@@ -14,6 +14,7 @@ import ProtokollDetail from "@/pages/ProtokollDetail";
 import VorlageDetail from "@/pages/VorlageDetail";
 import Unternehmen from "@/pages/Unternehmen";
 import Bogen from "@/pages/Bogen";
+import Portal from "@/pages/Portal";
 import Austausch from "@/pages/Austausch";
 import IncomingInvoices from "@/pages/IncomingInvoices";
 import Lager from "@/pages/Lager";
@@ -87,6 +88,7 @@ export default function App() {
         <Route path="/einstellungen" element={<SettingsPage />} />
       </Route>
       <Route path="/bogen/:token" element={<Bogen />} />
+      <Route path="/portal/:token" element={<Portal />} />
       <Route path="/login" element={<Login />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

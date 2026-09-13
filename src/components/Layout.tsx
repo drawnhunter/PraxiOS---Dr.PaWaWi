@@ -50,6 +50,17 @@ const OBEN: NavEintrag[] = [
   { to: "/kalender", label: "Kalender", icon: Calendar, recht: "kalender" },
 ];
 
+/** Pfad → Modul-ID (null = immer sichtbar). Spiegelt api/lib/module MODUL_DEFS. */
+const MODUL_JE_PFAD: Record<string, string> = {
+  "/bank": "banking",
+  "/posteingang": "postmanager",
+  "/lager": "lager",
+  "/anamnese": "anamnese",
+  "/austausch": "austausch",
+  "/rezepte": "rezepte",
+  "/protokolle": "protokolle",
+};
+
 const GRUPPEN: NavGruppe[] = [
   {
     id: "praxis",
@@ -100,6 +111,13 @@ function ladeGruppenZugeklappt(): Record<string, boolean> {
 }
 
 export default function Layout() {
+  const module = trpc.settings.moduleUebersicht.useQuery(undefined, { staleTime: 60_000 });
+  const modulAktiv = (pfad: string) => {
+    const id = MODUL_JE_PFAD[pfad];
+    if (!id) return true;
+    const def = module.data?.find((d) => d.id === id);
+    return def ? def.aktiv : true;
+  };
   const { user, isLoading, logout } = useAuth({ redirectOnUnauthenticated: true });
   const [navOffen, setNavOffen] = useState(false);
   const [gruppenZugeklappt, setGruppenZugeklappt] = useState<Record<string, boolean>>(ladeGruppenZugeklappt);
@@ -130,7 +148,8 @@ export default function Layout() {
 
   const sichtbar = (e: NavEintrag) =>
     (!e.adminNur || ich.data?.role === "admin") &&
-    (!e.recht || meineRechte.includes(e.recht));
+    (!e.recht || meineRechte.includes(e.recht)) &&
+    modulAktiv(e.to);
 
   const gruppeKlappen = (id: string) => {
     setGruppenZugeklappt((z) => {

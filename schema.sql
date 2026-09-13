@@ -65,6 +65,10 @@ CREATE TABLE `company_settings` (
   `patienten_nr_prefix` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'P',
   `backup_zuletzt_am` timestamp NULL DEFAULT NULL,
   `support_schluessel` varchar(80) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `agent_autonomie` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'vorschlag',
+  `modul_konfig` text COLLATE utf8mb4_unicode_ci,
+  `portal_aktiv` tinyint(1) NOT NULL DEFAULT '1',
+  `portal_bereiche` text COLLATE utf8mb4_unicode_ci,
   `erinnerung_aktiv` tinyint(1) NOT NULL DEFAULT '0',
   `erinnerung_tage_vorher` int NOT NULL DEFAULT '1',
   `kalender_token` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -919,6 +923,7 @@ CREATE TABLE `bank_transaktionen` (
   `gebuehr` decimal(12,2) DEFAULT NULL,
   `saldo_nach` decimal(14,2) DEFAULT NULL,
   `hash` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `quell_id` varchar(40) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('offen','zugeordnet','ignoriert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'offen',
   `invoice_id` bigint unsigned DEFAULT NULL,
   `incoming_invoice_id` bigint unsigned DEFAULT NULL,
@@ -928,6 +933,7 @@ CREATE TABLE `bank_transaktionen` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `bank_tx_hash_uniq` (`bank_account_id`,`hash`),
+  KEY `bank_tx_quell_idx` (`quell_id`),
   KEY `bank_tx_konto_datum` (`bank_account_id`,`datum`),
   KEY `bank_tx_status` (`status`),
   CONSTRAINT `bank_tx_konto_fk` FOREIGN KEY (`bank_account_id`) REFERENCES `bank_accounts` (`id`) ON DELETE CASCADE,
@@ -948,4 +954,101 @@ CREATE TABLE `support_meldungen` (
   `fehler` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `agent_tokens` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `token_hash` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `aktiv` tinyint(1) NOT NULL DEFAULT '1',
+  `letzte_nutzung` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `agent_aufgaben` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `text` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `erledigt` tinyint(1) NOT NULL DEFAULT '0',
+  `erledigt_am` timestamp NULL DEFAULT NULL,
+  `quelle` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'mensch',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `agent_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `aktion` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `details` text COLLATE utf8mb4_unicode_ci,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `patient_portal_links` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `token` varchar(80) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `gueltig_bis` date NOT NULL,
+  `fehlversuche` int NOT NULL DEFAULT '0',
+  `gesperrt_bis` timestamp NULL DEFAULT NULL,
+  `letzter_zugriff_am` timestamp NULL DEFAULT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ppl_token_uniq` (`token`),
+  CONSTRAINT `ppl_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ppl_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `patient_portal_sessions` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `link_id` bigint unsigned NOT NULL,
+  `patient_id` bigint unsigned NOT NULL,
+  `token` varchar(80) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `gueltig_bis` timestamp NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `pps_token_uniq` (`token`),
+  KEY `pps_patient_idx` (`patient_id`),
+  CONSTRAINT `pps_link_fk` FOREIGN KEY (`link_id`) REFERENCES `patient_portal_links` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `pps_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `patient_portal_zugriffe` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `bereich` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `zeitpunkt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `ppz_patient_idx` (`patient_id`),
+  CONSTRAINT `ppz_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `patient_daten_antraege` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `felder` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('offen','bestaetigt','abgelehnt') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'offen',
+  `kommentar` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `bearbeitet_am` timestamp NULL DEFAULT NULL,
+  `bearbeitet_von` bigint unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `pda_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `pda_user_fk` FOREIGN KEY (`bearbeitet_von`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `termin_anfragen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `wunsch_datum` date NOT NULL,
+  `wunsch_von` varchar(5) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `wunsch_bis` varchar(5) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `notiz` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('offen','bestaetigt','abgelehnt') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'offen',
+  `praxis_kommentar` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `bearbeitet_am` timestamp NULL DEFAULT NULL,
+  `bearbeitet_von` bigint unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `ta_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ta_user_fk` FOREIGN KEY (`bearbeitet_von`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

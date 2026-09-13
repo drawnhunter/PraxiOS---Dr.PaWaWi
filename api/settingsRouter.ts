@@ -208,4 +208,168 @@ export const settingsRouter = createRouter({
       }
       return { ok: true };
     }),
+
+  // ── Agent-API (Kimi Claw) ──
+  agentStatus: authedQuery.query(async () => {
+    const { agentTokens, agentLog } = await import("@db/schema");
+    const { desc } = await import("drizzle-orm");
+    const db = getDb();
+    const [tokens, log, einstellungen] = await Promise.all([
+      db.query.agentTokens.findMany({ orderBy: [desc(agentTokens.createdAt)] }),
+      db.query.agentLog.findMany({ orderBy: [desc(agentLog.createdAt)], limit: 20 }),
+      db.query.companySettings.findFirst({ where: eq(companySettings.id, 1) }),
+    ]);
+    return {
+      autonomie: einstellungen?.agentAutonomie ?? "vorschlag",
+      tokens: tokens.map((t) => ({ id: t.id, name: t.name, aktiv: t.aktiv, letzteNutzung: t.letzteNutzung, createdAt: t.createdAt })),
+      letzteAktionen: log,
+    };
+  }),
+
+  agentTokenErstellen: adminQuery
+    .input(z.object({ name: z.string().trim().min(2).max(100) }))
+    .mutation(async ({ input }) => {
+      const { agentTokens } = await import("@db/schema");
+      const { erzeugeAgentToken, hashToken } = await import("./agentRouter");
+      const klar = erzeugeAgentToken();
+      const [{ id }] = await getDb()
+        .insert(agentTokens)
+        .values({ name: input.name, tokenHash: hashToken(klar) })
+        .$returningId();
+      return { id, name: input.name, token: klar };
+    }),
+
+  agentTokenUmschalten: adminQuery
+    .input(z.object({ id: z.number(), aktiv: z.boolean() }))
+    .mutation(async ({ input }) => {
+      const { agentTokens } = await import("@db/schema");
+      const { eq } = await import("drizzle-orm");
+      await getDb().update(agentTokens).set({ aktiv: input.aktiv }).where(eq(agentTokens.id, input.id));
+      return { ok: true };
+    }),
+
+  agentAutonomieSetzen: adminQuery
+    .input(z.object({ stufe: z.enum(["vorschlag", "vollautomatik"]) }))
+    .mutation(async ({ input }) => {
+      await getDb()
+        .insert(companySettings)
+        .values({ id: 1, agentAutonomie: input.stufe } as never)
+        .onDuplicateKeyUpdate({ set: { agentAutonomie: input.stufe } as never });
+      return { ok: true };
+    }),
+
+  // ── Update-Sektion (Einstellungen → Update) ──
+  updateInfo: authedQuery.query(async () => {
+    const { APP_VERSION } = await import("./lib/version");
+    let neuestesTag: string | null = null;
+    try {
+      const res = await fetch(
+        "https://api.github.com/repos/drawnhunter/PraxiOS---Dr.PaWaWi/tags?per_page=5",
+        { signal: AbortSignal.timeout(6000), headers: { Accept: "application/vnd.github+json" } },
+      );
+      if (res.ok) {
+        const tags = (await res.json()) as { name: string }[];
+        neuestesTag = tags[0]?.name ?? null;
+      }
+    } catch { /* offline ok */ }
+    return { aktuell: APP_VERSION, neuestesTag };
+  }),
+
+  updateAnfordern: adminQuery.mutation(async () => {
+    const db = getDb();
+    const s = await db.query.companySettings.findFirst({
+      where: eq(companySettings.id, 1),
+      columns: { supportSchluessel: true },
+    });
+    if (!s?.supportSchluessel) {
+      throw new Error("Kein Support-Schlüssel verbunden — zuerst unter Support verbinden.");
+    }
+    const url = (process.env.SUPPORT_HUB_URL || "https://support.praxios.dynv6.net").replace(/\/$/, "");
+    try {
+      const res = await fetch(`${url}/api/hub/update-anfordern`, {
+        method: "POST",
+        signal: AbortSignal.timeout(10000),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schluessel: s.supportSchluessel }),
+      });
+      const text = await res.text();
+      let daten: { ok?: boolean; fehler?: string } = {};
+      try { daten = JSON.parse(text); } catch { /* HTML-Antwort (Hub-Version zu alt?) */ }
+      if (res.status === 404) {
+        throw new Error('Der Hub kennt „update-anfordern" noch nicht (Hub-Version aktualisieren — SupportHub-Chat hat den Auftrag).');
+      }
+      if (!res.ok || daten.ok === false) {
+        throw new Error(daten.fehler || `Hub antwortet HTTP ${res.status}: ${text.slice(0, 200)}`);
+      }
+      return { ok: true, hinweis: "Update angefordert — der Hub baut und deployt; Status auf der Instanz-Karte im Hub." };
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("Hub")) throw e;
+      throw new Error(`Hub nicht erreichbar: ${e instanceof Error ? e.message : e}`);
+    }
+  }),
+
+  // ── Patienten-Portal ──
+  portalStatus: authedQuery.query(async () => {
+    const s = await getDb().query.companySettings.findFirst({
+      where: eq(companySettings.id, 1),
+      columns: { portalAktiv: true, portalBereiche: true },
+    });
+    const standard = { termine: true, therapieplan: true, dokumente: true, atteste: true, daten: true, terminanfragen: true };
+    let bereiche = standard;
+    if (s?.portalBereiche) {
+      try {
+        bereiche = { ...standard, ...(JSON.parse(s.portalBereiche) as Partial<typeof standard>) };
+      } catch { /* Standard */ }
+    }
+    return { aktiv: s?.portalAktiv ?? true, bereiche };
+  }),
+
+  portalSetzen: adminQuery
+    .input(
+      z.object({
+        aktiv: z.boolean().optional(),
+        bereiche: z
+          .object({
+            termine: z.boolean(),
+            therapieplan: z.boolean(),
+            dokumente: z.boolean(),
+            atteste: z.boolean(),
+            daten: z.boolean(),
+            terminanfragen: z.boolean(),
+          })
+          .optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const setze: Record<string, unknown> = {};
+      if (input.aktiv !== undefined) setze.portalAktiv = input.aktiv;
+      if (input.bereiche) setze.portalBereiche = JSON.stringify(input.bereiche);
+      await getDb()
+        .insert(companySettings)
+        .values({ id: 1, ...setze } as never)
+        .onDuplicateKeyUpdate({ set: setze as never });
+      return { ok: true };
+    }),
+
+  // ── Modul-Konfiguration ──
+  moduleUebersicht: authedQuery.query(async () => {
+    const { MODUL_DEFS, ladeModulKonfig } = await import("./lib/module");
+    const konfig = await ladeModulKonfig();
+    return MODUL_DEFS.map((d) => ({ ...d, aktiv: konfig[d.id] !== false }));
+  }),
+
+  modulSetzen: adminQuery
+    .input(z.object({ modul: z.string().min(2).max(40), aktiv: z.boolean() }))
+    .mutation(async ({ input }) => {
+      const { MODUL_DEFS, ladeModulKonfig, modulCacheLeeren } = await import("./lib/module");
+      if (!MODUL_DEFS.some((d) => d.id === input.modul)) throw new Error("Unbekanntes Modul.");
+      const konfig = await ladeModulKonfig();
+      const neu = { ...konfig, [input.modul]: input.aktiv };
+      await getDb()
+        .insert(companySettings)
+        .values({ id: 1, modulKonfig: JSON.stringify(neu) } as never)
+        .onDuplicateKeyUpdate({ set: { modulKonfig: JSON.stringify(neu) } as never });
+      modulCacheLeeren();
+      return { ok: true };
+    }),
 });

@@ -482,6 +482,12 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* ── Update (Einstellungen → Update anfordern) ── */}
+      <UpdateAbschnitt />
+
+      {/* ── Patienten-Portal ── */}
+      <PortalAbschnitt />
+
       {/* ── Unterschrift (Rezepte/Atteste) ── */}
       <SignaturAbschnitt />
 
@@ -1056,6 +1062,136 @@ function PatientenNrAbschnitt({
           <span className="ml-2 text-xs text-neutral-400">(Vorschau, wird nicht verbraucht)</span>
         </div>
       </div>
+    </section>
+  );
+}
+
+// ── Update-Sektion: aktuelle Version, neuestes Tag, Update beim Hub anfordern ─
+function UpdateAbschnitt() {
+  const info = trpc.settings.updateInfo.useQuery();
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+  const anfordern = trpc.settings.updateAnfordern.useMutation({
+    onSuccess: (r) => {
+      setFehler(null);
+      setOk(r.hinweis);
+    },
+    onError: (e) => setFehler(e.message),
+  });
+
+  const aktuell = info.data?.aktuell ?? "…";
+  const neuestes = info.data?.neuestesTag ?? "—";
+  const verfuegbar =
+    neuestes && aktuell !== "…" && neuestes !== `v${aktuell}` && neuestes !== aktuell;
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-5">
+      <h2 className="mb-1 text-sm font-medium text-neutral-700">Update</h2>
+      <p className="mb-4 text-xs text-neutral-400">
+        Aktuelle Version + neueste auf GitHub. „Update anfordern" löst beim
+        SupportHub den Build + Deploy aus (braucht einen verbundenen
+        Support-Schlüssel; Paket ≥ standard).
+      </p>
+      <div className="flex flex-wrap items-center gap-4 text-sm">
+        <div>
+          <span className="text-neutral-500">Installiert:</span>{" "}
+          <span className="font-mono font-semibold">v{aktuell}</span>
+        </div>
+        <div>
+          <span className="text-neutral-500">Neueste (GitHub):</span>{" "}
+          <span className="font-mono font-semibold">{neuestes}</span>
+        </div>
+        {verfuegbar ? (
+          <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
+            Update verfügbar
+          </span>
+        ) : (
+          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
+            aktuell
+          </span>
+        )}
+        <Button
+          size="sm"
+          disabled={anfordern.isPending || !verfuegbar}
+          onClick={() => {
+            setFehler(null);
+            setOk(null);
+            anfordern.mutate();
+          }}
+        >
+          {anfordern.isPending ? "Fordere an …" : "Update anfordern"}
+        </Button>
+        {fehler && <span className="text-sm text-red-600">{fehler}</span>}
+        {ok && <span className="text-sm text-green-700">{ok}</span>}
+      </div>
+    </section>
+  );
+}
+
+// ── Patienten-Portal: an/aus + sichtbare Bereiche ───────────────────────────
+function PortalAbschnitt() {
+  const utils = trpc.useUtils();
+  const status = trpc.settings.portalStatus.useQuery();
+  const setzen = trpc.settings.portalSetzen.useMutation({
+    onSuccess: () => utils.settings.portalStatus.invalidate(),
+  });
+
+  if (!status.data) return null;
+  const { aktiv, bereiche } = status.data;
+  const LABELS: Record<string, string> = {
+    termine: "Termine ansehen",
+    therapieplan: "Eigener Therapieverlauf",
+    dokumente: "Dokumente (Befund/Arztbrief/Rezept/Einverständnis)",
+    atteste: "Atteste & Rezepte als PDF",
+    daten: "Kontaktdaten + Änderungsanträge",
+    terminanfragen: "Terminanfragen",
+  };
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-5">
+      <h2 className="mb-1 text-sm font-medium text-neutral-700">Patienten-Portal</h2>
+      <p className="mb-4 text-xs text-neutral-400">
+        Geschützter Zugang für Patienten: Link (30 Tage) + Geburtsdatum als zweiter
+        Faktor. Patienten sehen ausschließlich ihre eigenen Daten; jeder Zugriff wird
+        auditiert (DSGVO Art. 9). Links erstellt ihr in der Patientenakte (Tab „Portal").
+      </p>
+      <div className="mb-3 flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[#0F766E]"
+            checked={aktiv}
+            onChange={(e) => setzen.mutate({ aktiv: e.target.checked })}
+          />
+          Portal aktivieren
+        </label>
+      </div>
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {Object.entries(LABELS).map(([id, label]) => (
+          <label key={id} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[#0F766E]"
+              checked={(bereiche as Record<string, boolean>)[id] ?? true}
+              onChange={(e) =>
+                setzen.mutate({
+                  bereiche: {
+                    termine: bereiche.termine,
+                    therapieplan: bereiche.therapieplan,
+                    dokumente: bereiche.dokumente,
+                    atteste: bereiche.atteste,
+                    daten: bereiche.daten,
+                    terminanfragen: bereiche.terminanfragen,
+                    [id]: e.target.checked,
+                  } as typeof bereiche,
+                })
+              }
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+      {setzen.isPending && <p className="mt-2 text-xs text-neutral-400">Speichere …</p>}
     </section>
   );
 }

@@ -1,5 +1,41 @@
 # Changelog — PraxiOS
 
+## [1.10.0] — 2026-09-14 — Patienten-Portal + ReWaWi-Sync v1.10–v1.12
+
+### Patienten-Portal (Flaggschiff — rechtssauber per Konstruktion)
+- **Geschützter Zugang pro Patient**: Link aus der Patientenakte (30 Tage) +
+  **Geburtsdatum als zweiter Faktor** → Session (24 h). Kein Passwort nötig —
+  nutzt die bewährte Token-Infrastruktur der Anamnesebögen
+- **Nur eigene Daten, jeder Zugriff auditiert** (DSGVO Art. 9): Termine,
+  eigener Therapieverlauf (Art. 15), Dokumente (Befund/Arztbrief/Rezept/
+  Einverständnis), Atteste & Rezepte als PDF, eigene Kontaktdaten
+- **Datenänderungs-Anträge**: Patient schlägt vor, Praxis bestätigt (erst dann
+  werden Stammdaten übernommen) oder lehnt ab — kein ungeprüftes Überschreiben
+- **Terminanfragen**: Wunschdatum + Zeitraum, Praxis bestätigt/lehnt mit Kommentar
+- **Rate-Limiting + Sperre**: 5 Fehlversuche beim Geburtsdatum → 60 min Sperre
+- **Praxis steuert alles**: Portal an/aus + Sichtbarkeit je Bereich
+  (Einstellungen → Patienten-Portal), Links einzeln widerrufbar,
+  Zugriffs-Protokoll in der Akte einsehbar
+
+### ReWaWi-Sync v1.10.2–v1.12.0
+- **Agent-API (Kimi Claw)**: REST `/api/agent/*` mit Bearer-Token (sha256),
+  Autonomie-Stufen `vorschlag` (Standard) ↔ `vollautomatik` (Versand-Gate),
+  jede Schreib-Aktion im `agent_log` auditiert, Settings-Sektion mit
+  Token-Verwaltung — Lesen (offene Rechnungen, Entwürfe, Kunden ohne Rechnung
+  seit X, Mahnungen, Import-Status) + Schreiben (Aufgaben, Kunden, Entwurf,
+  Bank-Zuordnung mit Reversal)
+- **Modul-System (Feature-Flags)**: tRPC-Gate (deaktivierte Router → 403),
+  Sidebar-Filter, Einstellungen → Module mit Toggles; PaWaWi-Module ergänzt:
+  Anamnese, Austausch, Rezepte, Protokolle — Daten bleiben beim Deaktivieren
+  erhalten (signiertes Release bleibt die eine Wahrheit)
+- **Banking-Dedupe formatübergreifend**: `quell_id` (Anbieter-TxID) als
+  Dedup-Anker + schlanker SumUp-Transaktionsbericht-Parser +
+  Duplikat-Prüfung im Banking (GoBD-sicher)
+- **Update-Button** (Einstellungen → Update): aktuelle Version vs. neuestes
+  GitHub-Tag + „Update anfordern" an den Hub (Auftrag Bus #27, App-Seite)
+
+---
+
 ## [1.9.5] — 2026-09-10 — Fix: Login über direkte IP / WireGuard (Cookie-Falle)
 
 ### Fix

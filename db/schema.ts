@@ -74,6 +74,13 @@ export const companySettings = mysqlTable("company_settings", {
   ageSecret: varchar("age_secret", { length: 100 }),
   // SupportHub-Verbindung: Support-Schlüssel des Kunden (ps_…)
   supportSchluessel: varchar("support_schluessel", { length: 80 }),
+  // Agent-API: Autonomie-Stufe (vorschlag | vollautomatik)
+  agentAutonomie: varchar("agent_autonomie", { length: 20 }).notNull().default("vorschlag"),
+  // Modul-System: aktive/deaktivierte Module (JSON)
+  modulKonfig: text("modul_konfig"),
+  // Patienten-Portal: aktiv + sichtbare Bereiche (JSON)
+  portalAktiv: boolean("portal_aktiv").notNull().default(true),
+  portalBereiche: text("portal_bereiche"),
   // Backup-Erinnerung: Zeitpunkt der letzten bestätigten Sicherung
   backupZuletztAm: timestamp("backup_zuletzt_am"),
   // Patientennummern-Nummernkreis: Startzahl + optionaler freier Präfix
@@ -1173,6 +1180,32 @@ export const bankImporte = mysqlTable("bank_importe", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ── Agent-API (Kimi Claw): Tokens, Aufgabenliste, Aktions-Log ─────────────
+export const agentTokens = mysqlTable("agent_tokens", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+  aktiv: boolean("aktiv").notNull().default(true),
+  letzteNutzung: timestamp("letzte_nutzung"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const agentAufgaben = mysqlTable("agent_aufgaben", {
+  id: serial("id").primaryKey(),
+  text: varchar("text", { length: 500 }).notNull(),
+  erledigt: boolean("erledigt").notNull().default(false),
+  erledigtAm: timestamp("erledigt_am"),
+  quelle: varchar("quelle", { length: 20 }).notNull().default("mensch"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const agentLog = mysqlTable("agent_log", {
+  id: serial("id").primaryKey(),
+  aktion: varchar("aktion", { length: 100 }).notNull(),
+  details: text("details"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const bankTransaktionen = mysqlTable(
   "bank_transaktionen",
   {
@@ -1191,6 +1224,7 @@ export const bankTransaktionen = mysqlTable(
     gebuehr: decimal("gebuehr", { precision: 12, scale: 2 }),
     saldoNach: decimal("saldo_nach", { precision: 14, scale: 2 }),
     hash: varchar("hash", { length: 64 }).notNull(), // Duplikat-Erkennung je Konto
+    quellId: varchar("quell_id", { length: 40 }), // Anbieter-ID (z. B. SumUp) — formatübergreifende Duplikat-Erkennung
     status: mysqlEnum("status", ["offen", "zugeordnet", "ignoriert"]).notNull().default("offen"),
     invoiceId: bigint("invoice_id", { mode: "number", unsigned: true }).references(
       () => invoices.id,
@@ -1207,6 +1241,7 @@ export const bankTransaktionen = mysqlTable(
   },
   (t) => [
     uniqueIndex("bank_tx_hash_uniq").on(t.bankAccountId, t.hash),
+    index("bank_tx_quell_idx").on(t.quellId),
     index("bank_tx_konto_datum").on(t.bankAccountId, t.datum),
     index("bank_tx_status").on(t.status),
   ],
@@ -1229,3 +1264,86 @@ export const supportMeldungen = mysqlTable("support_meldungen", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 export type SupportMeldung = typeof supportMeldungen.$inferSelect;
+
+// ── Patienten-Portal: geschützter Zugang pro Patient (DSGVO Art. 9) ────────
+export const patientPortalLinks = mysqlTable("patient_portal_links", {
+  id: serial("id").primaryKey(),
+  patientId: bigint("patient_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 80 }).notNull().unique(),
+  gueltigBis: date("gueltig_bis", { mode: "string" }).notNull(),
+  fehlversuche: int("fehlversuche").notNull().default(0),
+  gesperrtBis: timestamp("gesperrt_bis"),
+  letzterZugriffAm: timestamp("letzter_zugriff_am"),
+  createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type PatientPortalLink = typeof patientPortalLinks.$inferSelect;
+
+export const patientPortalSessions = mysqlTable("patient_portal_sessions", {
+  id: serial("id").primaryKey(),
+  linkId: bigint("link_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => patientPortalLinks.id, { onDelete: "cascade" }),
+  patientId: bigint("patient_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 80 }).notNull().unique(),
+  gueltigBis: timestamp("gueltig_bis").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type PatientPortalSession = typeof patientPortalSessions.$inferSelect;
+
+// DSGVO-Audit: welcher Bereich wann abgerufen wurde
+export const patientPortalZugriffe = mysqlTable("patient_portal_zugriffe", {
+  id: serial("id").primaryKey(),
+  patientId: bigint("patient_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  bereich: varchar("bereich", { length: 40 }).notNull(),
+  zeitpunkt: timestamp("zeitpunkt").notNull().defaultNow(),
+});
+export type PatientPortalZugriff = typeof patientPortalZugriffe.$inferSelect;
+
+// Datenänderungs-Anträge des Patienten (Praxis bestätigt — nie direkt überschrieben)
+export const patientDatenAntraege = mysqlTable("patient_daten_antraege", {
+  id: serial("id").primaryKey(),
+  patientId: bigint("patient_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  felder: text("felder").notNull(), // JSON: [{feld, alt, neu}]
+  status: mysqlEnum("status", ["offen", "bestaetigt", "abgelehnt"]).notNull().default("offen"),
+  kommentar: varchar("kommentar", { length: 500 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  bearbeitetAm: timestamp("bearbeitet_am"),
+  bearbeitetVon: bigint("bearbeitet_von", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+});
+export type PatientDatenAntrag = typeof patientDatenAntraege.$inferSelect;
+
+// Termin-Anfragen des Patienten (Praxis bestätigt/vergibt)
+export const terminAnfragen = mysqlTable("termin_anfragen", {
+  id: serial("id").primaryKey(),
+  patientId: bigint("patient_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  wunschDatum: date("wunsch_datum", { mode: "string" }).notNull(),
+  wunschVon: varchar("wunsch_von", { length: 5 }),
+  wunschBis: varchar("wunsch_bis", { length: 5 }),
+  notiz: varchar("notiz", { length: 500 }),
+  status: mysqlEnum("status", ["offen", "bestaetigt", "abgelehnt"]).notNull().default("offen"),
+  praxisKommentar: varchar("praxis_kommentar", { length: 500 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  bearbeitetAm: timestamp("bearbeitet_am"),
+  bearbeitetVon: bigint("bearbeitet_von", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+});
+export type TerminAnfrage = typeof terminAnfragen.$inferSelect;

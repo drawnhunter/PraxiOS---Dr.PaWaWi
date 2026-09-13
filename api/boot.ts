@@ -178,6 +178,15 @@ app.get("/ics/zahlungsziele.ics", async (c) => {
 });
 
 // ── ICS-Kalender-Feed (Token-Auth, kein Login — für Google/Outlook-Abo) ────
+// Agent-API (Kimi Claw): REST mit Bearer-Token, unabhängig von der Session
+try {
+  const { default: agentRouter } = await import("./agentRouter");
+  app.route("/api/agent", agentRouter);
+  console.log("[agent] API unter /api/agent aktiv (Bearer-Token in Einstellungen)");
+} catch (e) {
+  console.error("[agent] Router-Mount fehlgeschlagen:", e);
+}
+
 app.get("/api/ics/:token.ics", async (c) => {
   const token = c.req.param("token");
   const db = getDb();
@@ -233,6 +242,24 @@ app.get("/api/ics/:token.ics", async (c) => {
       "Cache-Control": "no-cache",
     },
   });
+});
+
+// Modul-Gate: deaktivierte Module antworten mit 403 (vor dem tRPC-Handler)
+app.use("/api/trpc/*", async (c, next) => {
+  const { modulFuerRouter, modulAktiv } = await import("./lib/module");
+  const pfad = c.req.path.replace(/^\/api\/trpc\//, "").split("?")[0];
+  // Batching: Pfade sind kommagetrennt (zeit.a,zeit.b)
+  const routerNamen = [...new Set(pfad.split(",").map((x) => x.split(".")[0]))];
+  for (const name of routerNamen) {
+    const def = modulFuerRouter(name);
+    if (def && !(await modulAktiv(def.id))) {
+      return c.json(
+        [{ error: { message: `Modul „${def.titel}" ist deaktiviert (Einstellungen → Module).`, code: -32403, data: { code: "FORBIDDEN", httpStatus: 403 } } }],
+        403,
+      );
+    }
+  }
+  return next();
 });
 
 app.use("/api/trpc/*", async (c) => {

@@ -69,6 +69,15 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "plan_entries", spalte: "reihenfolge", ddl: "ALTER TABLE plan_entries ADD COLUMN reihenfolge INT NOT NULL DEFAULT 0 AFTER raum" },
   // SupportHub-Verbindung (1.9.0)
   { tabelle: "company_settings", spalte: "support_schluessel", ddl: "ALTER TABLE company_settings ADD COLUMN support_schluessel VARCHAR(80) NULL AFTER backup_zuletzt_am" },
+  // Agent-API + Modul-System (1.10)
+  { tabelle: "company_settings", spalte: "agent_autonomie", ddl: "ALTER TABLE company_settings ADD COLUMN agent_autonomie VARCHAR(20) NOT NULL DEFAULT 'vorschlag' AFTER support_schluessel" },
+  { tabelle: "company_settings", spalte: "modul_konfig", ddl: "ALTER TABLE company_settings ADD COLUMN modul_konfig TEXT NULL AFTER agent_autonomie" },
+  // Banking-Dedupe (1.10.2)
+  { tabelle: "bank_transaktionen", spalte: "quell_id", ddl: "ALTER TABLE bank_transaktionen ADD COLUMN quell_id VARCHAR(40) NULL AFTER hash" },
+  { tabelle: "bank_transaktionen", spalte: "bank_tx_quell_idx", ddl: "ALTER TABLE bank_transaktionen ADD INDEX bank_tx_quell_idx (quell_id)", },
+  // Patienten-Portal (1.10)
+  { tabelle: "company_settings", spalte: "portal_aktiv", ddl: "ALTER TABLE company_settings ADD COLUMN portal_aktiv TINYINT(1) NOT NULL DEFAULT 1 AFTER modul_konfig" },
+  { tabelle: "company_settings", spalte: "portal_bereiche", ddl: "ALTER TABLE company_settings ADD COLUMN portal_bereiche TEXT NULL AFTER portal_aktiv" },
   // Backup-Erinnerung (1.7.0)
   // Patientennummern-Nummernkreis (1.7.0)
   { tabelle: "company_settings", spalte: "patienten_nr_start", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_start INT NOT NULL DEFAULT 1 AFTER signatur_bild" },
@@ -488,6 +497,115 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       sortierung INT NOT NULL DEFAULT 0,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT ck_post_fk FOREIGN KEY (post_eingang_id) REFERENCES post_eingang(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    // Patienten-Portal (1.10): Links, Sessions, Audit, Anträge, Terminanfragen
+    tabelle: "patient_portal_links",
+    ddl: `CREATE TABLE IF NOT EXISTS patient_portal_links (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      token VARCHAR(80) NOT NULL,
+      gueltig_bis DATE NOT NULL,
+      fehlversuche INT NOT NULL DEFAULT 0,
+      gesperrt_bis TIMESTAMP NULL,
+      letzter_zugriff_am TIMESTAMP NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX ppl_token_uniq (token),
+      CONSTRAINT ppl_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT ppl_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "patient_portal_sessions",
+    ddl: `CREATE TABLE IF NOT EXISTS patient_portal_sessions (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      link_id BIGINT UNSIGNED NOT NULL,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      token VARCHAR(80) NOT NULL,
+      gueltig_bis TIMESTAMP NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX pps_token_uniq (token),
+      INDEX pps_patient_idx (patient_id),
+      CONSTRAINT pps_link_fk FOREIGN KEY (link_id) REFERENCES patient_portal_links(id) ON DELETE CASCADE,
+      CONSTRAINT pps_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE
+    )`,
+  },
+  {
+    tabelle: "patient_portal_zugriffe",
+    ddl: `CREATE TABLE IF NOT EXISTS patient_portal_zugriffe (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      bereich VARCHAR(40) NOT NULL,
+      zeitpunkt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX ppz_patient_idx (patient_id),
+      CONSTRAINT ppz_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE
+    )`,
+  },
+  {
+    tabelle: "patient_daten_antraege",
+    ddl: `CREATE TABLE IF NOT EXISTS patient_daten_antraege (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      felder TEXT NOT NULL,
+      status ENUM('offen','bestaetigt','abgelehnt') NOT NULL DEFAULT 'offen',
+      kommentar VARCHAR(500) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      bearbeitet_am TIMESTAMP NULL,
+      bearbeitet_von BIGINT UNSIGNED NULL,
+      CONSTRAINT pda_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT pda_user_fk FOREIGN KEY (bearbeitet_von) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "termin_anfragen",
+    ddl: `CREATE TABLE IF NOT EXISTS termin_anfragen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      wunsch_datum DATE NOT NULL,
+      wunsch_von VARCHAR(5) NULL,
+      wunsch_bis VARCHAR(5) NULL,
+      notiz VARCHAR(500) NULL,
+      status ENUM('offen','bestaetigt','abgelehnt') NOT NULL DEFAULT 'offen',
+      praxis_kommentar VARCHAR(500) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      bearbeitet_am TIMESTAMP NULL,
+      bearbeitet_von BIGINT UNSIGNED NULL,
+      CONSTRAINT ta_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT ta_user_fk FOREIGN KEY (bearbeitet_von) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    // Agent-API (1.10): Tokens, Aufgabenliste, Aktions-Log
+    tabelle: "agent_tokens",
+    ddl: `CREATE TABLE IF NOT EXISTS agent_tokens (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      token_hash VARCHAR(64) NOT NULL,
+      aktiv TINYINT(1) NOT NULL DEFAULT 1,
+      letzte_nutzung TIMESTAMP NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "agent_aufgaben",
+    ddl: `CREATE TABLE IF NOT EXISTS agent_aufgaben (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      text VARCHAR(500) NOT NULL,
+      erledigt TINYINT(1) NOT NULL DEFAULT 0,
+      erledigt_am TIMESTAMP NULL,
+      quelle VARCHAR(20) NOT NULL DEFAULT 'mensch',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "agent_log",
+    ddl: `CREATE TABLE IF NOT EXISTS agent_log (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      aktion VARCHAR(100) NOT NULL,
+      details TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
   },
   {

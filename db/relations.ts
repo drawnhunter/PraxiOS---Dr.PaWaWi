@@ -246,6 +246,41 @@ export const protokollVorlagenRelations = relations(protokollVorlagen, ({ one })
   }),
 }));
 
+// ── PraxiOS: Patienten-Portal ───────────────────────────────────────────────
+import { patientDatenAntraege, patientPortalLinks, patientPortalSessions, terminAnfragen } from "./schema";
+
+export const patientPortalLinksRelations = relations(patientPortalLinks, ({ one }) => ({
+  patient: one(customers, {
+    fields: [patientPortalLinks.patientId],
+    references: [customers.id],
+  }),
+}));
+
+export const patientPortalSessionsRelations = relations(patientPortalSessions, ({ one }) => ({
+  link: one(patientPortalLinks, {
+    fields: [patientPortalSessions.linkId],
+    references: [patientPortalLinks.id],
+  }),
+  patient: one(customers, {
+    fields: [patientPortalSessions.patientId],
+    references: [customers.id],
+  }),
+}));
+
+export const patientDatenAntraegeRelations = relations(patientDatenAntraege, ({ one }) => ({
+  patient: one(customers, {
+    fields: [patientDatenAntraege.patientId],
+    references: [customers.id],
+  }),
+}));
+
+export const terminAnfragenRelations = relations(terminAnfragen, ({ one }) => ({
+  patient: one(customers, {
+    fields: [terminAnfragen.patientId],
+    references: [customers.id],
+  }),
+}));
+
 // ── PraxiOS: Rollen-Gruppen ─────────────────────────────────────────────────
 import { gruppen } from "./schema";
 
