@@ -9,5 +9,8 @@ imtz-daten.sql
 backup/
 db-daten/
 
+# Hochgeladene Patientendokumente (Standard-UPLOAD_DIR) - niemals committen
+dokumente/
+
 # Lokale Server-Ueberschreibungen (Passwoerter!) - niemals committen
 docker-compose.override.yml
