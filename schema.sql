@@ -544,7 +544,7 @@ CREATE TABLE `plan_entries` (
 DROP TABLE IF EXISTS `documents`;
 CREATE TABLE `documents` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `patient_id` bigint unsigned NOT NULL,
+  `patient_id` bigint unsigned DEFAULT NULL,
   `plan_id` bigint unsigned DEFAULT NULL,
   `kategorie` enum('befund','arztbrief','rezept','einverstaendnis','anamnesebogen','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'sonstiges',
   `dateiname` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -848,8 +848,8 @@ SET FOREIGN_KEY_CHECKS=1;
 
 CREATE TABLE `rezepte` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `patient_id` bigint unsigned NOT NULL,
-  `typ` enum('rezept','attest') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `patient_id` bigint unsigned DEFAULT NULL,
+  `typ` enum('rezept','attest','praxisbedarf') COLLATE utf8mb4_unicode_ci NOT NULL,
   `inhalt` text COLLATE utf8mb4_unicode_ci NOT NULL,
   `document_id` bigint unsigned DEFAULT NULL,
   `created_by` bigint unsigned DEFAULT NULL,

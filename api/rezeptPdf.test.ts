@@ -88,6 +88,24 @@ describe("renderRezeptPdf", () => {
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
   });
 
+  it("Praxisbedarf ohne Patienten, mit PZN (1.12.0)", async () => {
+    const pdf = await renderRezeptPdf({
+      typ: "praxisbedarf",
+      inhalt: {
+        medikamente: [
+          { name: "Heparin-natrium-ratiopharm", staerke: "25.000 I.E.", menge: "4 PCK (5×5 ml, N1)", pzn: "03029843" },
+          { name: "NaCl 0,9 %", menge: "10× 500 ml" },
+        ],
+      },
+      patient: null,
+      praxis,
+      signaturBild: null,
+      datum: "15.09.2026",
+    });
+    expect(pdf.length).toBeGreaterThan(2000);
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+  });
+
   it("defektes Signaturbild bricht das Rendering nicht", async () => {
     const pdf = await renderRezeptPdf({
       typ: "attest",

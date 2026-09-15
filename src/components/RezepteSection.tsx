@@ -45,6 +45,7 @@ interface MedZeile {
   staerke: string;
   menge: string;
   dosierung: string;
+  pzn: string;
 }
 
 function isoNachDe(iso: string): string | undefined {
@@ -63,7 +64,7 @@ export function RezepteSection({ patientId }: { patientId: number }) {
   const produkte = trpc.products.list.useQuery(undefined, { enabled: dialog === "rezept" });
 
   // Rezept-Formular
-  const [meds, setMeds] = useState<MedZeile[]>([{ name: "", staerke: "", menge: "", dosierung: "" }]);
+  const [meds, setMeds] = useState<MedZeile[]>([{ name: "", staerke: "", menge: "", dosierung: "", pzn: "" }]);
   const [hinweis, setHinweis] = useState("");
 
   // Attest-Formular
@@ -89,7 +90,7 @@ export function RezepteSection({ patientId }: { patientId: number }) {
     onSuccess: () => {
       setFehler(null);
       setDialog(null);
-      setMeds([{ name: "", staerke: "", menge: "", dosierung: "" }]);
+      setMeds([{ name: "", staerke: "", menge: "", dosierung: "", pzn: "" }]);
       setHinweis("");
       setAttestText("");
       setAuVon("");
@@ -127,6 +128,7 @@ export function RezepteSection({ patientId }: { patientId: number }) {
         staerke: m.staerke.trim() || undefined,
         menge: m.menge.trim() || undefined,
         dosierung: m.dosierung.trim() || undefined,
+        pzn: m.pzn.trim() || undefined,
       }));
     if (medikamente.length === 0) {
       setFehler("Mindestens ein Medikament angeben.");
@@ -290,6 +292,14 @@ export function RezepteSection({ patientId }: { patientId: number }) {
                       onChange={(e) => setMed(i, "menge", e.target.value)}
                     />
                   </div>
+                  <div>
+                    <Label>PZN (optional)</Label>
+                    <Input
+                      placeholder="z. B. 03029843"
+                      value={m.pzn}
+                      onChange={(e) => setMed(i, "pzn", e.target.value)}
+                    />
+                  </div>
                   <div className="sm:col-span-2">
                     <Label>Dosierung</Label>
                     <Input
@@ -304,7 +314,7 @@ export function RezepteSection({ patientId }: { patientId: number }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setMeds([...meds, { name: "", staerke: "", menge: "", dosierung: "" }])}
+              onClick={() => setMeds([...meds, { name: "", staerke: "", menge: "", dosierung: "", pzn: "" }])}
               disabled={meds.length >= 10}
             >
               <Plus className="mr-1 h-4 w-4" /> Weitere Verordnung

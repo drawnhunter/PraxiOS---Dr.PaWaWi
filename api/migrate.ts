@@ -719,6 +719,25 @@ const SCHEMA_UPDATES: { name: string; check: (db: string) => string; ddl: string
       `SELECT COLUMN_TYPE AS v FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${db}' AND TABLE_NAME='offers' AND COLUMN_NAME='status' AND COLUMN_TYPE NOT LIKE '%finalisiert%'`,
     ddl: "ALTER TABLE offers MODIFY status ENUM('entwurf','offen','bestaetigt','abgelehnt','umgewandelt','storniert') NOT NULL DEFAULT 'entwurf'",
   },
+  // Praxisbedarf-Bestellungen (1.12.0): neuer Typ + kein Patientenbezug nötig
+  {
+    name: "rezepte.typ Enum + praxisbedarf",
+    check: (db) =>
+      `SELECT COLUMN_TYPE AS v FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${db}' AND TABLE_NAME='rezepte' AND COLUMN_NAME='typ' AND COLUMN_TYPE LIKE '%praxisbedarf%'`,
+    ddl: "ALTER TABLE rezepte MODIFY typ ENUM('rezept','attest','praxisbedarf') NOT NULL",
+  },
+  {
+    name: "rezepte.patient_id nullable",
+    check: (db) =>
+      `SELECT IS_NULLABLE AS v FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${db}' AND TABLE_NAME='rezepte' AND COLUMN_NAME='patient_id' AND IS_NULLABLE='YES'`,
+    ddl: "ALTER TABLE rezepte MODIFY patient_id BIGINT UNSIGNED NULL",
+  },
+  {
+    name: "documents.patient_id nullable",
+    check: (db) =>
+      `SELECT IS_NULLABLE AS v FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${db}' AND TABLE_NAME='documents' AND COLUMN_NAME='patient_id' AND IS_NULLABLE='YES'`,
+    ddl: "ALTER TABLE documents MODIFY patient_id BIGINT UNSIGNED NULL",
+  },
 ];
 
 // Einmalige Daten-Nachschübe (idempotent, nach den Spalten)

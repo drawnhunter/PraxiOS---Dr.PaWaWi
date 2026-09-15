@@ -1,5 +1,28 @@
 # Changelog — PraxiOS
 
+## [1.12.0] — 2026-09-15 — Praxisbedarf-Bestellung („zur Anwendung in der Praxis")
+
+### Neu
+- **Praxisbedarf-Bestellung als eigener Dokumententyp** — ohne Patientenbezug:
+  Auf der Seite „Rezepte & Atteste" gibt es den neuen Bereich
+  „Praxisbedarf-Bestellung" (Artikel, Stärke, Menge/Packung, **PZN**,
+  Hinweis). Das PDF trägt den Empfänger „Zur Anwendung in der Praxis" +
+  Praxisadresse und den Fußhinweis „Bestellung für den Praxisbedarf — nicht
+  zur Abgabe an Patientinnen und Patienten". Damit entfällt der bisherige
+  Workaround mit Schein-Patient (und dessen Geburtsdatum im Dokument).
+- **PZN-Feld** gibt es jetzt auch im normalen Privatrezept-Dialog (optional).
+- Bestellungen werden abgelegt unter `dokumente/_praxis/` (kein Aktenbezug),
+  tauchen in „Zuletzt erstellt" auf und sind in der eigenen Liste
+  nachvollziehbar (PDF erneut laden, Löschen mit Protokoll).
+
+### Datenmodell / Migration (läuft automatisch beim Start)
+- `rezepte.typ` um `praxisbedarf` erweitert; `rezepte.patient_id` und
+  `documents.patient_id` sind jetzt nullable (praxisweite Dokumente).
+- Patienten-Portal unverändert: patientenlose Einträge erscheinen dort
+  grundsätzlich nicht.
+
+---
+
 ## [1.11.0] — 2026-09-14 — Portal-Upgrade: Dokumente-Fix + neues Layout
 
 ### Fix (gemeldet aus dem Realbetrieb)

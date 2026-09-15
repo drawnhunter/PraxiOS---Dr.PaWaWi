@@ -101,10 +101,13 @@ export const rezepte = mysqlTable(
   "rezepte",
   {
     id: serial("id").primaryKey(),
-    patientId: bigint("patient_id", { mode: "number", unsigned: true })
-      .notNull()
-      .references(() => customers.id, { onDelete: "cascade" }),
-    typ: mysqlEnum("typ", ["rezept", "attest"]).notNull(),
+    // NULL bei Praxisbedarf-Bestellungen (zur Anwendung in der Praxis) —
+    // die gehören zu keinem Patienten (1.12.0).
+    patientId: bigint("patient_id", { mode: "number", unsigned: true }).references(
+      () => customers.id,
+      { onDelete: "cascade" },
+    ),
+    typ: mysqlEnum("typ", ["rezept", "attest", "praxisbedarf"]).notNull(),
     inhalt: text("inhalt").notNull(), // JSON: RezeptInhalt | AttestInhalt
     documentId: bigint("document_id", { mode: "number", unsigned: true }).references(
       () => documents.id,
@@ -816,9 +819,12 @@ export const documents = mysqlTable(
   "documents",
   {
     id: serial("id").primaryKey(),
-    patientId: bigint("patient_id", { mode: "number", unsigned: true })
-      .notNull()
-      .references(() => customers.id, { onDelete: "cascade" }),
+    // NULL bei praxisweiten Dokumenten ohne Patientenbezug (z. B.
+    // Praxisbedarf-Bestellungen, 1.12.0).
+    patientId: bigint("patient_id", { mode: "number", unsigned: true }).references(
+      () => customers.id,
+      { onDelete: "cascade" },
+    ),
     planId: bigint("plan_id", { mode: "number", unsigned: true }).references(
       () => therapyPlans.id,
       { onDelete: "set null" },

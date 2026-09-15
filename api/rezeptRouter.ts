@@ -8,7 +8,7 @@ import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { TRPCError } from "@trpc/server";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, isNull } from "drizzle-orm";
 import { createRouter, rechtQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { companySettings, customers, documents, loeschprotokoll, rezepte } from "@db/schema";
@@ -23,6 +23,7 @@ const medikamentInput = z.object({
   staerke: z.string().trim().max(100).optional(),
   menge: z.string().trim().max(100).optional(),
   dosierung: z.string().trim().max(300).optional(),
+  pzn: z.string().trim().max(20).optional(),
 });
 
 const DATUM_RE = /^\d{2}\.\d{2}\.\d{4}$/;
@@ -31,6 +32,15 @@ const erstellenInput = z.discriminatedUnion("typ", [
   z.object({
     typ: z.literal("rezept"),
     patientId: z.number().int(),
+    inhalt: z.object({
+      medikamente: z.array(medikamentInput).min(1, "Mindestens ein Medikament").max(10),
+      hinweis: z.string().max(1000).optional(),
+    }),
+  }),
+  // Praxisbedarf (1.12.0): „zur Anwendung in der Praxis" — bewusst OHNE
+  // Patienten. Kein Schein-Patient mehr nötig.
+  z.object({
+    typ: z.literal("praxisbedarf"),
     inhalt: z.object({
       medikamente: z.array(medikamentInput).min(1, "Mindestens ein Medikament").max(10),
       hinweis: z.string().max(1000).optional(),
@@ -84,6 +94,17 @@ export const rezeptRouter = createRouter({
       });
     }),
 
+  // Praxisbedarf-Bestellungen (patientenlos, 1.12.0) — eigene Liste auf der
+  // Menü-Seite, damit Bestellungen nachvollziehbar bleiben.
+  listePraxisbedarf: rechtQuery("dokumente").query(async () => {
+    return getDb().query.rezepte.findMany({
+      where: isNull(rezepte.patientId),
+      orderBy: [desc(rezepte.createdAt)],
+      with: { ersteller: { columns: { id: true, name: true, username: true } } },
+      limit: 100,
+    });
+  }),
+
   // Zuletzt erstellte Rezepte/Atteste praxisweit (für die eigene Menü-Seite)
   letzte: rechtQuery("dokumente")
     .input(z.object({ limit: z.number().int().min(1).max(50).default(15) }).optional())
@@ -102,10 +123,16 @@ export const rezeptRouter = createRouter({
     .input(erstellenInput)
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-      const patient = await db.query.customers.findFirst({
-        where: eq(customers.id, input.patientId),
-      });
-      if (!patient) throw new TRPCError({ code: "NOT_FOUND", message: "Patient nicht gefunden." });
+      const istPraxisbedarf = input.typ === "praxisbedarf";
+      // Patient nur bei rezept/attest — Praxisbedarf hat bewusst keinen.
+      const patient = "patientId" in input
+        ? await db.query.customers.findFirst({
+            where: eq(customers.id, input.patientId),
+          })
+        : null;
+      if (!istPraxisbedarf && !patient) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Patient nicht gefunden." });
+      }
 
       const praxis = await db.query.companySettings.findFirst({
         where: eq(companySettings.id, 1),
@@ -121,13 +148,15 @@ export const rezeptRouter = createRouter({
       const pdfBuf = await renderRezeptPdf({
         typ: input.typ,
         inhalt: input.inhalt as RezeptInhalt | AttestInhalt,
-        patient: {
-          name: patient.name,
-          geburtsdatum: isoNachDe(patient.geburtsdatum),
-          strasse: patient.strasse,
-          plz: patient.plz,
-          ort: patient.ort,
-        },
+        patient: patient
+          ? {
+              name: patient.name,
+              geburtsdatum: isoNachDe(patient.geburtsdatum),
+              strasse: patient.strasse,
+              plz: patient.plz,
+              ort: patient.ort,
+            }
+          : null,
         praxis: {
           name: praxis.name,
           strasse: praxis.strasse,
@@ -140,24 +169,27 @@ export const rezeptRouter = createRouter({
         datum,
       });
 
-      // Datei ablegen
+      // Datei ablegen — Praxisbedarf im praxisweiten Ordner, nicht in einer Akte
       const dateinameIntern = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.pdf`;
-      const relativerPfad = `${patient.id}/${dateinameIntern}`;
-      mkdirSync(path.join(env.uploadDir, String(patient.id)), { recursive: true });
+      const ordner = patient ? String(patient.id) : "_praxis";
+      const relativerPfad = `${ordner}/${dateinameIntern}`;
+      mkdirSync(path.join(env.uploadDir, ordner), { recursive: true });
       await writeFile(path.join(env.uploadDir, relativerPfad), pdfBuf);
 
       const anzeigeName =
         input.typ === "rezept"
           ? `Privatrezept ${datum}.pdf`
-          : (input.inhalt as AttestInhalt).art === "krankschreibung"
-            ? `Krankschreibung ${datum}.pdf`
-            : `Attest ${datum}.pdf`;
+          : istPraxisbedarf
+            ? `Praxisbedarf ${datum}.pdf`
+            : (input.inhalt as AttestInhalt).art === "krankschreibung"
+              ? `Krankschreibung ${datum}.pdf`
+              : `Attest ${datum}.pdf`;
 
       const [{ id: documentId }] = await db
         .insert(documents)
         .values({
-          patientId: patient.id,
-          kategorie: input.typ === "rezept" ? "rezept" : "arztbrief",
+          patientId: patient?.id ?? null,
+          kategorie: input.typ === "attest" ? "arztbrief" : "rezept",
           dateiname: anzeigeName,
           dateipfad: relativerPfad,
           mimeType: "application/pdf",
@@ -169,7 +201,7 @@ export const rezeptRouter = createRouter({
       const [{ id }] = await db
         .insert(rezepte)
         .values({
-          patientId: patient.id,
+          patientId: patient?.id ?? null,
           typ: input.typ,
           inhalt: JSON.stringify(input.inhalt),
           documentId,
@@ -177,20 +209,23 @@ export const rezeptRouter = createRouter({
         })
         .$returningId();
 
-      await schreibeTimeline({
-        patientId: patient.id,
-        typ: "dokument",
-        titel: input.typ === "rezept" ? "Privatrezept erstellt" : "Attest erstellt",
-        beschreibung:
-          input.typ === "rezept"
-            ? (input.inhalt as RezeptInhalt).medikamente
-                .map((m) => [m.name, m.staerke].filter(Boolean).join(" "))
-                .join(", ")
-            : (input.inhalt as AttestInhalt).art === "krankschreibung"
-              ? `AU ${(input.inhalt as AttestInhalt).auVon ?? datum} – ${(input.inhalt as AttestInhalt).auBis ?? "?"}`
-              : null,
-        createdBy: ctx.user.id,
-      });
+      // Timeline nur bei Patientenbezug (Praxisbedarf taucht in keiner Akte auf)
+      if (patient) {
+        await schreibeTimeline({
+          patientId: patient.id,
+          typ: "dokument",
+          titel: input.typ === "rezept" ? "Privatrezept erstellt" : "Attest erstellt",
+          beschreibung:
+            input.typ === "rezept"
+              ? (input.inhalt as RezeptInhalt).medikamente
+                  .map((m) => [m.name, m.staerke].filter(Boolean).join(" "))
+                  .join(", ")
+              : (input.inhalt as AttestInhalt).art === "krankschreibung"
+                ? `AU ${(input.inhalt as AttestInhalt).auVon ?? datum} – ${(input.inhalt as AttestInhalt).auBis ?? "?"}`
+                : null,
+          createdBy: ctx.user.id,
+        });
+      }
 
       return { id, documentId };
     }),
@@ -212,24 +247,30 @@ export const rezeptRouter = createRouter({
         const buf = await readFile(path.join(env.uploadDir, r.dokument.dateipfad));
         return { dateiname: r.dokument.dateiname, base64: buf.toString("base64") };
       }
-      const patient = await db.query.customers.findFirst({
-        where: eq(customers.id, r.patientId),
-      });
+      const patient = r.patientId
+        ? await db.query.customers.findFirst({
+            where: eq(customers.id, r.patientId),
+          })
+        : null;
       const praxis = await db.query.companySettings.findFirst({
         where: eq(companySettings.id, 1),
       });
-      if (!patient || !praxis) throw new TRPCError({ code: "NOT_FOUND", message: "Daten fehlen." });
+      if ((r.patientId && !patient) || !praxis) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Daten fehlen." });
+      }
       const datum = r.createdAt.toLocaleDateString("de-DE");
       const pdfBuf = await renderRezeptPdf({
         typ: r.typ,
         inhalt: JSON.parse(r.inhalt),
-        patient: {
-          name: patient.name,
-          geburtsdatum: isoNachDe(patient.geburtsdatum),
-          strasse: patient.strasse,
-          plz: patient.plz,
-          ort: patient.ort,
-        },
+        patient: patient
+          ? {
+              name: patient.name,
+              geburtsdatum: isoNachDe(patient.geburtsdatum),
+              strasse: patient.strasse,
+              plz: patient.plz,
+              ort: patient.ort,
+            }
+          : null,
         praxis: {
           name: praxis.name,
           strasse: praxis.strasse,

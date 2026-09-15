@@ -25,15 +25,16 @@ const GROESSEN = {
 } as const;
 
 export interface RezeptPdfInput {
-  typ: "rezept" | "attest";
+  typ: "rezept" | "attest" | "praxisbedarf";
   inhalt: RezeptInhalt | AttestInhalt;
-  patient: {
+  /** Bei praxisbedarf weglassen — die Bestellung hat keinen Patientenbezug. */
+  patient?: {
     name: string;
     geburtsdatum?: string | null; // TT.MM.JJJJ oder null
     strasse?: string | null;
     plz?: string | null;
     ort?: string | null;
-  };
+  } | null;
   praxis: {
     name: string;
     strasse: string;
@@ -69,7 +70,14 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
     margin: MARGIN,
     // Pflicht: eigener Font als Default (ESM-Bundle, siehe rezeptPdf.test.ts)
     font: fontPath("DejaVuSans.ttf"),
-    info: { Title: input.typ === "rezept" ? "Privatrezept" : "Attest" },
+    info: {
+      Title:
+        input.typ === "rezept"
+          ? "Privatrezept"
+          : input.typ === "praxisbedarf"
+            ? "Praxisbedarf-Bestellung"
+            : "Attest",
+    },
   });
   doc.registerFont("Regular", fontPath("DejaVuSans.ttf"));
   doc.registerFont("Bold", fontPath("DejaVuSans-Bold.ttf"));
@@ -101,15 +109,29 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
     .strokeColor(PETROL)
     .stroke();
 
-  // ── Patient ───────────────────────────────────────────────────────────────
-  const geb = patient.geburtsdatum ? `, geb. am ${patient.geburtsdatum}` : "";
-  const adresse = [patient.strasse, [patient.plz, patient.ort].filter(Boolean).join(" ")]
-    .filter(Boolean)
-    .join(", ");
+  // ── Empfänger: Patient ODER „zur Anwendung in der Praxis" ────────────────
+  const istPraxisbedarf = input.typ === "praxisbedarf";
+  const geb = patient?.geburtsdatum ? `, geb. am ${patient.geburtsdatum}` : "";
   let y = kopfEnde + 10;
-  doc.font("Bold").fontSize(10).fillColor(DUNKEL).text(`${patient.name}${geb}`, MARGIN, y);
-  if (adresse) {
-    doc.font("Regular").fontSize(8).fillColor(GRAU).text(adresse, MARGIN, doc.y + 1);
+  if (istPraxisbedarf) {
+    doc
+      .font("Bold")
+      .fontSize(10)
+      .fillColor(DUNKEL)
+      .text("Zur Anwendung in der Praxis", MARGIN, y);
+    doc
+      .font("Regular")
+      .fontSize(8)
+      .fillColor(GRAU)
+      .text(`${praxis.strasse}, ${praxis.plz} ${praxis.ort}`, MARGIN, doc.y + 1);
+  } else if (patient) {
+    const adresse = [patient.strasse, [patient.plz, patient.ort].filter(Boolean).join(" ")]
+      .filter(Boolean)
+      .join(", ");
+    doc.font("Bold").fontSize(10).fillColor(DUNKEL).text(`${patient.name}${geb}`, MARGIN, y);
+    if (adresse) {
+      doc.font("Regular").fontSize(8).fillColor(GRAU).text(adresse, MARGIN, doc.y + 1);
+    }
   }
   y = doc.y + 10;
 
@@ -144,7 +166,7 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
   const inhaltX = MARGIN + 16;
   const inhaltW = W - 32;
 
-  if (input.typ === "rezept") {
+  if (input.typ === "rezept" || input.typ === "praxisbedarf") {
     const inhalt = input.inhalt as RezeptInhalt;
     // ── Rp. + Verordnungen ──────────────────────────────────────────────────
     let ry = boxOben + 14;
@@ -160,6 +182,10 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
       ry = doc.y + 2;
       if (m.menge) {
         doc.font("Regular").fontSize(9).fillColor(GRAU).text(m.menge, inhaltX, ry, { width: inhaltW });
+        ry = doc.y + 1;
+      }
+      if (m.pzn) {
+        doc.font("Regular").fontSize(9).fillColor(GRAU).text(`PZN: ${m.pzn}`, inhaltX, ry, { width: inhaltW });
         ry = doc.y + 1;
       }
       if (m.dosierung) {
@@ -207,7 +233,7 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
       const von = inhalt.auVon || datum;
       const bis = inhalt.auBis || "…";
       doc.text(
-        `${patient.name}${geb} ist vom ${von} bis voraussichtlich einschließlich ${bis} arbeitsunfähig erkrankt.`,
+        `${patient?.name ?? ""}${geb} ist vom ${von} bis voraussichtlich einschließlich ${bis} arbeitsunfähig erkrankt.`,
         inhaltX,
         ay,
         { width: inhaltW, lineGap: 3 },
@@ -230,7 +256,7 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
     }
   }
 
-  // ── Fußbereich: Hinweis (nur Rezept) + Ort/Datum + Unterschrift ──────────
+  // ── Fußbereich: Hinweis (Rezept/Praxisbedarf) + Ort/Datum + Unterschrift ─
   if (input.typ === "rezept") {
     doc
       .font("Regular")
@@ -238,6 +264,17 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
       .fillColor(GRAU)
       .text(
         "Privat verordnet — die Kosten dieser Verordnung werden nicht von der gesetzlichen Krankenversicherung übernommen.",
+        MARGIN,
+        boxUnten + 8,
+        { width: W },
+      );
+  } else if (istPraxisbedarf) {
+    doc
+      .font("Regular")
+      .fontSize(6.8)
+      .fillColor(GRAU)
+      .text(
+        "Bestellung für den Praxisbedarf — zur Anwendung in der Praxis, nicht zur Abgabe an Patientinnen und Patienten.",
         MARGIN,
         boxUnten + 8,
         { width: W },

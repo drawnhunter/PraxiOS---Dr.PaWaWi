@@ -9,6 +9,8 @@ export interface RezeptMedikament {
   menge?: string;
   /** Dosierungsanweisung, z. B. „3× täglich 1 Tablette" — optional. */
   dosierung?: string;
+  /** Pharmazentralnummer (optional, v. a. für Praxisbedarf-Bestellungen). */
+  pzn?: string;
 }
 
 export interface RezeptInhalt {
@@ -42,7 +44,8 @@ export interface AttestInhalt {
   icdCodes?: IcdCode[];
 }
 
-export const REZEPT_TYP_LABEL: Record<"rezept" | "attest", string> = {
+export const REZEPT_TYP_LABEL: Record<"rezept" | "attest" | "praxisbedarf", string> = {
   rezept: "Privatrezept",
   attest: "Attest / Krankschreibung",
+  praxisbedarf: "Praxisbedarf",
 };
