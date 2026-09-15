@@ -1,5 +1,30 @@
 # Changelog — PraxiOS
 
+## [1.11.0] — 2026-09-14 — Portal-Upgrade: Dokumente-Fix + neues Layout
+
+### Fix (gemeldet aus dem Realbetrieb)
+- **Portal zeigte keine Dokumente**: Der Portal-Filter ließ nur die Kategorien
+  Befund/Arztbrief/Rezept/Einverständnis zu — in der Praxis landet aber fast
+  jeder Upload als „Sonstiges" (Standard im Upload-Dialog), wodurch der
+  Bereich trotz gefüllter Akte leer blieb. Jetzt sieht der Patient alle
+  eigenen Dokumente (es sind ohnehin ausschließlich eigene Daten, Art. 15);
+  die Praxis steuert die Sichtbarkeit weiter über Einstellungen →
+  Patienten-Portal.
+
+### Patienten-Portal: neues Layout
+- **Sidebar-Konzept**: links Patientenkarte (Name, „angemeldet bis …") +
+  Menü + Abmelden + DSGVO-Hinweis, rechts die Detailansicht; auf kleinen
+  Bildschirmen wird die Sidebar zur Leiste oben
+- **Therapieplan komplett neu**: statt endloser Einzelzeilen jetzt
+  **Tageskarten** — Wochentag + Datum, Anwendungen als kompakte Chips mit
+  Status (erledigt/geplant/ausgefallen), Tages-Zusammenfassung
+  („abgeschlossen" / „2/7 erledigt" / „geplant") und Plan-Summe
+  („X Anwendungen · Y erledigt")
+- **Termine** ebenfalls nach Tagen gruppiert (Karte je Tag, Zeit prominent)
+- **Dokumente & Atteste**: Kategorie-Badge + Ladezustand beim PDF-Download
+
+---
+
 ## [1.10.0] — 2026-09-14 — Patienten-Portal + ReWaWi-Sync v1.10–v1.12
 
 ### Patienten-Portal (Flaggschiff — rechtssauber per Konstruktion)

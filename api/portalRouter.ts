@@ -259,14 +259,17 @@ export const portalRouter = createRouter({
       const { bereiche } = await ladeBereiche();
       bereichPruefen(bereiche, "dokumente");
       await audit(sess.patientId, "dokumente");
-      const ERLAUBT = ["befund", "arztbrief", "rezept", "einverstaendnis"] as const;
+      // Alle eigenen Dokumente, unabhängig von der Kategorie: Früher waren nur
+      // 4 Kategorien freigegeben — in der Praxis landet fast alles als
+      // „sonstiges" in der Akte und das Portal blieb leer (Bug v1.10.0).
+      // Es sind ohnehin ausschließlich EIGENE Daten (Art. 15); die Praxis
+      // steuert die Sichtbarkeit über Einstellungen → Patienten-Portal.
       const rows = await getDb().query.documents.findMany({
         where: eq(documents.patientId, sess.patientId),
         orderBy: [desc(documents.createdAt)],
       });
       return {
         dokumente: rows
-          .filter((d) => (ERLAUBT as readonly string[]).includes(d.kategorie))
           .map((d) => ({
             id: d.id,
             kategorie: d.kategorie,
@@ -287,10 +290,6 @@ export const portalRouter = createRouter({
       // Zugriff nur auf EIGENE Dokumente (DSGVO: kein Fremdzugriff)
       if (!doc || doc.patientId !== sess.patientId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Dokument nicht gefunden." });
-      }
-      const ERLAUBT = ["befund", "arztbrief", "rezept", "einverstaendnis"];
-      if (!ERLAUBT.includes(doc.kategorie)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Diese Kategorie steht im Portal nicht bereit." });
       }
       await audit(sess.patientId, "dokument-datei");
       const buf = await readFile(path.join(env.uploadDir, doc.dateipfad));
