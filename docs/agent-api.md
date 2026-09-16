@@ -1,4 +1,4 @@
-# Dr.PaWaWi Agent-API — Leitfaden (Stand v1.13.0)
+# Dr.PaWaWi Agent-API — Leitfaden (Stand v1.14.0)
 
 REST-API für externe Agenten (Kimi Claw). Basis: `https://<host>/api/agent`
 Auth: `Authorization: Bearer ax_…` (Token aus Einstellungen → Agent-API, Klartext nur einmalig).
@@ -17,6 +17,19 @@ Bild gehören AVV mit dem KI-Anbieter und VVT-Eintrag „KI-Agent".
 ## Autonomie-Stufen (Einstellungen → Agent-API)
 - `vorschlag` (Standard): Lesen + Entwürfe/Aufgaben/Anlagen — Freigabe immer beim Menschen
 - `vollautomatik`: zusätzlich Direktversand (Rechnungen per Mail)
+- **Granulare Freigabe pro Token** (ab 1.14): Token-Feld `freigabeEmpfaenger` (JSON-Array mit Adressen oder `@domain`) erlaubt Direktversand an genau diese Empfänger auch in Stufe `vorschlag`
+
+## Transparenz & Vertrauen (ab 1.14)
+- `GET /audit-log?von=&bis=&aktion=&limit=` → jede Agent-Aktion mit Zeitstempel
+- **Idempotenz**: Header `Idempotenz-Key: <beliebig>` bei POSTs → Retry liefert die gespeicherte Antwort (`x-idempotent-replay: 1`), nichts dupliziert
+- **Webhooks**: `POST /webhooks {ereignis: "bankbuchung.neu", url}` · `GET /webhooks` · `DELETE /webhooks/:id` (5 s Timeout, Fehlerzähler; `mail.neu` folgt mit dem Mail-Modul)
+- `GET /uebersicht/heute` → Morgen-Briefing in einem Call: heutige Termine, überfällige Rechnungen, offene Bankbuchungen ohne Zuordnung, offene Aufgaben
+- `GET /zahlungsziele?von=&bis=` → fällige Ausgangs-/Eingangsrechnungen + Mahnfristen mit `ueberfaellig`-Flag
+
+## Erweiterungen Bestand (ab 1.14)
+- Kunden-Suite: `GET /kunde/:id` · `PUT /kunde/:id` · `GET /kunde/nach-email/:email` · `GET /kunde/:id/rechnungen`
+- Rechnungen: `GET /rechnung/:id/pdf` (GoBD-PDF als base64) · `POST /rechnung/:id/zahlung {betrag?, datum?}` · `POST /rechnung/:id/stornieren` (GoBD-Vollstorno mit Gutschrift)
+- Aufgaben: `faelligAm`, `prioritaet` (niedrig/normal/hoch), `referenz` `{art: "rechnung"|"beleg"|"patient"|"plan", id}`
 
 ## Status
 - `GET /status` → `{produkt, version, zeit}`

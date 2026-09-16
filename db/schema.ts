@@ -1198,6 +1198,9 @@ export const agentTokens = mysqlTable("agent_tokens", {
   name: varchar("name", { length: 100 }).notNull(),
   tokenHash: varchar("token_hash", { length: 64 }).notNull(),
   aktiv: boolean("aktiv").notNull().default(true),
+  // Granulare Autonomie (1.14.0): JSON-Array erlaubter Empfänger (Adressen
+  // oder @domains) für Direktversand auch in Stufe „vorschlag".
+  freigabeEmpfaenger: text("freigabe_empfaenger"),
   letzteNutzung: timestamp("letzte_nutzung"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -1207,7 +1210,31 @@ export const agentAufgaben = mysqlTable("agent_aufgaben", {
   text: varchar("text", { length: 500 }).notNull(),
   erledigt: boolean("erledigt").notNull().default(false),
   erledigtAm: timestamp("erledigt_am"),
+  // Wiedervorlage-Felder (1.14.0)
+  faelligAm: date("faellig_am", { mode: "string" }),
+  prioritaet: varchar("prioritaet", { length: 10 }).notNull().default("normal"), // niedrig/normal/hoch
+  referenzJson: text("referenz_json"), // {art: "rechnung"|"beleg"|"patient"|"plan", id: number}
   quelle: varchar("quelle", { length: 20 }).notNull().default("mensch"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Idempotenz-Keys: Retry nach Timeout liefert die gespeicherte Antwort (1.14.0)
+export const agentIdempotenz = mysqlTable("agent_idempotenz", {
+  id: serial("id").primaryKey(),
+  schluessel: varchar("schluessel", { length: 128 }).notNull(),
+  endpunkt: varchar("endpunkt", { length: 255 }).notNull(),
+  status: int("status").notNull(),
+  antwortJson: text("antwort_json"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Webhooks: Ereignis → URL (1.14.0). Feuert bankbuchung.neu (mail.neu folgt mit Mail-Sync).
+export const webhooks = mysqlTable("webhooks", {
+  id: serial("id").primaryKey(),
+  ereignis: varchar("ereignis", { length: 40 }).notNull(),
+  url: varchar("url", { length: 1000 }).notNull(),
+  aktiv: boolean("aktiv").notNull().default(true),
+  fehler: int("fehler").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

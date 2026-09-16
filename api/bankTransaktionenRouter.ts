@@ -412,6 +412,12 @@ async function persistiereUndMatche(
     .set({ zeilen: neu.length, duplikate, summeEin: summeEin.toFixed(2), summeAus: summeAus.toFixed(2) })
     .where(eq(bankImporte.id, importId));
 
+  // Webhook (1.14.0): neue Buchungen an registrierte URLs melden (fire-and-forget)
+  if (neu.length > 0) {
+    const { webhookFeuern } = await import("./agentRouter");
+    webhookFeuern("bankbuchung.neu", { importId, bankAccountId, anzahl: neu.length }).catch(() => undefined);
+  }
+
   // Auto-Match nur fuer neue, noch offene Transaktionen
   const vorschau = [] as {
     transaktionId: number; datum: string; name: string; zweck: string;

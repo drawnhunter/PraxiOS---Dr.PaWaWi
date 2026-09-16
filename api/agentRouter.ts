@@ -18,7 +18,7 @@ import { APP_VERSION } from "./lib/version";
 import { computeTotals, centToDecimal } from "./queries/invoicing";
 import { besterTreffer } from "@contracts/fuzzy";
 
-const app = new Hono();
+const app = new Hono<{ Variables: { agentToken: { freigabeEmpfaenger?: string | null } } }>();
 
 function hashToken(t: string): string {
   return createHash("sha256").update(t).digest("hex");
@@ -30,7 +30,7 @@ export function erzeugeAgentToken(): string {
 }
 export { hashToken };
 
-// ── Auth-Middleware ────────────────────────────────────────────────────────
+// ── Auth-Middleware (+ Token-Kontext + Idempotenz-Keys, 1.14.0) ────────────
 app.use("*", async (c, next) => {
   const kopf = c.req.header("authorization") ?? "";
   const token = kopf.startsWith("Bearer ") ? kopf.slice(7).trim() : "";
@@ -44,6 +44,35 @@ app.use("*", async (c, next) => {
     .set({ letzteNutzung: new Date() })
     .where(eq(agentTokens.id, treffer.id))
     .catch(() => undefined);
+  c.set("agentToken", treffer);
+
+  // Idempotenz: POST mit Idempotenz-Key → gespeicherte Antwort replayen (Retry-sicher)
+  const idemKey = c.req.header("idempotenz-key") ?? c.req.header("idempotency-key");
+  if (c.req.method === "POST" && idemKey) {
+    const { agentIdempotenz } = await import("@db/schema");
+    const db = getDb();
+    const bekannt = await db.query.agentIdempotenz.findFirst({
+      where: eq(agentIdempotenz.schluessel, idemKey.slice(0, 128)),
+    });
+    if (bekannt) {
+      return new Response(bekannt.antwortJson ?? "{}", {
+        status: bekannt.status,
+        headers: { "content-type": "application/json", "x-idempotent-replay": "1" },
+      });
+    }
+    await next();
+    try {
+      const klon = c.res.clone();
+      const antwort = await klon.text();
+      if (klon.status < 500) {
+        await db
+          .insert(agentIdempotenz)
+          .values({ schluessel: idemKey.slice(0, 128), endpunkt: c.req.path, status: klon.status, antwortJson: antwort })
+          .catch(() => undefined);
+      }
+    } catch { /* Idempotenz darf nie blockieren */ }
+    return;
+  }
   return next();
 });
 
@@ -62,6 +91,51 @@ async function autonomie(): Promise<"vorschlag" | "vollautomatik"> {
     columns: { agentAutonomie: true },
   });
   return s?.agentAutonomie === "vollautomatik" ? "vollautomatik" : "vorschlag";
+}
+
+/** Granulare Autonomie (1.14.0): vollautomatik erlaubt alles; sonst
+ *  Token-Freigabeliste (Adresse oder @domain) je Empfänger. */
+async function versandErlaubt(c: { get: (k: string) => unknown }, empfaenger: string[]): Promise<{ ok: boolean; via: string }> {
+  const stufe = await autonomie();
+  if (stufe === "vollautomatik") return { ok: true, via: "vollautomatik" };
+  const token = c.get("agentToken") as { freigabeEmpfaenger?: string | null } | undefined;
+  let liste: string[] = [];
+  try {
+    liste = token?.freigabeEmpfaenger ? (JSON.parse(token.freigabeEmpfaenger) as string[]) : [];
+  } catch { liste = []; }
+  if (liste.length === 0) return { ok: false, via: "gesperrt" };
+  const norm = liste.map((x) => x.toLowerCase().trim());
+  const alleOk = empfaenger.every((e) => {
+    const adr = e.toLowerCase().trim();
+    const dom = adr.split("@")[1] ?? "";
+    return norm.includes(adr) || norm.includes(`@${dom}`);
+  });
+  return alleOk ? { ok: true, via: "freigabeliste" } : { ok: false, via: "gesperrt" };
+}
+
+/** Webhook feuern (fire-and-forget, 5 s Timeout, Fehlerzähler). */
+export async function webhookFeuern(ereignis: string, payload: unknown): Promise<void> {
+  try {
+    const { webhooks } = await import("@db/schema");
+    const db = getDb();
+    const ziele = await db.query.webhooks.findMany({
+      where: and(eq(webhooks.ereignis, ereignis), eq(webhooks.aktiv, true)),
+    });
+    for (const z of ziele) {
+      fetch(z.url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ereignis, zeit: new Date().toISOString(), daten: payload }),
+        signal: AbortSignal.timeout(5000),
+      })
+        .then((r) => {
+          if (!r.ok) throw new Error(String(r.status));
+        })
+        .catch(() =>
+          db.update(webhooks).set({ fehler: z.fehler + 1 }).where(eq(webhooks.id, z.id)).catch(() => undefined),
+        );
+    }
+  } catch { /* Webhooks dürfen nie blockieren */ }
 }
 
 const heute = () => new Date().toISOString().slice(0, 10);
@@ -445,11 +519,20 @@ app.post("/aufgaben", async (c) => {
   const body = await bodyLesen(c);
   const text = String(body.text ?? "").trim();
   if (!text || text.length > 500) return c.json({ fehler: "text fehlt (max. 500 Zeichen)." }, 400);
+  const faelligAm = body.faelligAm && /^\d{4}-\d{2}-\d{2}$/.test(String(body.faelligAm)) ? String(body.faelligAm) : null;
+  const prioritaet = ["niedrig", "normal", "hoch"].includes(String(body.prioritaet)) ? String(body.prioritaet) : "normal";
+  let referenzJson: string | null = null;
+  if (body.referenz && typeof body.referenz === "object") {
+    const r = body.referenz as Record<string, unknown>;
+    if (["rechnung", "beleg", "patient", "plan"].includes(String(r.art)) && Number(r.id) > 0) {
+      referenzJson = JSON.stringify({ art: String(r.art), id: Number(r.id) });
+    }
+  }
   const [{ id }] = await getDb()
     .insert(agentAufgaben)
-    .values({ text, quelle: "agent" })
+    .values({ text, quelle: "agent", faelligAm, prioritaet, referenzJson })
     .$returningId();
-  await audit("aufgabe_angelegt", { id, text });
+  await audit("aufgabe_angelegt", { id, text, faelligAm, prioritaet });
   return c.json({ ok: true, id });
 });
 
@@ -561,15 +644,6 @@ app.post("/rechnung-entwurf", async (c) => {
 });
 
 app.post("/rechnung/:id/versenden", async (c) => {
-  const stufe = await autonomie();
-  if (stufe !== "vollautomatik") {
-    return c.json(
-      {
-        fehler: "Versand ist in der Autonomie-Stufe „vorschlag“ gesperrt. Entwurf prüfen und manuell versenden — oder Einstellungen → Agent-API auf „vollautomatik“ stellen.",
-      },
-      403,
-    );
-  }
   const id = Number(c.req.param("id"));
   const body = await bodyLesen(c);
   const db = getDb();
@@ -580,6 +654,17 @@ app.post("/rechnung/:id/versenden", async (c) => {
   const kundeRow = await db.query.customers.findFirst({ where: eq(customers.id, r.customerId) });
   const empfaenger = String(body.empfaenger ?? kundeRow?.email ?? "").trim();
   if (!empfaenger) return c.json({ fehler: "Keine Empfänger-Adresse (empfaenger angeben oder beim Kunden hinterlegen)." }, 400);
+
+  // Granulare Autonomie (1.14.0): vollautomatik ODER Token-Freigabeliste
+  const erlaubnis = await versandErlaubt(c, [empfaenger]);
+  if (!erlaubnis.ok) {
+    return c.json(
+      {
+        fehler: "Versand gesperrt: weder Stufe „vollautomatik“ noch Token-Freigabeliste deckt den Empfänger ab. Alternative: GET /rechnung/:id/pdf + Versand durch einen Menschen.",
+      },
+      403,
+    );
+  }
 
   const { ladeRechnungsBeleg } = await import("./pdfBelege");
   const { renderBelegPdf } = await import("./pdf");
@@ -961,6 +1046,278 @@ app.get("/rezepte", async (c) => {
       hinweis: "Nur Metadaten — PDF-Inhalte verlassen den Server nicht (Gesundheitsdaten).",
     })),
   });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── Agent-API v3 (1.14.0, ReWaWi-Sync v1.17): Transparenz, Briefing, ───────
+// ── Kunden-Suite, Rechnungs-Aktionen, Webhooks ─────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Transparenz: vollständiges Aktions-Log ─────────────────────────────────
+app.get("/audit-log", async (c) => {
+  const von = c.req.query("von");
+  const bis = c.req.query("bis");
+  const aktion = c.req.query("aktion");
+  const limit = Math.max(1, Math.min(500, Number(c.req.query("limit") ?? "100")));
+  const bed = [];
+  if (von) bed.push(gte(agentLog.createdAt, new Date(`${von}T00:00:00`)));
+  if (bis) bed.push(lte(agentLog.createdAt, new Date(`${bis}T23:59:59`)));
+  if (aktion) bed.push(eq(agentLog.aktion, aktion));
+  const rows = await getDb().query.agentLog.findMany({
+    where: bed.length ? and(...bed) : undefined,
+    orderBy: [desc(agentLog.createdAt)],
+    limit,
+  });
+  return c.json({ anzahl: rows.length, eintraege: rows });
+});
+
+// ── Morgen-Briefing: ein Call für den Tagesstart ───────────────────────────
+app.get("/uebersicht/heute", async (c) => {
+  const db = getDb();
+  const h = heute();
+  const pseudo = await pseudonymAn();
+  const { bankTransaktionen } = await import("@db/schema");
+  const { sql } = await import("drizzle-orm");
+
+  const termineHeute = await db
+    .select({ e: planEntries, plan: therapyPlans })
+    .from(planEntries)
+    .innerJoin(therapyPlans, eq(planEntries.planId, therapyPlans.id))
+    .where(and(eq(planEntries.datum, h), isNull(therapyPlans.geloeschtAm)))
+    .orderBy(asc(planEntries.zeitVon));
+
+  const [offenBank] = await db
+    .select({ n: sql<number>`COUNT(*)` })
+    .from(bankTransaktionen)
+    .where(and(eq(bankTransaktionen.status, "offen"), sql`${bankTransaktionen.invoiceId} IS NULL`, sql`${bankTransaktionen.incomingInvoiceId} IS NULL`));
+
+  const aufgabenOffen = await db.select().from(agentAufgaben).where(eq(agentAufgaben.erledigt, false));
+
+  const finale = await db.select().from(invoices).where(eq(invoices.status, "finalisiert"));
+  const ueberfaellig = finale
+    .filter((r) => Number(r.brutto) - Number(r.bezahltBetrag) > 0.004 && r.faelligkeitsdatum < h)
+    .map((r) => ({ rechnungId: r.id, nummer: r.nummer, kundenId: r.customerId, offen: Number(r.brutto) - Number(r.bezahltBetrag), faelligkeitsdatum: r.faelligkeitsdatum }));
+
+  const patienten = new Map<number, Kunde>();
+  for (const k of await db.select().from(customers)) patienten.set(k.id, k);
+
+  return c.json({
+    datum: h,
+    termineHeute: termineHeute.map((r) => ({
+      eintragId: r.e.id, planId: r.plan.id, zeitVon: r.e.zeitVon, zeitBis: r.e.zeitBis,
+      leistung: r.e.leistungText, raum: r.e.raum, status: r.e.status,
+      patient: patienten.get(r.plan.patientId) ? patientMaske(patienten.get(r.plan.patientId)!, pseudo) : null,
+    })),
+    ueberfaelligeRechnungen: ueberfaellig,
+    bankOffenOhneZuordnung: Number(offenBank?.n ?? 0),
+    aufgabenOffen: aufgabenOffen.map((a) => ({ id: a.id, text: a.text, prioritaet: a.prioritaet, faelligAm: a.faelligAm })),
+  });
+});
+
+// ── Zahlungsziele: was ist wann fällig (Mahnungen, offene Rechnungen, Eingang)
+app.get("/zahlungsziele", async (c) => {
+  const db = getDb();
+  const von = c.req.query("von") ?? "2000-01-01";
+  const bis = c.req.query("bis") ?? "2100-01-01";
+  const h = heute();
+  const eintraege: { art: string; datum: string; betrag: number; referenz: string; ueberfaellig: boolean }[] = [];
+
+  const finale = await db.select().from(invoices).where(eq(invoices.status, "finalisiert"));
+  for (const r of finale) {
+    const offen = Number(r.brutto) - Number(r.bezahltBetrag);
+    if (offen > 0.004 && r.faelligkeitsdatum >= von && r.faelligkeitsdatum <= bis) {
+      eintraege.push({ art: "ausgangsrechnung", datum: r.faelligkeitsdatum, betrag: offen, referenz: r.nummer ?? `#${r.id}`, ueberfaellig: r.faelligkeitsdatum < h });
+    }
+  }
+  const { incomingInvoices } = await import("@db/schema");
+  const eingehend = await db.select().from(incomingInvoices);
+  for (const r of eingehend) {
+    if (r.bezahltAm) continue;
+    const f = r.faelligkeitsdatum ?? r.rechnungsdatum;
+    if (f >= von && f <= bis) {
+      eintraege.push({ art: "eingangsrechnung", datum: f, betrag: Number(r.brutto), referenz: `${r.lieferantName} ${r.nummer}`, ueberfaellig: f < h });
+    }
+  }
+  const mahnungen = await db.select().from(reminders);
+  for (const m of mahnungen) {
+    if (m.zahlungsfrist >= von && m.zahlungsfrist <= bis) {
+      eintraege.push({ art: "mahnung", datum: m.zahlungsfrist, betrag: Number(m.offenBetrag), referenz: `Stufe ${m.stufe} (Rechnung #${m.invoiceId})`, ueberfaellig: m.zahlungsfrist < h });
+    }
+  }
+  eintraege.sort((a, b) => (a.datum < b.datum ? -1 : 1));
+  return c.json({ von, bis, anzahl: eintraege.length, eintraege });
+});
+
+// ── Kunden-Suite (ReWaWi-Parität; für Akten-Zwecke /patient* bevorzugen) ────
+app.get("/kunde/:id", async (c) => {
+  const pseudo = await pseudonymAn();
+  const id = Number(c.req.param("id"));
+  const k = await getDb().query.customers.findFirst({ where: eq(customers.id, id) });
+  if (!k) return c.json({ fehler: "Kunde nicht gefunden." }, 404);
+  return c.json(patientMaske(k, pseudo));
+});
+
+app.put("/kunde/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const db = getDb();
+  const k = await db.query.customers.findFirst({ where: eq(customers.id, id) });
+  if (!k) return c.json({ fehler: "Kunde nicht gefunden." }, 404);
+  const felder = ["name", "zusatz", "strasse", "plz", "ort", "land", "email", "telefon", "krankenkasse", "geburtsdatum", "tags"] as const;
+  const setze: Record<string, unknown> = {};
+  for (const f of felder) if (body[f] !== undefined) setze[f] = body[f] === null ? null : String(body[f]);
+  if (Object.keys(setze).length === 0) return c.json({ fehler: `Keine Felder zum Aktualisieren (erlaubt: ${felder.join(", ")}).` }, 400);
+  await db.update(customers).set(setze).where(eq(customers.id, id));
+  await audit("kunde_aktualisiert", { id, felder: Object.keys(setze) });
+  return c.json({ ok: true, id, aktualisiert: Object.keys(setze) });
+});
+
+app.get("/kunde/nach-email/:email", async (c) => {
+  const pseudo = await pseudonymAn();
+  const email = decodeURIComponent(c.req.param("email") ?? "").toLowerCase().trim();
+  if (!email.includes("@")) return c.json({ fehler: "E-Mail-Adresse angeben." }, 400);
+  const alle = await getDb().select().from(customers);
+  const treffer = alle.find((k) => k.email?.toLowerCase().trim() === email);
+  if (!treffer) return c.json({ gefunden: false });
+  return c.json({ gefunden: true, ...patientMaske(treffer, pseudo) });
+});
+
+app.get("/kunde/:id/rechnungen", async (c) => {
+  const id = Number(c.req.param("id"));
+  const rows = await getDb().query.invoices.findMany({
+    where: eq(invoices.customerId, id),
+    orderBy: [desc(invoices.rechnungsdatum)],
+  });
+  return c.json({
+    kundenId: id,
+    anzahl: rows.length,
+    rechnungen: rows.map((r) => ({
+      id: r.id, nummer: r.nummer, status: r.status, datum: r.rechnungsdatum,
+      brutto: Number(r.brutto), bezahlt: Number(r.bezahltBetrag),
+      offen: Number(r.brutto) - Number(r.bezahltBetrag),
+    })),
+  });
+});
+
+// ── Rechnungs-Aktionen: PDF, Zahlung, Storno ───────────────────────────────
+app.get("/rechnung/:id/pdf", async (c) => {
+  const id = Number(c.req.param("id"));
+  const r = await getDb().query.invoices.findFirst({ where: eq(invoices.id, id) });
+  if (!r) return c.json({ fehler: "Rechnung nicht gefunden." }, 404);
+  if (r.status === "entwurf") return c.json({ fehler: "Entwürfe haben noch kein GoBD-PDF (erst finalisieren)." }, 409);
+  const { ladeRechnungsBeleg, ladeDesign } = await import("./pdfBelege");
+  const { renderBelegPdf } = await import("./pdf");
+  const { beleg, dateiname } = await ladeRechnungsBeleg(id);
+  const pdf = await renderBelegPdf(beleg, await ladeDesign());
+  return c.json({ ok: true, dateiname: `Rechnung-${dateiname}.pdf`, base64: pdf.toString("base64"), mime: "application/pdf" });
+});
+
+app.post("/rechnung/:id/zahlung", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const db = getDb();
+  const r = await db.query.invoices.findFirst({ where: eq(invoices.id, id) });
+  if (!r) return c.json({ fehler: "Rechnung nicht gefunden." }, 404);
+  if (r.status === "entwurf") return c.json({ fehler: "Entwurf muss zuerst finalisiert werden." }, 409);
+  const datum = body.datum && /^\d{4}-\d{2}-\d{2}$/.test(String(body.datum)) ? String(body.datum) : heute();
+  const betrag = body.betrag !== undefined ? String(Number(body.betrag).toFixed(2)) : r.brutto;
+  await db
+    .update(invoices)
+    .set({ bezahltBetrag: betrag, bezahltAm: datum })
+    .where(eq(invoices.id, id));
+  await audit("rechnung_zahlung", { id, nummer: r.nummer, betrag, datum });
+  return c.json({ ok: true, id, nummer: r.nummer, bezahltBetrag: betrag, bezahltAm: datum, hinweis: "Manuell gebucht — für den Bankabgleich zusätzlich POST /bankbuchung/:id/zuordnen nutzen." });
+});
+
+app.post("/rechnung/:id/stornieren", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const db = getDb();
+  const r = await db.query.invoices.findFirst({ where: eq(invoices.id, id), with: { items: true } });
+  if (!r) return c.json({ fehler: "Rechnung nicht gefunden." }, 404);
+  if (r.status === "entwurf") return c.json({ fehler: "Entwürfe löschen statt stornieren (DELETE /entwurf/:id)." }, 409);
+  if (r.status === "storniert") return c.json({ fehler: "Rechnung ist bereits storniert." }, 409);
+  const { creditNotes, creditNoteItems } = await import("@db/schema");
+  const { nextNumber, formatCreditNoteNumber } = await import("./queries/invoicing");
+
+  const nummer = await db.transaction(async (tx) => {
+    // Gutschrift-Entwurf mit allen Positionen (Vollstorno)
+    const [{ id: gId }] = await tx
+      .insert(creditNotes)
+      .values({
+        invoiceId: r.id,
+        datum: heute(),
+        grund: body.grund ? String(body.grund).slice(0, 500) : "Storno per Agent-API (Kimi Claw)",
+        kundeName: r.kundeName,
+        kundeZusatz: r.kundeZusatz,
+        kundeStrasse: r.kundeStrasse,
+        kundePlz: r.kundePlz,
+        kundeOrt: r.kundeOrt,
+        kundeLand: r.kundeLand,
+        netto: r.netto, ust: r.ust, brutto: r.brutto,
+      })
+      .$returningId();
+    await tx.insert(creditNoteItems).values(
+      r.items.map((it) => ({
+        creditNoteId: gId,
+        position: it.position,
+        bezeichnung: it.bezeichnung,
+        beschreibung: it.beschreibung,
+        menge: it.menge,
+        einheit: it.einheit,
+        einzelpreis: it.einzelpreis,
+        ustSatz: it.ustSatz,
+      })),
+    );
+    // Finalisieren (ST-Nummer + Firmen-Snapshot) + Vollstorno-Buchung
+    const settings = await tx.query.companySettings.findFirst({ where: eq(companySettings.id, 1) });
+    const firmenSnapshot = JSON.stringify({
+      name: settings?.name, strasse: settings?.strasse, plz: settings?.plz, ort: settings?.ort,
+      land: settings?.land, handelsregister: settings?.handelsregister, steuernummer: settings?.steuernummer,
+      ustIdNr: settings?.ustIdNr, email: settings?.email, telefon: settings?.telefon,
+      webseite: settings?.webseite, fussText: settings?.fussText,
+    });
+    const n = await nextNumber(tx, "credit_note", 0);
+    const nr = formatCreditNoteNumber(n);
+    await tx
+      .update(creditNotes)
+      .set({ nummer: nr, status: "finalisiert", finalizedAt: new Date(), firmenSnapshot })
+      .where(eq(creditNotes.id, gId));
+    await tx.update(invoices).set({ status: "storniert" }).where(eq(invoices.id, r.id));
+    return nr;
+  });
+  await audit("rechnung_storniert", { id, nummer: r.nummer, gutschrift: nummer });
+  return c.json({ ok: true, rechnung: r.nummer, gutschrift: nummer, hinweis: "Vollstorno gebucht — GoBD-Gutschrift finalisiert." });
+});
+
+// ── Webhooks verwalten ─────────────────────────────────────────────────────
+app.get("/webhooks", async (c) => {
+  const { webhooks } = await import("@db/schema");
+  return c.json({ webhooks: await getDb().select().from(webhooks) });
+});
+
+app.post("/webhooks", async (c) => {
+  const body = await bodyLesen(c);
+  const ereignis = String(body.ereignis ?? "").trim();
+  const url = String(body.url ?? "").trim();
+  if (!["bankbuchung.neu"].includes(ereignis)) {
+    return c.json({ fehler: "ereignis unbekannt — derzeit: bankbuchung.neu (mail.neu folgt mit dem Mail-Modul)." }, 400);
+  }
+  if (!/^https?:\/\//.test(url)) return c.json({ fehler: "url muss mit http(s):// beginnen." }, 400);
+  const { webhooks } = await import("@db/schema");
+  const [{ id }] = await getDb().insert(webhooks).values({ ereignis, url }).$returningId();
+  await audit("webhook_registriert", { id, ereignis, url });
+  return c.json({ ok: true, id });
+});
+
+app.delete("/webhooks/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const { webhooks } = await import("@db/schema");
+  const w = await getDb().query.webhooks.findFirst({ where: eq(webhooks.id, id) });
+  if (!w) return c.json({ fehler: "Webhook nicht gefunden." }, 404);
+  await getDb().delete(webhooks).where(eq(webhooks.id, id));
+  await audit("webhook_geloescht", { id, ereignis: w.ereignis });
+  return c.json({ ok: true });
 });
 
 export default app;

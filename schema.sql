@@ -962,6 +962,7 @@ CREATE TABLE `agent_tokens` (
   `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `token_hash` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
   `aktiv` tinyint(1) NOT NULL DEFAULT '1',
+  `freigabe_empfaenger` text COLLATE utf8mb4_unicode_ci,
   `letzte_nutzung` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
@@ -972,7 +973,30 @@ CREATE TABLE `agent_aufgaben` (
   `text` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
   `erledigt` tinyint(1) NOT NULL DEFAULT '0',
   `erledigt_am` timestamp NULL DEFAULT NULL,
+  `faellig_am` date DEFAULT NULL,
+  `prioritaet` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'normal',
+  `referenz_json` text COLLATE utf8mb4_unicode_ci,
   `quelle` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'mensch',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `agent_idempotenz` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `schluessel` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `endpunkt` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` int NOT NULL,
+  `antwort_json` text COLLATE utf8mb4_unicode_ci,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `webhooks` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `ereignis` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `url` varchar(1000) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `aktiv` tinyint(1) NOT NULL DEFAULT '1',
+  `fehler` int NOT NULL DEFAULT '0',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

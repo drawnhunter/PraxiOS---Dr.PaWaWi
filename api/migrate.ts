@@ -74,6 +74,11 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   // Agent-API v2 (1.13.0): Pseudonymisierung Gesundheitsdaten
   { tabelle: "company_settings", spalte: "agent_pseudonym", ddl: "ALTER TABLE company_settings ADD COLUMN agent_pseudonym TINYINT(1) NOT NULL DEFAULT 1 AFTER agent_autonomie" },
   { tabelle: "customers", spalte: "synonym", ddl: "ALTER TABLE customers ADD COLUMN synonym VARCHAR(20) NULL AFTER tags" },
+  // Agent-API v3 (1.14.0): Freigabeliste, Wiedervorlage-Aufgaben
+  { tabelle: "agent_tokens", spalte: "freigabe_empfaenger", ddl: "ALTER TABLE agent_tokens ADD COLUMN freigabe_empfaenger TEXT NULL AFTER aktiv" },
+  { tabelle: "agent_aufgaben", spalte: "faellig_am", ddl: "ALTER TABLE agent_aufgaben ADD COLUMN faellig_am DATE NULL AFTER erledigt_am" },
+  { tabelle: "agent_aufgaben", spalte: "prioritaet", ddl: "ALTER TABLE agent_aufgaben ADD COLUMN prioritaet VARCHAR(10) NOT NULL DEFAULT 'normal' AFTER faellig_am" },
+  { tabelle: "agent_aufgaben", spalte: "referenz_json", ddl: "ALTER TABLE agent_aufgaben ADD COLUMN referenz_json TEXT NULL AFTER prioritaet" },
   { tabelle: "company_settings", spalte: "modul_konfig", ddl: "ALTER TABLE company_settings ADD COLUMN modul_konfig TEXT NULL AFTER agent_autonomie" },
   // Banking-Dedupe (1.10.2)
   { tabelle: "bank_transaktionen", spalte: "quell_id", ddl: "ALTER TABLE bank_transaktionen ADD COLUMN quell_id VARCHAR(40) NULL AFTER hash" },
@@ -675,6 +680,32 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
   },
 ];
 
+const NEUE_TABELLEN_2: { tabelle: string; ddl: string }[] = [
+  // Agent-API v3 (1.14.0): Idempotenz + Webhooks
+  {
+    tabelle: "agent_idempotenz",
+    ddl: `CREATE TABLE IF NOT EXISTS agent_idempotenz (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      schluessel VARCHAR(128) NOT NULL,
+      endpunkt VARCHAR(255) NOT NULL,
+      status INT NOT NULL,
+      antwort_json TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "webhooks",
+    ddl: `CREATE TABLE IF NOT EXISTS webhooks (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      ereignis VARCHAR(40) NOT NULL,
+      url VARCHAR(1000) NOT NULL,
+      aktiv TINYINT(1) NOT NULL DEFAULT 1,
+      fehler INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+];
+
 const NEUE_INDIZES: { tabelle: string; index: string; ddl: string }[] = [
   { tabelle: "users", index: "users_username_unique", ddl: "ALTER TABLE users ADD UNIQUE INDEX users_username_unique (username)" },
   { tabelle: "customers", index: "customers_patienten_nr_unique", ddl: "ALTER TABLE customers ADD UNIQUE INDEX customers_patienten_nr_unique (patienten_nr)" },
@@ -794,7 +825,7 @@ export async function migriereFehlendeSpalten(): Promise<void> {
     }
   }
 
-  for (const t of NEUE_TABELLEN) {
+  for (const t of [...NEUE_TABELLEN, ...NEUE_TABELLEN_2]) {
     const [rows] = (await db.execute(
       sql.raw(
         `SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA='${dbName}' AND TABLE_NAME='${t.tabelle}'`,

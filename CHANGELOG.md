@@ -1,5 +1,35 @@
 # Changelog — PraxiOS
 
+## [1.14.0] — 2026-09-16 — Agent-API v3: Transparenz, Briefing, Rechnungs-Aktionen (ReWaWi-Sync v1.17)
+
+### Neu (Agent-API)
+- **Idempotenz-Keys**: Header `Idempotenz-Key` bei POSTs — Retry nach Timeout
+  liefert die gespeicherte Antwort (`x-idempotent-replay: 1`), nichts dupliziert
+- **Webhooks**: `GET/POST/DELETE /webhooks` — Ereignis `bankbuchung.neu`
+  feuert beim Bankimport (5 s Timeout, Fehlerzähler)
+- **`GET /audit-log`** — vollständige Agent-Aktionshistorie (Filter: Zeitraum, Aktion)
+- **`GET /uebersicht/heute`** — Morgen-Briefing: heutige Termine (mit Patient,
+  pseudonymisiert), überfällige Rechnungen, offene Bankbuchungen ohne
+  Zuordnung, offene Aufgaben
+- **`GET /zahlungsziele`** — fällige Ausgangs-/Eingangsrechnungen +
+  Mahnfristen mit Überfällig-Flag
+- **Kunden-Suite**: `GET /kunde/:id`, `PUT /kunde/:id`,
+  `GET /kunde/nach-email/:email`, `GET /kunde/:id/rechnungen`
+- **Rechnungs-Aktionen**: `GET /rechnung/:id/pdf` (GoBD-PDF als base64),
+  `POST /rechnung/:id/zahlung`, `POST /rechnung/:id/stornieren`
+  (Vollstorno als finalisierte GoBD-Gutschrift in einer Transaktion)
+- **Granulare Autonomie**: Token-Feld `freigabe_empfaenger` (Adressen oder
+  @domains) erlaubt Direktversand auch in Stufe „vorschlag"
+- **Aufgaben erweitert**: `faelligAm`, `prioritaet`, `referenz`
+  (rechnung/beleg/patient/plan)
+
+### Migration (automatisch beim Start)
+- `agent_tokens.freigabe_empfaenger`
+- `agent_aufgaben`: `faellig_am`, `prioritaet`, `referenz_json`
+- Neue Tabellen: `agent_idempotenz`, `webhooks`
+
+---
+
 ## [1.13.0] — 2026-09-16 — Agent-API v2: PaWaWi-Domäne + Pseudonymisierung
 
 ### Neu (Agent-API, Kimi Claw)
