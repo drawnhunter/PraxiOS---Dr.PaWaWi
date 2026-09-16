@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { kopiereInZwischenablage } from "@/lib/clipboard";
 import { BLOCK_TYPEN, BLOCK_TYP_LABEL, type FormBlock } from "@contracts/anamnese";
 import { trpc } from "@/providers/trpc";
 import { pdfHerunterladen } from "@/lib/downloads";
@@ -200,7 +201,7 @@ function LinkDialog({ formId, onClose }: { formId: number | null; onClose: () =>
   };
 
   const kopieren = async (token: string) => {
-    await navigator.clipboard.writeText(urlFuer(token));
+    await kopiereInZwischenablage(urlFuer(token));
     setKopiert(token);
     setTimeout(() => setKopiert(""), 2000);
   };

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { kopiereInZwischenablage } from "@/lib/clipboard";
 import { trpc } from "@/providers/trpc";
 import { geld, datum as fmtDatum } from "@/lib/format";
 import { Link } from "react-router";
@@ -87,7 +88,7 @@ export default function Zahlungsziele() {
   };
 
   const kopieren = async () => {
-    await navigator.clipboard.writeText(icsUrl);
+    await kopiereInZwischenablage(icsUrl);
     setKopiert(true);
     setTimeout(() => setKopiert(false), 2000);
   };

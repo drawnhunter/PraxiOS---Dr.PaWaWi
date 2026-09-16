@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { kopiereInZwischenablage } from "@/lib/clipboard";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
@@ -309,7 +310,7 @@ function SchluesselTab() {
                 variant="outline"
                 size="sm"
                 onClick={async () => {
-                  await navigator.clipboard.writeText(schluessel.data!.recipient!);
+                  await kopiereInZwischenablage(schluessel.data!.recipient!);
                   setKopiert(true);
                   setTimeout(() => setKopiert(false), 2000);
                 }}

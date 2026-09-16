@@ -1,5 +1,6 @@
 // ── PraxiOS: Patienten-Portal — Verwaltung in der Patientenakte ─────────────
 import { useState } from "react";
+import { kopiereInZwischenablage } from "@/lib/clipboard";
 import { trpc } from "@/providers/trpc";
 import { datum } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -80,7 +81,7 @@ export function PortalSection({ patientId }: { patientId: number }) {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(portalUrl(l.token));
+                    kopiereInZwischenablage(portalUrl(l.token));
                     setKopiert(l.id);
                     setTimeout(() => setKopiert(null), 1500);
                   }}

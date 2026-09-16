@@ -1,5 +1,18 @@
 # Changelog — PraxiOS
 
+## [1.15.1] — 2026-09-16 — Fix: Zwischenablage über HTTP (Bus #51)
+
+### Fix (Feldbericht via Bus #51)
+- **Kopieren bricht über direkte LAN-IP**: `navigator.clipboard` existiert nur
+  in Secure Contexts (HTTPS/localhost) — über `http://192.168.x.x` warf jeder
+  Kopier-Button (Portal-Link, Anamnese-Link, ICS-Abo, Austausch-Schlüssel,
+  Zahlungsziele-ICS) einen TypeError. Neuer Helper
+  `src/lib/clipboard.ts` mit Textarea/execCommand-Fallback; alle fünf
+  Stellen umgestellt. Pairing-Fehlertext (Netz vs. Auth) war in PaWaWi
+  bereits sauber getrennt — verifiziert, keine Änderung nötig.
+
+---
+
 ## [1.15.0] — 2026-09-16 — Mail-System komplett (ReWaWi-Sync v1.14–v1.16)
 
 ### Mail (neues Modul, ReWaWi-Sync)

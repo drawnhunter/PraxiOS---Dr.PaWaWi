@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { kopiereInZwischenablage } from "@/lib/clipboard";
 import { Link } from "react-router";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../api/router";
@@ -360,7 +361,7 @@ export default function Kalender() {
             setAboUrl={setAboUrl}
             kopiert={aboKopiert}
             onKopieren={async () => {
-              await navigator.clipboard.writeText(aboUrl);
+              await kopiereInZwischenablage(aboUrl);
               setAboKopiert(true);
               setTimeout(() => setAboKopiert(false), 2000);
             }}
