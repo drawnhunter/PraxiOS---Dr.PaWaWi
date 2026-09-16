@@ -221,6 +221,7 @@ export const settingsRouter = createRouter({
     ]);
     return {
       autonomie: einstellungen?.agentAutonomie ?? "vorschlag",
+      pseudonym: einstellungen?.agentPseudonym ?? true,
       tokens: tokens.map((t) => ({ id: t.id, name: t.name, aktiv: t.aktiv, letzteNutzung: t.letzteNutzung, createdAt: t.createdAt })),
       letzteAktionen: log,
     };
@@ -255,6 +256,16 @@ export const settingsRouter = createRouter({
         .insert(companySettings)
         .values({ id: 1, agentAutonomie: input.stufe } as never)
         .onDuplicateKeyUpdate({ set: { agentAutonomie: input.stufe } as never });
+      return { ok: true };
+    }),
+
+  agentPseudonymSetzen: adminQuery
+    .input(z.object({ aktiv: z.boolean() }))
+    .mutation(async ({ input }) => {
+      await getDb()
+        .insert(companySettings)
+        .values({ id: 1, agentPseudonym: input.aktiv } as never)
+        .onDuplicateKeyUpdate({ set: { agentPseudonym: input.aktiv } as never });
       return { ok: true };
     }),
 

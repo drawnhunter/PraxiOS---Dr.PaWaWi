@@ -6,12 +6,14 @@
 // Jede Schreib-Aktion wird in agent_log auditiert (sichtbar in Einstellungen).
 import { Hono } from "hono";
 import { createHash, randomBytes } from "node:crypto";
-import { eq, desc } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, like, lte } from "drizzle-orm";
 import { getDb } from "./queries/connection";
 import {
   agentTokens, agentAufgaben, agentLog, companySettings,
-  customers, invoices, invoiceItems, reminders, bankImporte,
+  customers, invoices, invoiceItems, planEntries, products, reminders, bankImporte,
+  rezepte, therapyPlans,
 } from "@db/schema";
+import { naechstePatientenNr } from "./lib/patientenNr";
 import { APP_VERSION } from "./lib/version";
 import { computeTotals, centToDecimal } from "./queries/invoicing";
 import { besterTreffer } from "@contracts/fuzzy";
@@ -609,6 +611,356 @@ app.post("/rechnung/:id/versenden", async (c) => {
   await audit("rechnung_versendet", { id, empfaenger, erfolg, fehler });
   if (!erfolg) return c.json({ fehler: `Versand fehlgeschlagen: ${fehler}` }, 502);
   return c.json({ ok: true, empfaenger });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── PaWaWi-Domäne (1.13.0): Patienten, Therapiepläne, Termine, Rezepte ─────
+// Pseudonymisierung an der API-Grenze: Die KI arbeitet mit P-Nummern,
+// Jahrgang und Ort. Klarnamen, volle Adressen, E-Mails und Geburtsdaten
+// bleiben im System (Einstellungen → Agent-API, Standard: an).
+// ══════════════════════════════════════════════════════════════════════════
+
+async function pseudonymAn(): Promise<boolean> {
+  const s = await getDb().query.companySettings.findFirst({
+    where: eq(companySettings.id, 1),
+    columns: { agentPseudonym: true },
+  });
+  return s?.agentPseudonym ?? true;
+}
+
+type Kunde = typeof customers.$inferSelect;
+
+/** Patient in der Agent-Ansicht: pseudonymisiert ODER voll (je nach Schalter). */
+function patientMaske(k: Kunde, pseudo: boolean) {
+  if (!pseudo) {
+    return {
+      id: k.id, pseudonym: k.synonym, name: k.name, geburtsdatum: k.geburtsdatum,
+      strasse: k.strasse, plz: k.plz, ort: k.ort, email: k.email, telefon: k.telefon,
+      patientenNr: k.patientenNr, krankenkasse: k.krankenkasse, tags: k.tags,
+    };
+  }
+  // Strenger Modus (Gesundheitsdaten): kein Name, keine vollständige Adresse,
+  // nur Jahrgang statt Geburtsdatum, keine Kontaktdaten.
+  return {
+    id: k.id,
+    pseudonym: k.synonym,
+    jahrgang: k.geburtsdatum ? Number(String(k.geburtsdatum).slice(0, 4)) : null,
+    ort: k.ort,
+    tags: k.tags,
+  };
+}
+
+// ── Patienten: suchen, lesen, anlegen (mit Dubletten-Prüfung) ──────────────
+app.get("/patienten", async (c) => {
+  const pseudo = await pseudonymAn();
+  const q = (c.req.query("q") ?? "").trim();
+  const limit = Math.max(1, Math.min(100, Number(c.req.query("limit") ?? "50")));
+  const db = getDb();
+  const rows = q
+    ? await db.select().from(customers).where(like(customers.name, `%${q}%`)).limit(limit)
+    : await db.select().from(customers).orderBy(asc(customers.name)).limit(limit);
+  return c.json({
+    anzahl: rows.length,
+    pseudonymisiert: pseudo,
+    patienten: rows.map((k) => patientMaske(k, pseudo)),
+  });
+});
+
+app.get("/patient/nach-name/:name", async (c) => {
+  const pseudo = await pseudonymAn();
+  const name = decodeURIComponent(c.req.param("name") ?? "").trim();
+  if (name.length < 2) return c.json({ fehler: "Name zu kurz (min. 2 Zeichen)." }, 400);
+  const alle = await getDb().select().from(customers);
+  const { fuzzyScore } = await import("@contracts/fuzzy");
+  const kandidaten = alle
+    .map((k) => ({ k, roh: fuzzyScore(k.name, name) }))
+    .filter((x): x is { k: Kunde; roh: number } => x.roh !== null && x.roh >= 40)
+    .sort((a, b) => b.roh - a.roh)
+    .slice(0, 5)
+    .map((x) => ({ k: x.k, score: Math.min(1, Math.round((x.roh / 100) * 100) / 100) }));
+  return c.json({
+    anzahl: kandidaten.length,
+    kandidaten: kandidaten.map((x) => ({ ...patientMaske(x.k, pseudo), score: Math.round(x.score * 100) / 100 })),
+  });
+});
+
+app.get("/patient/:id", async (c) => {
+  const pseudo = await pseudonymAn();
+  const id = Number(c.req.param("id"));
+  const k = await getDb().query.customers.findFirst({ where: eq(customers.id, id) });
+  if (!k) return c.json({ fehler: "Patient nicht gefunden." }, 404);
+  return c.json(patientMaske(k, pseudo));
+});
+
+app.post("/patient", async (c) => {
+  const body = await bodyLesen(c);
+  const name = String(body.name ?? "").trim();
+  if (!name) return c.json({ fehler: "name fehlt (Format: „Nachname, Vorname“)." }, 400);
+  const geb = body.geburtsdatum ? String(body.geburtsdatum).slice(0, 10) : null;
+  if (geb && !/^\d{4}-\d{2}-\d{2}$/.test(geb)) {
+    return c.json({ fehler: "geburtsdatum im Format JJJJ-MM-TT angeben." }, 400);
+  }
+  const db = getDb();
+
+  // Dubletten-Prüfung: gleicher Name (case-insensitiv) + gleiches Geburtsdatum
+  const namensTreffer = await db.select().from(customers).where(like(customers.name, name));
+  const dublette = namensTreffer.find(
+    (k) => k.name.toLowerCase() === name.toLowerCase() && (!geb || k.geburtsdatum === geb),
+  );
+  if (dublette) {
+    return c.json({
+      ok: false, fehler: "Patient existiert bereits (Name + Geburtsdatum).",
+      vorhanden: { id: dublette.id, pseudonym: dublette.synonym },
+    }, 409);
+  }
+
+  const id = await db.transaction(async (tx) => {
+    const patientenNr = await naechstePatientenNr(tx);
+    const [{ id: neuId }] = await tx
+      .insert(customers)
+      .values({
+        name,
+        geburtsdatum: geb,
+        patientenNr,
+        strasse: String(body.strasse ?? "—"),
+        plz: String(body.plz ?? "—"),
+        ort: String(body.ort ?? "—"),
+        land: body.land ? String(body.land) : "Deutschland",
+        email: body.email ? String(body.email) : null,
+        telefon: body.telefon ? String(body.telefon) : null,
+        krankenkasse: body.krankenkasse ? String(body.krankenkasse) : null,
+      })
+      .$returningId();
+    await tx.update(customers).set({ synonym: `P-${String(neuId).padStart(4, "0")}` }).where(eq(customers.id, neuId));
+    return neuId;
+  });
+  await audit("patient_angelegt", { id });
+  return c.json({ ok: true, id, pseudonym: `P-${String(id).padStart(4, "0")}`, hinweis: "Patient angelegt — Stammdaten bitte in der Akte vervollständigen/prüfen." });
+});
+
+// ── Therapiepläne: lesen + Entwurf anlegen ─────────────────────────────────
+app.get("/therapieplaene", async (c) => {
+  const pseudo = await pseudonymAn();
+  const db = getDb();
+  const bed = [];
+  if (c.req.query("patientId")) bed.push(eq(therapyPlans.patientId, Number(c.req.query("patientId"))));
+  if (c.req.query("status")) bed.push(eq(therapyPlans.status, c.req.query("status") as "geplant"));
+  bed.push(isNull(therapyPlans.geloeschtAm));
+  const plaene = await db.query.therapyPlans.findMany({
+    where: bed.length ? and(...bed) : undefined,
+    orderBy: [desc(therapyPlans.createdAt)],
+    with: { patient: { columns: { id: true, name: true, synonym: true, geburtsdatum: true, ort: true } } },
+    limit: 100,
+  });
+  const zaehler = await db.select({ planId: planEntries.planId, n: planEntries.id }).from(planEntries);
+  const anzahlJe = new Map<number, number>();
+  for (const z of zaehler) anzahlJe.set(z.planId, (anzahlJe.get(z.planId) ?? 0) + 1);
+  return c.json({
+    anzahl: plaene.length,
+    plaene: plaene.map((p) => ({
+      id: p.id,
+      patient: p.patient
+        ? pseudo
+          ? { id: p.patient.id, pseudonym: p.patient.synonym, jahrgang: p.patient.geburtsdatum ? Number(String(p.patient.geburtsdatum).slice(0, 4)) : null, ort: p.patient.ort }
+          : { id: p.patient.id, name: p.patient.name, pseudonym: p.patient.synonym }
+        : null,
+      titel: p.titel,
+      vonDatum: p.vonDatum,
+      bisDatum: p.bisDatum,
+      status: p.status,
+      anzahlEintraege: anzahlJe.get(p.id) ?? 0,
+    })),
+  });
+});
+
+app.get("/therapieplan/:id", async (c) => {
+  const pseudo = await pseudonymAn();
+  const id = Number(c.req.param("id"));
+  const p = await getDb().query.therapyPlans.findFirst({
+    where: eq(therapyPlans.id, id),
+    with: {
+      patient: { columns: { id: true, name: true, synonym: true, geburtsdatum: true, ort: true } },
+      entries: { orderBy: [asc(planEntries.datum), asc(planEntries.zeitVon), asc(planEntries.reihenfolge)] },
+    },
+  });
+  if (!p) return c.json({ fehler: "Therapieplan nicht gefunden." }, 404);
+  return c.json({
+    id: p.id,
+    patient: p.patient
+      ? pseudo
+        ? { id: p.patient.id, pseudonym: p.patient.synonym, jahrgang: p.patient.geburtsdatum ? Number(String(p.patient.geburtsdatum).slice(0, 4)) : null, ort: p.patient.ort }
+        : { id: p.patient.id, name: p.patient.name, pseudonym: p.patient.synonym }
+      : null,
+    titel: p.titel,
+    vonDatum: p.vonDatum,
+    bisDatum: p.bisDatum,
+    status: p.status,
+    diagnoseZiele: p.diagnoseZiele,
+    eintraege: p.entries.map((e) => ({
+      id: e.id, datum: e.datum, zeitVon: e.zeitVon, zeitBis: e.zeitBis,
+      leistungId: e.leistungId, leistung: e.leistungText,
+      menge: Number(e.menge), raum: e.raum, status: e.status,
+    })),
+  });
+});
+
+const DATUM_ISO = /^\d{4}-\d{2}-\d{2}$/;
+const ZEIT = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+app.post("/therapieplan-entwurf", async (c) => {
+  const body = await bodyLesen(c);
+  const db = getDb();
+
+  // Patient: per ID oder per Namen (Fuzzy)
+  let patient: Kunde | undefined;
+  if (body.patientId) {
+    patient = await db.query.customers.findFirst({ where: eq(customers.id, Number(body.patientId)) });
+  } else if (body.patient) {
+    const alle = await db.select().from(customers);
+    patient = besterTreffer(alle, String(body.patient), (k) => k.name)?.treffer;
+  }
+  if (!patient) {
+    return c.json({ fehler: "Patient nicht gefunden (patientId oder patient als Name; ggf. vorher POST /patient)." }, 404);
+  }
+
+  const vonDatum = String(body.vonDatum ?? "");
+  const bisDatum = String(body.bisDatum ?? "");
+  if (!DATUM_ISO.test(vonDatum) || !DATUM_ISO.test(bisDatum)) {
+    return c.json({ fehler: "vonDatum und bisDatum im Format JJJJ-MM-TT nötig." }, 400);
+  }
+  if (bisDatum < vonDatum) return c.json({ fehler: "bisDatum liegt vor vonDatum." }, 400);
+
+  const eintraege = Array.isArray(body.eintraege) ? body.eintraege : [];
+  if (eintraege.length === 0 || eintraege.length > 500) {
+    return c.json({ fehler: "eintraege fehlt: [{datum, zeitVon?, leistungText | leistungId, menge?}] (1–500)." }, 400);
+  }
+  const katalog = new Map((await db.select().from(products)).map((p) => [p.id, p]));
+  const sauber: {
+    datum: string; zeitVon: string | null; zeitBis: string | null;
+    leistungId: number | null; leistungText: string | null; menge: string; raum: string | null;
+  }[] = [];
+  for (const [i, e] of eintraege.entries()) {
+    const r = e as Record<string, unknown>;
+    const datum = String(r.datum ?? "");
+    if (!DATUM_ISO.test(datum)) return c.json({ fehler: `Eintrag ${i + 1}: datum im Format JJJJ-MM-TT nötig.` }, 400);
+    if (datum < vonDatum || datum > bisDatum) return c.json({ fehler: `Eintrag ${i + 1}: datum außerhalb des Plan-Zeitraums.` }, 400);
+    const zeitVon = r.zeitVon ? String(r.zeitVon) : null;
+    const zeitBis = r.zeitBis ? String(r.zeitBis) : null;
+    if (zeitVon && !ZEIT.test(zeitVon)) return c.json({ fehler: `Eintrag ${i + 1}: zeitVon als SS:MM.` }, 400);
+    if (zeitBis && !ZEIT.test(zeitBis)) return c.json({ fehler: `Eintrag ${i + 1}: zeitBis als SS:MM.` }, 400);
+    let leistungId: number | null = null;
+    let leistungText: string | null = r.leistungText ? String(r.leistungText).slice(0, 255) : null;
+    if (r.leistungId) {
+      const prod = katalog.get(Number(r.leistungId));
+      if (!prod) return c.json({ fehler: `Eintrag ${i + 1}: leistungId ${r.leistungId} nicht im Katalog (GET /leistungskatalog).` }, 404);
+      leistungId = prod.id;
+      if (!leistungText) leistungText = prod.name;
+    }
+    if (!leistungText && !leistungId) {
+      return c.json({ fehler: `Eintrag ${i + 1}: leistungText oder leistungId nötig.` }, 400);
+    }
+    sauber.push({
+      datum, zeitVon, zeitBis, leistungId, leistungText,
+      menge: String(r.menge ?? "1"), raum: r.raum ? String(r.raum).slice(0, 100) : null,
+    });
+  }
+
+  const planId = await db.transaction(async (tx) => {
+    const [{ id: neuId }] = await tx
+      .insert(therapyPlans)
+      .values({
+        patientId: patient!.id,
+        titel: body.titel ? String(body.titel).slice(0, 255) : `Therapieplan ${vonDatum} – ${bisDatum}`,
+        vonDatum,
+        bisDatum,
+        diagnoseZiele: body.diagnoseZiele ? String(body.diagnoseZiele).slice(0, 4000) : null,
+        status: "geplant",
+        notizen: "Erstellt per Agent-API (Kimi Claw) — bitte prüfen und aktivieren.",
+      })
+      .$returningId();
+    // Reihenfolge je Tag in der übergebenen Reihenfolge nummerieren
+    const zaehlerJeTag = new Map<string, number>();
+    await tx.insert(planEntries).values(
+      sauber.map((e) => {
+        const n = (zaehlerJeTag.get(e.datum) ?? 0) + 1;
+        zaehlerJeTag.set(e.datum, n);
+        return { ...e, planId: neuId, reihenfolge: n };
+      }),
+    );
+    return neuId;
+  });
+  await audit("therapieplan_entwurf", { planId, patientId: patient.id, eintraege: sauber.length });
+  return c.json({
+    ok: true,
+    id: planId,
+    patient: { id: patient.id, pseudonym: patient.synonym },
+    eintraege: sauber.length,
+    hinweis: "Plan als „geplant“ angelegt — die Praxis prüft und aktiviert ihn (Status bleibt bewusst beim Menschen).",
+  });
+});
+
+// ── Termine (Kalender = Plan-Einträge mit Datum/Zeit) ──────────────────────
+app.get("/termine", async (c) => {
+  const pseudo = await pseudonymAn();
+  const von = c.req.query("von") ?? heute();
+  const bis = c.req.query("bis") ?? von;
+  const patientId = c.req.query("patientId") ? Number(c.req.query("patientId")) : null;
+  const db = getDb();
+  const bed = [gte(planEntries.datum, von), lte(planEntries.datum, bis)];
+  const rows = await db
+    .select({ e: planEntries, plan: therapyPlans })
+    .from(planEntries)
+    .innerJoin(therapyPlans, eq(planEntries.planId, therapyPlans.id))
+    .where(and(...bed))
+    .orderBy(asc(planEntries.datum), asc(planEntries.zeitVon))
+    .limit(500);
+  const patienten = new Map<number, Kunde>();
+  for (const k of await db.select().from(customers)) patienten.set(k.id, k);
+  return c.json({
+    von, bis,
+    anzahl: rows.length,
+    termine: rows
+      .filter((r) => (patientId ? r.plan.patientId === patientId : true))
+      .filter((r) => !r.plan.geloeschtAm)
+      .map((r) => {
+        const k = patienten.get(r.plan.patientId);
+        return {
+          eintragId: r.e.id,
+          planId: r.plan.id,
+          datum: r.e.datum,
+          zeitVon: r.e.zeitVon,
+          zeitBis: r.e.zeitBis,
+          leistung: r.e.leistungText,
+          raum: r.e.raum,
+          status: r.e.status,
+          patient: k ? patientMaske(k, pseudo) : null,
+        };
+      }),
+  });
+});
+
+// ── Rezepte/Atteste: nur Metadaten (Inhalte bleiben lokal) ─────────────────
+app.get("/rezepte", async (c) => {
+  const pseudo = await pseudonymAn();
+  const db = getDb();
+  const patientId = c.req.query("patientId") ? Number(c.req.query("patientId")) : null;
+  const rows = await db.query.rezepte.findMany({
+    where: patientId ? eq(rezepte.patientId, patientId) : undefined,
+    orderBy: [desc(rezepte.createdAt)],
+    limit: 100,
+  });
+  const patienten = new Map<number, Kunde>();
+  for (const k of await db.select().from(customers)) patienten.set(k.id, k);
+  return c.json({
+    anzahl: rows.length,
+    rezepte: rows.map((r) => ({
+      id: r.id,
+      typ: r.typ,
+      erstelltAm: r.createdAt,
+      patient: r.patientId ? patientMaske(patienten.get(r.patientId)!, pseudo) : null,
+      hinweis: "Nur Metadaten — PDF-Inhalte verlassen den Server nicht (Gesundheitsdaten).",
+    })),
+  });
 });
 
 export default app;

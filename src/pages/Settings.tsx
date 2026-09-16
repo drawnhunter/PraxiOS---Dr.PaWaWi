@@ -488,6 +488,9 @@ export default function SettingsPage() {
       {/* ── Patienten-Portal ── */}
       <PortalAbschnitt />
 
+      {/* ── Agent-API (Kimi Claw) ── */}
+      <AgentAbschnitt />
+
       {/* ── Unterschrift (Rezepte/Atteste) ── */}
       <SignaturAbschnitt />
 
@@ -1124,6 +1127,148 @@ function UpdateAbschnitt() {
         {fehler && <span className="text-sm text-red-600">{fehler}</span>}
         {ok && <span className="text-sm text-green-700">{ok}</span>}
       </div>
+    </section>
+  );
+}
+
+// ── Agent-API (Kimi Claw): Tokens, Autonomie-Stufe, Pseudonymisierung ───────
+function AgentAbschnitt() {
+  const utils = trpc.useUtils();
+  const status = trpc.settings.agentStatus.useQuery();
+  const [neuerName, setNeuerName] = useState("");
+  const [frischesToken, setFrischesToken] = useState<string | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  const tokenErstellen = trpc.settings.agentTokenErstellen.useMutation({
+    onSuccess: (r) => {
+      setFrischesToken(r.token);
+      setNeuerName("");
+      utils.settings.agentStatus.invalidate();
+    },
+    onError: (e) => setFehler(e.message),
+  });
+  const tokenUmschalten = trpc.settings.agentTokenUmschalten.useMutation({
+    onSuccess: () => utils.settings.agentStatus.invalidate(),
+  });
+  const autonomieSetzen = trpc.settings.agentAutonomieSetzen.useMutation({
+    onSuccess: () => utils.settings.agentStatus.invalidate(),
+  });
+  const pseudonymSetzen = trpc.settings.agentPseudonymSetzen.useMutation({
+    onSuccess: () => utils.settings.agentStatus.invalidate(),
+  });
+
+  const d = status.data;
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-5">
+      <h2 className="mb-1 text-sm font-medium text-neutral-700">Agent-API (Kimi Claw)</h2>
+      <p className="mb-4 text-xs text-neutral-400">
+        REST-Zugang für externe Agenten unter <code>/api/agent</code> (Bearer-Token).
+        Jede Schreib-Aktion wird protokolliert.
+      </p>
+
+      {/* Autonomie + Pseudonymisierung */}
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-md border border-neutral-100 p-3">
+          <div className="mb-1 text-xs font-medium text-neutral-600">Autonomie-Stufe</div>
+          <div className="flex gap-1 rounded-md bg-neutral-100 p-0.5 text-xs">
+            {(["vorschlag", "vollautomatik"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                disabled={autonomieSetzen.isPending}
+                onClick={() => autonomieSetzen.mutate({ stufe: s })}
+                className={`flex-1 rounded px-2 py-1.5 transition-colors ${
+                  (d?.autonomie ?? "vorschlag") === s ? "bg-white font-medium shadow-sm" : "text-neutral-500"
+                }`}
+              >
+                {s === "vorschlag" ? "Vorschlag" : "Vollautomatik"}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11px] text-neutral-400">
+            Vorschlag: Lesen + Entwürfe (Mensch gibt frei). Vollautomatik: zusätzlich Versand.
+          </p>
+        </div>
+        <div className="rounded-md border border-neutral-100 p-3">
+          <div className="mb-1 text-xs font-medium text-neutral-600">Pseudonymisierung (Gesundheitsdaten)</div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[#0F766E]"
+              checked={d?.pseudonym ?? true}
+              disabled={pseudonymSetzen.isPending}
+              onChange={(e) => pseudonymSetzen.mutate({ aktiv: e.target.checked })}
+            />
+            KI sieht nur P-Nummern, Jahrgang + Ort
+          </label>
+          <p className="mt-1.5 text-[11px] text-neutral-400">
+            Empfohlen: an. Klarnamen, Adressen und Geburtsdaten bleiben im System.
+          </p>
+        </div>
+      </div>
+
+      {/* Tokens */}
+      <div className="mb-2 flex flex-wrap items-end gap-2">
+        <div className="min-w-44 flex-1">
+          <Label className="text-xs">Neues Token (Name, z. B. „Kimi Claw Haupt-Agent")</Label>
+          <Input value={neuerName} onChange={(e) => setNeuerName(e.target.value)} />
+        </div>
+        <Button
+          size="sm"
+          disabled={neuerName.trim().length < 2 || tokenErstellen.isPending}
+          onClick={() => tokenErstellen.mutate({ name: neuerName.trim() })}
+        >
+          Token erstellen
+        </Button>
+      </div>
+      {frischesToken && (
+        <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs">
+          <b>Token jetzt kopieren — er wird nur einmal angezeigt:</b>
+          <div className="mt-1 select-all break-all font-mono">{frischesToken}</div>
+        </div>
+      )}
+      {fehler && <p className="mb-2 text-sm text-red-600">{fehler}</p>}
+
+      {(d?.tokens ?? []).length > 0 && (
+        <div className="mb-4 divide-y divide-neutral-100">
+          {d!.tokens.map((t) => (
+            <div key={t.id} className="flex items-center justify-between py-2 text-sm">
+              <div>
+                <span className="font-medium">{t.name}</span>
+                <span className="ml-2 text-xs text-neutral-400">
+                  {t.letzteNutzung
+                    ? `zuletzt ${new Date(t.letzteNutzung).toLocaleString("de-DE")}`
+                    : "noch nie genutzt"}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => tokenUmschalten.mutate({ id: t.id, aktiv: !t.aktiv })}
+              >
+                {t.aktiv ? "Deaktivieren" : "Aktivieren"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Letzte Aktionen */}
+      {(d?.letzteAktionen ?? []).length > 0 && (
+        <div>
+          <div className="mb-1 text-xs font-medium text-neutral-600">Letzte Agent-Aktionen</div>
+          <div className="max-h-44 space-y-1 overflow-y-auto">
+            {d!.letzteAktionen.map((l) => (
+              <div key={l.id} className="flex items-baseline gap-2 text-xs">
+                <span className="shrink-0 tabular-nums text-neutral-400">
+                  {new Date(l.createdAt).toLocaleString("de-DE")}
+                </span>
+                <span className="font-medium">{l.aktion}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -71,6 +71,9 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "support_schluessel", ddl: "ALTER TABLE company_settings ADD COLUMN support_schluessel VARCHAR(80) NULL AFTER backup_zuletzt_am" },
   // Agent-API + Modul-System (1.10)
   { tabelle: "company_settings", spalte: "agent_autonomie", ddl: "ALTER TABLE company_settings ADD COLUMN agent_autonomie VARCHAR(20) NOT NULL DEFAULT 'vorschlag' AFTER support_schluessel" },
+  // Agent-API v2 (1.13.0): Pseudonymisierung Gesundheitsdaten
+  { tabelle: "company_settings", spalte: "agent_pseudonym", ddl: "ALTER TABLE company_settings ADD COLUMN agent_pseudonym TINYINT(1) NOT NULL DEFAULT 1 AFTER agent_autonomie" },
+  { tabelle: "customers", spalte: "synonym", ddl: "ALTER TABLE customers ADD COLUMN synonym VARCHAR(20) NULL AFTER tags" },
   { tabelle: "company_settings", spalte: "modul_konfig", ddl: "ALTER TABLE company_settings ADD COLUMN modul_konfig TEXT NULL AFTER agent_autonomie" },
   // Banking-Dedupe (1.10.2)
   { tabelle: "bank_transaktionen", spalte: "quell_id", ddl: "ALTER TABLE bank_transaktionen ADD COLUMN quell_id VARCHAR(40) NULL AFTER hash" },
@@ -742,6 +745,11 @@ const SCHEMA_UPDATES: { name: string; check: (db: string) => string; ddl: string
 
 // Einmalige Daten-Nachschübe (idempotent, nach den Spalten)
 const NACHSCHUB: { name: string; ddl: string }[] = [
+  {
+    // Agent-Pseudonyme (1.13.0): P-0001 aus der ID ableiten, nur fehlende
+    name: "customers-synonym-backfill",
+    ddl: "UPDATE customers SET synonym = CONCAT('P-', LPAD(id, 4, '0')) WHERE synonym IS NULL",
+  },
   {
     // Reihenfolge im Tag: Bestand in bisheriger Anzeige-Reihenfolge nummerieren
     // (nur Zeilen mit reihenfolge = 0 → läuft nie über manuelle Sortierungen)

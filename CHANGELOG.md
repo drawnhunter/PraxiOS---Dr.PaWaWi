@@ -1,5 +1,35 @@
 # Changelog — PraxiOS
 
+## [1.13.0] — 2026-09-16 — Agent-API v2: PaWaWi-Domäne + Pseudonymisierung
+
+### Neu (Agent-API, Kimi Claw)
+- **Patienten-Endpunkte**: `GET /patienten`, `GET /patient/nach-name/:name`
+  (fuzzy), `GET /patient/:id`, `POST /patient` mit **Dubletten-Prüfung**
+  (Name + Geburtsdatum → 409), automatischer Patientennummer aus dem
+  Nummernkreis und automatischem Synonym `P-####`
+- **Therapieplan-Endpunkte**: `GET /therapieplaene`, `GET /therapieplan/:id`,
+  `POST /therapieplan-entwurf` — der Agent legt Pläne (1–500 Einträge,
+  Katalog-Validierung, Tages-Reihenfolge) als **„geplant"** an; die Praxis
+  prüft und aktiviert (medizinische Hoheit bleibt beim Menschen)
+- **Termine lesen**: `GET /termine?von=&bis=&patientId=`
+- **Rezepte/Atteste als Metadaten**: `GET /rezepte?patientId=` — PDF-Inhalte
+  verlassen den Server nicht (Gesundheitsdaten)
+- **Pseudonymisierung an der API-Grenze** (DSGVO, strenger als ReWaWi):
+  Die KI arbeitet mit `P-0001` + Jahrgang + Ort; Klarnamen, Adressen,
+  E-Mails und Geburtsdaten bleiben im System. Umschaltbar in
+  Einstellungen → Agent-API (Standard: an). `customers.synonym` +
+  Backfill per Migration
+- **Einstellungen → Agent-API** ist jetzt auch im UI: Token-Verwaltung
+  (erstellen/deaktivieren), Autonomie-Stufe, Pseudonym-Schalter,
+  letzte Agent-Aktionen
+- Doku: `docs/agent-api.md` (vollständiger Leitfaden)
+
+### Migration (automatisch beim Start)
+- `company_settings.agent_pseudonym` (TINYINT, Default 1)
+- `customers.synonym` + Backfill `P-####` aus der ID
+
+---
+
 ## [1.12.0] — 2026-09-15 — Praxisbedarf-Bestellung („zur Anwendung in der Praxis")
 
 ### Neu

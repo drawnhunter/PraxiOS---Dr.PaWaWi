@@ -76,6 +76,9 @@ export const companySettings = mysqlTable("company_settings", {
   supportSchluessel: varchar("support_schluessel", { length: 80 }),
   // Agent-API: Autonomie-Stufe (vorschlag | vollautomatik)
   agentAutonomie: varchar("agent_autonomie", { length: 20 }).notNull().default("vorschlag"),
+  // Agent-API: Pseudonymisierung an der API-Grenze (1.13.0) — KI sieht
+  // P-Nummern/Jahrgang/Ort, Klarnamen & volle Adressen bleiben im System.
+  agentPseudonym: boolean("agent_pseudonym").notNull().default(true),
   // Modul-System: aktive/deaktivierte Module (JSON)
   modulKonfig: text("modul_konfig"),
   // Patienten-Portal: aktiv + sichtbare Bereiche (JSON)
@@ -224,6 +227,9 @@ export const customers = mysqlTable(
     versichertennummer: varchar("versichertennummer", { length: 50 }),
     aerztlicherAnsprechpartner: varchar("aerztlicher_ansprechpartner", { length: 255 }),
     tags: varchar("tags", { length: 500 }), // kommagetrennt, z. B. "borreliose,apherese"
+    // Agent-API-Pseudonym (1.13.0): „P-0001" — die KI arbeitet mit Pseudonymen,
+    // Klarnamen bleiben im System (Backfill per Migration).
+    synonym: varchar("synonym", { length: 20 }),
     ustIdNr: varchar("ust_id_nr", { length: 50 }),
     zahlungszielTage: int("zahlungsziel_tage"),
     debitornummer: int("debitornummer"),
