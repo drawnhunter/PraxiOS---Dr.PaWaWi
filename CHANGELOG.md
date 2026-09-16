@@ -1,5 +1,19 @@
 # Changelog — PraxiOS
 
+## [1.16.1] — 2026-09-16 — AU: immer BEIDE Ausfertigungen automatisch
+
+### Änderung (alex' Vorgabe)
+- **Eine Krankschreibung erzeugt jetzt immer beide Ausfertigungen** —
+  Arbeitgeber (ohne Diagnose) UND Krankenkasse (mit ICD), wie auf dem echten
+  Vordruck. Keine Auswahl mehr im Dialog; die Kassen-Markierungen
+  (Versorgungsleiden, Reha, Wiedereingliederung, Krankengeld) sind immer
+  sichtbar und gelten für das Kassen-Exemplar
+- Dateinamen: `Krankschreibung-Arbeitgeber TT.MM.JJJJ.pdf` /
+  `Krankschreibung-Krankenkasse TT.MM.JJJJ.pdf`; Listen (Akte, Portal)
+  zeigen das Exemplar im Titel
+
+---
+
 ## [1.16.0] — 2026-09-16 — AU-Formular v2: vollständiger Muster-1b-Gehalt
 
 ### Neu (aus dem Realbetrieb: „sieht nicht aus wie eine AU")

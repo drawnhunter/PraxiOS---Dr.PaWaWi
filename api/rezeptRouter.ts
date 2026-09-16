@@ -157,10 +157,18 @@ export const rezeptRouter = createRouter({
       const datum = heuteDe();
       const istAU =
         input.typ === "attest" && (input.inhalt as AttestInhalt).art === "krankschreibung";
-      const pdfBuf = istAU
-        ? // AU-Formular v2 (1.16.0): vollständiges Formular, immer A4
-          await renderAuPdf({
-            inhalt: input.inhalt as AttestInhalt,
+
+      // ── AU (1.16.1): IMMER beide Ausfertigungen (Arbeitgeber + Krankenkasse)
+      // — wie auf dem echten Vordruck. Zwei Dokumente, zwei Einträge.
+      if (istAU) {
+        const exemplare = [
+          { key: "arbeitgeber" as const, suffix: "Arbeitgeber" },
+          { key: "krankenkasse" as const, suffix: "Krankenkasse" },
+        ];
+        const ergebnisse: { id: number; documentId: number }[] = [];
+        for (const ex of exemplare) {
+          const pdfBuf = await renderAuPdf({
+            inhalt: { ...(input.inhalt as AttestInhalt), ausfertigung: ex.key },
             patient: {
               name: patient!.name,
               geburtsdatum: isoNachDe(patient!.geburtsdatum),
@@ -183,8 +191,56 @@ export const rezeptRouter = createRouter({
             },
             signaturBild: praxis.signaturBild,
             datum,
-          })
-        : await renderRezeptPdf({
+          });
+
+          const dateinameIntern = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.pdf`;
+          const ordner = String(patient!.id);
+          const relativerPfad = `${ordner}/${dateinameIntern}`;
+          mkdirSync(path.join(env.uploadDir, ordner), { recursive: true });
+          await writeFile(path.join(env.uploadDir, relativerPfad), pdfBuf);
+
+          const [{ id: documentId }] = await db
+            .insert(documents)
+            .values({
+              patientId: patient!.id,
+              kategorie: "arztbrief",
+              dateiname: `Krankschreibung-${ex.suffix} ${datum}.pdf`,
+              dateipfad: relativerPfad,
+              mimeType: "application/pdf",
+              groesse: pdfBuf.length,
+              uploadedBy: ctx.user.id,
+            })
+            .$returningId();
+
+          const [{ id }] = await db
+            .insert(rezepte)
+            .values({
+              patientId: patient!.id,
+              typ: "attest",
+              inhalt: JSON.stringify({ ...(input.inhalt as AttestInhalt), ausfertigung: ex.key }),
+              documentId,
+              createdBy: ctx.user.id,
+            })
+            .$returningId();
+          ergebnisse.push({ id, documentId });
+        }
+
+        await schreibeTimeline({
+          patientId: patient!.id,
+          typ: "dokument",
+          titel: "Krankschreibung erstellt (beide Ausfertigungen)",
+          beschreibung: `AU ${(input.inhalt as AttestInhalt).auVon ?? datum} – ${(input.inhalt as AttestInhalt).auBis ?? "?"}`,
+          createdBy: ctx.user.id,
+        });
+
+        return {
+          id: ergebnisse[0].id,
+          documentId: ergebnisse[0].documentId,
+          ids: ergebnisse.map((e) => e.id),
+        };
+      }
+
+      const pdfBuf = await renderRezeptPdf({
             typ: input.typ,
             inhalt: input.inhalt as RezeptInhalt | AttestInhalt,
             patient: patient

@@ -319,7 +319,11 @@ export const portalRouter = createRouter({
                   ?.map((m) => m.name)
                   .join(", ") ?? "Rezept"
               : (JSON.parse(r.inhalt) as { art?: string }).art === "krankschreibung"
-                ? "Krankschreibung"
+                ? `Krankschreibung${
+                    (JSON.parse(r.inhalt) as { ausfertigung?: string }).ausfertigung === "krankenkasse"
+                      ? " (Kassen-Exemplar)"
+                      : " (Arbeitgeber-Exemplar)"
+                  }`
                 : "Attest",
         })),
       };

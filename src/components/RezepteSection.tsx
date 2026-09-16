@@ -79,8 +79,7 @@ export function RezepteSection({ patientId }: { patientId: number }) {
   const [ortWahl, setOrtWahl] = useState("Praxis");
   const [ortFrei, setOrtFrei] = useState("");
   const [diagAusweisen, setDiagAusweisen] = useState(false);
-  // v1.16.0: AU-Formular (Muster-1b-Gehalt)
-  const [ausfertigung, setAusfertigung] = useState<"arbeitgeber" | "krankenkasse">("arbeitgeber");
+  // v1.16.x: AU-Formular (Muster-1b-Gehalt) — beide Ausfertigungen immer automatisch
   const [auFlags, setAuFlags] = useState({
     arbeitsunfall: false,
     durchgangsarzt: false,
@@ -113,7 +112,6 @@ export function RezepteSection({ patientId }: { patientId: number }) {
       setDiagAusweisen(false);
       setIcdGewaehlt([]);
       setIcdSucheText("");
-      setAusfertigung("arbeitgeber");
       setAuFlags({ arbeitsunfall: false, durchgangsarzt: false, sonstigerUnfall: false, versorgungsleiden: false, reha: false, wiedereingliederung: false });
       setKrankengeld("");
       utils.rezepte.liste.invalidate({ patientId });
@@ -169,15 +167,14 @@ export function RezepteSection({ patientId }: { patientId: number }) {
         feststellungsOrt: ortWahl === "anderer Ort" ? ortFrei.trim() || "Praxis" : ortWahl,
         diagnoseAusweisen: diagAusweisen,
         icdCodes: diagAusweisen && icdGewaehlt.length > 0 ? icdGewaehlt : undefined,
-        // AU-Formular v2 (nur bei Krankschreibung relevant)
-        ausfertigung: art === "krankschreibung" ? ausfertigung : undefined,
+        // AU-Formular v2: Server erzeugt IMMER beide Ausfertigungen (1.16.1)
         arbeitsunfall: art === "krankschreibung" && auFlags.arbeitsunfall ? true : undefined,
         durchgangsarzt: art === "krankschreibung" && auFlags.durchgangsarzt ? true : undefined,
         sonstigerUnfall: art === "krankschreibung" && auFlags.sonstigerUnfall ? true : undefined,
-        versorgungsleiden: art === "krankschreibung" && ausfertigung === "krankenkasse" && auFlags.versorgungsleiden ? true : undefined,
-        reha: art === "krankschreibung" && ausfertigung === "krankenkasse" && auFlags.reha ? true : undefined,
-        wiedereingliederung: art === "krankschreibung" && ausfertigung === "krankenkasse" && auFlags.wiedereingliederung ? true : undefined,
-        krankengeld: art === "krankschreibung" && ausfertigung === "krankenkasse" && krankengeld ? krankengeld : undefined,
+        versorgungsleiden: art === "krankschreibung" && auFlags.versorgungsleiden ? true : undefined,
+        reha: art === "krankschreibung" && auFlags.reha ? true : undefined,
+        wiedereingliederung: art === "krankschreibung" && auFlags.wiedereingliederung ? true : undefined,
+        krankengeld: art === "krankschreibung" && krankengeld ? krankengeld : undefined,
       },
     });
   };
@@ -225,7 +222,11 @@ export function RezepteSection({ patientId }: { patientId: number }) {
                           .join(", ")
                       : (JSON.parse(r.inhalt) as { art: string; text: string }).art ===
                           "krankschreibung"
-                        ? "Arbeitsunfähigkeitsbescheinigung"
+                        ? `Arbeitsunfähigkeitsbescheinigung${
+                            (JSON.parse(r.inhalt) as { ausfertigung?: string }).ausfertigung === "krankenkasse"
+                              ? " (Kassen-Exemplar)"
+                              : " (Arbeitgeber-Exemplar)"
+                          }`
                         : "Ärztliches Attest"}
                   </div>
                 </div>
@@ -391,25 +392,14 @@ export function RezepteSection({ patientId }: { patientId: number }) {
               </div>
             )}
 
-            {/* ── AU-Formular v2: Ausfertigung + Markierungen (1.16.0) ── */}
+            {/* ── AU-Formular v2: Markierungen (1.16.x) ── */}
             {art === "krankschreibung" && (
               <div className="rounded-md border border-neutral-200 p-3">
-                <Label>Ausfertigung</Label>
-                <div className="mt-1 flex gap-1 rounded-md bg-neutral-100 p-0.5 text-xs">
-                  {(["arbeitgeber", "krankenkasse"] as const).map((a) => (
-                    <button
-                      key={a}
-                      type="button"
-                      onClick={() => setAusfertigung(a)}
-                      className={`flex-1 rounded px-2 py-1.5 transition-colors ${
-                        ausfertigung === a ? "bg-white font-medium shadow-sm" : "text-neutral-500"
-                      }`}
-                    >
-                      {a === "arbeitgeber" ? "Arbeitgeber (ohne Diagnose)" : "Krankenkasse (mit ICD)"}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
+                <p className="mb-2 text-xs text-neutral-400">
+                  Es werden automatisch <strong>beide Ausfertigungen</strong> erstellt:
+                  Arbeitgeber (ohne Diagnose) + Krankenkasse (mit ICD).
+                </p>
+                <div className="grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
                   {(
                     [
                       ["arbeitsunfall", "Arbeitsunfall / Berufskrankheit"],
@@ -428,41 +418,40 @@ export function RezepteSection({ patientId }: { patientId: number }) {
                     </label>
                   ))}
                 </div>
-                {ausfertigung === "krankenkasse" && (
-                  <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
-                    <div className="grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
-                      {(
-                        [
-                          ["versorgungsleiden", "Versorgungsleiden (z. B. BVG)"],
-                          ["reha", "Reha erforderlich"],
-                          ["wiedereingliederung", "stufenweise Wiedereingliederung"],
-                        ] as const
-                      ).map(([key, label]) => (
-                        <label key={key} className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-[#0F766E]"
-                            checked={auFlags[key]}
-                            onChange={(e) => setAuFlags({ ...auFlags, [key]: e.target.checked })}
-                          />
-                          {label}
-                        </label>
-                      ))}
-                    </div>
-                    <div>
-                      <Label className="text-xs">Krankengeld-Markierung (optional)</Label>
-                      <Select value={krankengeld} onValueChange={(v) => setKrankengeld(v as typeof krankengeld)}>
-                        <SelectTrigger className="w-72">
-                          <SelectValue placeholder="keine" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="7woche">ab 7. AU-Woche / sonstiger Krankengeldfall</SelectItem>
-                          <SelectItem value="endbescheinigung">Endbescheinigung</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
+                  <div className="text-xs text-neutral-400">Nur Kassen-Exemplar:</div>
+                  <div className="grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
+                    {(
+                      [
+                        ["versorgungsleiden", "Versorgungsleiden (z. B. BVG)"],
+                        ["reha", "Reha erforderlich"],
+                        ["wiedereingliederung", "stufenweise Wiedereingliederung"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[#0F766E]"
+                          checked={auFlags[key]}
+                          onChange={(e) => setAuFlags({ ...auFlags, [key]: e.target.checked })}
+                        />
+                        {label}
+                      </label>
+                    ))}
                   </div>
-                )}
+                  <div>
+                    <Label className="text-xs">Krankengeld-Markierung (optional)</Label>
+                    <Select value={krankengeld} onValueChange={(v) => setKrankengeld(v as typeof krankengeld)}>
+                      <SelectTrigger className="w-72">
+                        <SelectValue placeholder="keine" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7woche">ab 7. AU-Woche / sonstiger Krankengeldfall</SelectItem>
+                        <SelectItem value="endbescheinigung">Endbescheinigung</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
             )}
 
