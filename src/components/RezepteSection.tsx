@@ -79,6 +79,17 @@ export function RezepteSection({ patientId }: { patientId: number }) {
   const [ortWahl, setOrtWahl] = useState("Praxis");
   const [ortFrei, setOrtFrei] = useState("");
   const [diagAusweisen, setDiagAusweisen] = useState(false);
+  // v1.16.0: AU-Formular (Muster-1b-Gehalt)
+  const [ausfertigung, setAusfertigung] = useState<"arbeitgeber" | "krankenkasse">("arbeitgeber");
+  const [auFlags, setAuFlags] = useState({
+    arbeitsunfall: false,
+    durchgangsarzt: false,
+    sonstigerUnfall: false,
+    versorgungsleiden: false,
+    reha: false,
+    wiedereingliederung: false,
+  });
+  const [krankengeld, setKrankengeld] = useState<"" | "7woche" | "endbescheinigung">("");
   const [icdSucheText, setIcdSucheText] = useState("");
   const [icdGewaehlt, setIcdGewaehlt] = useState<{ code: string; text: string }[]>([]);
   const icdTreffer = trpc.rezepte.icdSuche.useQuery(
@@ -102,6 +113,9 @@ export function RezepteSection({ patientId }: { patientId: number }) {
       setDiagAusweisen(false);
       setIcdGewaehlt([]);
       setIcdSucheText("");
+      setAusfertigung("arbeitgeber");
+      setAuFlags({ arbeitsunfall: false, durchgangsarzt: false, sonstigerUnfall: false, versorgungsleiden: false, reha: false, wiedereingliederung: false });
+      setKrankengeld("");
       utils.rezepte.liste.invalidate({ patientId });
       utils.customers.get.invalidate({ id: patientId });
     },
@@ -155,6 +169,15 @@ export function RezepteSection({ patientId }: { patientId: number }) {
         feststellungsOrt: ortWahl === "anderer Ort" ? ortFrei.trim() || "Praxis" : ortWahl,
         diagnoseAusweisen: diagAusweisen,
         icdCodes: diagAusweisen && icdGewaehlt.length > 0 ? icdGewaehlt : undefined,
+        // AU-Formular v2 (nur bei Krankschreibung relevant)
+        ausfertigung: art === "krankschreibung" ? ausfertigung : undefined,
+        arbeitsunfall: art === "krankschreibung" && auFlags.arbeitsunfall ? true : undefined,
+        durchgangsarzt: art === "krankschreibung" && auFlags.durchgangsarzt ? true : undefined,
+        sonstigerUnfall: art === "krankschreibung" && auFlags.sonstigerUnfall ? true : undefined,
+        versorgungsleiden: art === "krankschreibung" && ausfertigung === "krankenkasse" && auFlags.versorgungsleiden ? true : undefined,
+        reha: art === "krankschreibung" && ausfertigung === "krankenkasse" && auFlags.reha ? true : undefined,
+        wiedereingliederung: art === "krankschreibung" && ausfertigung === "krankenkasse" && auFlags.wiedereingliederung ? true : undefined,
+        krankengeld: art === "krankschreibung" && ausfertigung === "krankenkasse" && krankengeld ? krankengeld : undefined,
       },
     });
   };
@@ -365,6 +388,81 @@ export function RezepteSection({ patientId }: { patientId: number }) {
                   <Label>… bis einschließlich</Label>
                   <Input type="date" value={auBis} onChange={(e) => setAuBis(e.target.value)} />
                 </div>
+              </div>
+            )}
+
+            {/* ── AU-Formular v2: Ausfertigung + Markierungen (1.16.0) ── */}
+            {art === "krankschreibung" && (
+              <div className="rounded-md border border-neutral-200 p-3">
+                <Label>Ausfertigung</Label>
+                <div className="mt-1 flex gap-1 rounded-md bg-neutral-100 p-0.5 text-xs">
+                  {(["arbeitgeber", "krankenkasse"] as const).map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setAusfertigung(a)}
+                      className={`flex-1 rounded px-2 py-1.5 transition-colors ${
+                        ausfertigung === a ? "bg-white font-medium shadow-sm" : "text-neutral-500"
+                      }`}
+                    >
+                      {a === "arbeitgeber" ? "Arbeitgeber (ohne Diagnose)" : "Krankenkasse (mit ICD)"}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
+                  {(
+                    [
+                      ["arbeitsunfall", "Arbeitsunfall / Berufskrankheit"],
+                      ["durchgangsarzt", "dem Durchgangsarzt zugewiesen"],
+                      ["sonstigerUnfall", "sonstiger Unfall / Unfallfolgen"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[#0F766E]"
+                        checked={auFlags[key]}
+                        onChange={(e) => setAuFlags({ ...auFlags, [key]: e.target.checked })}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                {ausfertigung === "krankenkasse" && (
+                  <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
+                    <div className="grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
+                      {(
+                        [
+                          ["versorgungsleiden", "Versorgungsleiden (z. B. BVG)"],
+                          ["reha", "Reha erforderlich"],
+                          ["wiedereingliederung", "stufenweise Wiedereingliederung"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-[#0F766E]"
+                            checked={auFlags[key]}
+                            onChange={(e) => setAuFlags({ ...auFlags, [key]: e.target.checked })}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    <div>
+                      <Label className="text-xs">Krankengeld-Markierung (optional)</Label>
+                      <Select value={krankengeld} onValueChange={(v) => setKrankengeld(v as typeof krankengeld)}>
+                        <SelectTrigger className="w-72">
+                          <SelectValue placeholder="keine" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="7woche">ab 7. AU-Woche / sonstiger Krankengeldfall</SelectItem>
+                          <SelectItem value="endbescheinigung">Endbescheinigung</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

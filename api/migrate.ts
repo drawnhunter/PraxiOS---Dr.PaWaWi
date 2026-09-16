@@ -106,6 +106,10 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "patienten_nr_start", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_start INT NOT NULL DEFAULT 1 AFTER signatur_bild" },
   { tabelle: "company_settings", spalte: "patienten_nr_prefix_aktiv", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_prefix_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER patienten_nr_start" },
   { tabelle: "company_settings", spalte: "patienten_nr_prefix", ddl: "ALTER TABLE company_settings ADD COLUMN patienten_nr_prefix VARCHAR(20) NOT NULL DEFAULT 'P' AFTER patienten_nr_prefix_aktiv" },
+  // AU-Formular (1.16.0): LANR/BSNR/Fachrichtung an der Praxis
+  { tabelle: "company_settings", spalte: "arzt_nr", ddl: "ALTER TABLE company_settings ADD COLUMN arzt_nr VARCHAR(20) NULL AFTER webseite" },
+  { tabelle: "company_settings", spalte: "betriebsstaetten_nr", ddl: "ALTER TABLE company_settings ADD COLUMN betriebsstaetten_nr VARCHAR(20) NULL AFTER arzt_nr" },
+  { tabelle: "company_settings", spalte: "fachrichtung", ddl: "ALTER TABLE company_settings ADD COLUMN fachrichtung VARCHAR(120) NULL AFTER betriebsstaetten_nr" },
   // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
   { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
   // Rabatte (ReWaWi-Sync 1.9): Positions- + Hauptrabatt

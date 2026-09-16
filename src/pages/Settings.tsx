@@ -39,6 +39,9 @@ interface FirmenForm {
   email: string;
   telefon: string;
   webseite: string;
+  arztNr: string;
+  betriebsstaettenNr: string;
+  fachrichtung: string;
   standardZahlungsziel: number;
   fussText: string;
   datevBeraternummer: string;
@@ -122,6 +125,9 @@ export default function SettingsPage() {
       email: s.email ?? "",
       telefon: s.telefon ?? "",
       webseite: s.webseite ?? "",
+      arztNr: s.arztNr ?? "",
+      betriebsstaettenNr: s.betriebsstaettenNr ?? "",
+      fachrichtung: s.fachrichtung ?? "",
       standardZahlungsziel: s.standardZahlungsziel,
       fussText: s.fussText ?? "",
       datevBeraternummer: s.datevBeraternummer ?? "",
@@ -280,6 +286,28 @@ export default function SettingsPage() {
             />
           </div>
           <div>
+            <Label>Arzt-Nr. (LANR, für AU-Formular)</Label>
+            <Input
+              value={firma.arztNr}
+              onChange={(e) => setFirma({ ...firma, arztNr: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Betriebsstätten-Nr. (BSNR)</Label>
+            <Input
+              value={firma.betriebsstaettenNr}
+              onChange={(e) => setFirma({ ...firma, betriebsstaettenNr: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Fachrichtung (für AU-Formular)</Label>
+            <Input
+              placeholder="z. B. Facharzt für Allgemeinmedizin"
+              value={firma.fachrichtung}
+              onChange={(e) => setFirma({ ...firma, fachrichtung: e.target.value })}
+            />
+          </div>
+          <div>
             <Label>Standard-Zahlungsziel</Label>
             <Select
               value={String(firma.standardZahlungsziel)}
@@ -332,6 +360,9 @@ export default function SettingsPage() {
                 email: firma.email || null,
                 telefon: firma.telefon || null,
                 webseite: firma.webseite || null,
+                arztNr: firma.arztNr || null,
+                betriebsstaettenNr: firma.betriebsstaettenNr || null,
+                fachrichtung: firma.fachrichtung || null,
                 fussText: firma.fussText || null,
                 kreditorStartnummer: firma.kreditorStartnummer,
                 aufwandskontoDefault: firma.aufwandskontoDefault || null,

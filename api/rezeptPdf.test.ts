@@ -106,6 +106,32 @@ describe("renderRezeptPdf", () => {
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
   });
 
+  it("AU-Formular v2: beide Ausfertigungen rendern (1.16.0)", async () => {
+    const { renderAuPdf } = await import("./auPdf");
+    const basis = {
+      patient: { ...patient, krankenkasse: "DAK-Gesundheit", versichertennummer: "A123456789" },
+      praxis: { ...praxis, arztNr: "123456789", betriebsstaettenNr: "123456700", fachrichtung: "Facharzt für Allgemeinmedizin" },
+      signaturBild: null,
+      datum: "16.09.2026",
+    };
+    const ag = await renderAuPdf({
+      ...basis,
+      inhalt: { art: "krankschreibung", auVon: "16.09.2026", auBis: "18.09.2026", erstbescheinigung: true, text: "", ausfertigung: "arbeitgeber" },
+    });
+    expect(ag.subarray(0, 5).toString()).toBe("%PDF-");
+    const kk = await renderAuPdf({
+      ...basis,
+      inhalt: {
+        art: "krankschreibung", auVon: "16.09.2026", auBis: "30.09.2026", erstbescheinigung: false, text: "",
+        ausfertigung: "krankenkasse", diagnoseAusweisen: true,
+        icdCodes: [{ code: "A09.0", text: "Gastroenteritis" }],
+        reha: true, krankengeld: "7woche",
+      },
+    });
+    expect(kk.length).toBeGreaterThan(ag.length - 4000);
+    expect(kk.subarray(0, 5).toString()).toBe("%PDF-");
+  });
+
   it("defektes Signaturbild bricht das Rendering nicht", async () => {
     const pdf = await renderRezeptPdf({
       typ: "attest",

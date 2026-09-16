@@ -1,5 +1,30 @@
 # Changelog — PraxiOS
 
+## [1.16.0] — 2026-09-16 — AU-Formular v2: vollständiger Muster-1b-Gehalt
+
+### Neu (aus dem Realbetrieb: „sieht nicht aus wie eine AU")
+- **Arbeitsunfähigkeitsbescheinigung als echtes Formular** (A4): moderne,
+  klare Form mit dem vollständigen Informationsgehalt der Muster-1b-
+  Ausfertigungen — Kostenträger + Patientenblock, Nummernblock
+  (Kostenträgerkennung, Versicherten-Nr., BSNR, Arzt-Nr., Datum),
+  Erst-/Folgebescheinigung, Unfall-Checkboxen, AU-seit / voraussichtlich
+  bis / festgestellt am, Arztstempel-Block mit Signaturbild,
+  Ausfertigungs-Balken, Dokumentenversion im Fuß
+- **Zwei Ausfertigungen** (Wahl im Dialog): **Arbeitgeber** (ohne Diagnose —
+  Datenschutz-Regel) und **Krankenkasse** (AU-begründende Diagnose(n) ICD-10
+  in 6 Code-Feldern, Versorgungsleiden, Reha/Wiedereingliederung,
+  Im-Krankengeldfall-Block mit Hinweistext)
+- **Automatik aus der Akte**: Krankenkasse und Versichertennummer des
+  Patienten werden automatisch ins Formular übernommen
+- **Neue Praxis-Felder** (Einstellungen → Praxis): Arzt-Nr. (LANR),
+  Betriebsstätten-Nr. (BSNR), Fachrichtung — füllen den Nummernblock und
+  den Arztstempel (leer = Feld bleibt frei, handschriftlich ergänzbar)
+
+### Migration (automatisch beim Start)
+- `company_settings`: `arzt_nr`, `betriebsstaetten_nr`, `fachrichtung`
+
+---
+
 ## [1.15.1] — 2026-09-16 — Fix: Zwischenablage über HTTP (Bus #51)
 
 ### Fix (Feldbericht via Bus #51)

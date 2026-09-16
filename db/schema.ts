@@ -33,6 +33,10 @@ export const companySettings = mysqlTable("company_settings", {
   email: varchar("email", { length: 320 }),
   telefon: varchar("telefon", { length: 50 }),
   webseite: varchar("webseite", { length: 255 }),
+  // AU-Formular (1.16.0): Arzt-Nr. (LANR), Betriebsstätten-Nr. (BSNR), Fachrichtung
+  arztNr: varchar("arzt_nr", { length: 20 }),
+  betriebsstaettenNr: varchar("betriebsstaetten_nr", { length: 20 }),
+  fachrichtung: varchar("fachrichtung", { length: 120 }),
   standardZahlungsziel: int("standard_zahlungsziel").notNull().default(14),
   fussText: text("fuss_text"),
   // DATEV-Export (Buchungsstapel)

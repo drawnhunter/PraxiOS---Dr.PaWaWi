@@ -42,6 +42,25 @@ export interface AttestInhalt {
   diagnoseAusweisen?: boolean;
   /** Gewählte ICD-10-GM-Codes (nur gerendert, wenn diagnoseAusweisen). */
   icdCodes?: IcdCode[];
+
+  // ── AU-Formular v2 (1.16.0, Gehalt Muster 1b) ────────────────────────────
+  /** Ausfertigung: Arbeitgeber (ohne Diagnose, Standard) oder Krankenkasse
+   *  (mit ICD, Reha, Krankengeld). Nur bei krankschreibung. */
+  ausfertigung?: "arbeitgeber" | "krankenkasse";
+  /** Arbeitsunfall / Arbeitsunfallfolgen / Berufskrankheit. */
+  arbeitsunfall?: boolean;
+  /** Dem Durchgangsarzt zugewiesen. */
+  durchgangsarzt?: boolean;
+  /** Sonstiger Unfall / Unfallfolgen. */
+  sonstigerUnfall?: boolean;
+  /** Versorgungsleiden (z. B. BVG) — nur Kassen-Exemplar. */
+  versorgungsleiden?: boolean;
+  /** Leistungen zur medizinischen Rehabilitation erforderlich. */
+  reha?: boolean;
+  /** Stufenweise Wiedereingliederung. */
+  wiedereingliederung?: boolean;
+  /** Krankengeld-Markierung (nur Kassen-Exemplar). */
+  krankengeld?: "7woche" | "sonstiger" | "endbescheinigung" | null;
 }
 
 export const REZEPT_TYP_LABEL: Record<"rezept" | "attest" | "praxisbedarf", string> = {

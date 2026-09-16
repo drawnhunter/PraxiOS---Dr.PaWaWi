@@ -14,6 +14,7 @@ import { getDb } from "./queries/connection";
 import { companySettings, customers, documents, loeschprotokoll, rezepte } from "@db/schema";
 import { env } from "./lib/env";
 import { renderRezeptPdf } from "./rezeptPdf";
+import { renderAuPdf } from "./auPdf";
 import { icdSuche } from "./lib/icd";
 import { schreibeTimeline } from "./lib/timeline";
 import type { AttestInhalt, RezeptInhalt } from "@contracts/rezepte";
@@ -62,6 +63,15 @@ const erstellenInput = z.discriminatedUnion("typ", [
         .array(z.object({ code: z.string().trim().min(2).max(10), text: z.string().trim().min(1).max(300) }))
         .max(10)
         .optional(),
+      // AU-Formular v2 (1.16.0)
+      ausfertigung: z.enum(["arbeitgeber", "krankenkasse"]).optional(),
+      arbeitsunfall: z.boolean().optional(),
+      durchgangsarzt: z.boolean().optional(),
+      sonstigerUnfall: z.boolean().optional(),
+      versorgungsleiden: z.boolean().optional(),
+      reha: z.boolean().optional(),
+      wiedereingliederung: z.boolean().optional(),
+      krankengeld: z.enum(["7woche", "sonstiger", "endbescheinigung"]).nullable().optional(),
     }),
   }),
 ]);
@@ -145,29 +155,58 @@ export const rezeptRouter = createRouter({
       }
 
       const datum = heuteDe();
-      const pdfBuf = await renderRezeptPdf({
-        typ: input.typ,
-        inhalt: input.inhalt as RezeptInhalt | AttestInhalt,
-        patient: patient
-          ? {
-              name: patient.name,
-              geburtsdatum: isoNachDe(patient.geburtsdatum),
-              strasse: patient.strasse,
-              plz: patient.plz,
-              ort: patient.ort,
-            }
-          : null,
-        praxis: {
-          name: praxis.name,
-          strasse: praxis.strasse,
-          plz: praxis.plz,
-          ort: praxis.ort,
-          telefon: praxis.telefon,
-          email: praxis.email,
-        },
-        signaturBild: praxis.signaturBild,
-        datum,
-      });
+      const istAU =
+        input.typ === "attest" && (input.inhalt as AttestInhalt).art === "krankschreibung";
+      const pdfBuf = istAU
+        ? // AU-Formular v2 (1.16.0): vollständiges Formular, immer A4
+          await renderAuPdf({
+            inhalt: input.inhalt as AttestInhalt,
+            patient: {
+              name: patient!.name,
+              geburtsdatum: isoNachDe(patient!.geburtsdatum),
+              strasse: patient!.strasse,
+              plz: patient!.plz,
+              ort: patient!.ort,
+              krankenkasse: patient!.krankenkasse,
+              versichertennummer: patient!.versichertennummer,
+            },
+            praxis: {
+              name: praxis.name,
+              strasse: praxis.strasse,
+              plz: praxis.plz,
+              ort: praxis.ort,
+              telefon: praxis.telefon,
+              email: praxis.email,
+              arztNr: praxis.arztNr,
+              betriebsstaettenNr: praxis.betriebsstaettenNr,
+              fachrichtung: praxis.fachrichtung,
+            },
+            signaturBild: praxis.signaturBild,
+            datum,
+          })
+        : await renderRezeptPdf({
+            typ: input.typ,
+            inhalt: input.inhalt as RezeptInhalt | AttestInhalt,
+            patient: patient
+              ? {
+                  name: patient.name,
+                  geburtsdatum: isoNachDe(patient.geburtsdatum),
+                  strasse: patient.strasse,
+                  plz: patient.plz,
+                  ort: patient.ort,
+                }
+              : null,
+            praxis: {
+              name: praxis.name,
+              strasse: praxis.strasse,
+              plz: praxis.plz,
+              ort: praxis.ort,
+              telefon: praxis.telefon,
+              email: praxis.email,
+            },
+            signaturBild: praxis.signaturBild,
+            datum,
+          });
 
       // Datei ablegen — Praxisbedarf im praxisweiten Ordner, nicht in einer Akte
       const dateinameIntern = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.pdf`;
@@ -259,30 +298,58 @@ export const rezeptRouter = createRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Daten fehlen." });
       }
       const datum = r.createdAt.toLocaleDateString("de-DE");
-      const pdfBuf = await renderRezeptPdf({
-        typ: r.typ,
-        inhalt: JSON.parse(r.inhalt),
-        patient: patient
-          ? {
-              name: patient.name,
-              geburtsdatum: isoNachDe(patient.geburtsdatum),
-              strasse: patient.strasse,
-              plz: patient.plz,
-              ort: patient.ort,
-            }
-          : null,
-        praxis: {
-          name: praxis.name,
-          strasse: praxis.strasse,
-          plz: praxis.plz,
-          ort: praxis.ort,
-          telefon: praxis.telefon,
-          email: praxis.email,
-        },
-        signaturBild: praxis.signaturBild,
-        datum,
-        format: "a4",
-      });
+      const inhaltParsed = JSON.parse(r.inhalt) as AttestInhalt;
+      const istAU = r.typ === "attest" && inhaltParsed.art === "krankschreibung";
+      const pdfBuf = istAU
+        ? await renderAuPdf({
+            inhalt: inhaltParsed,
+            patient: {
+              name: patient!.name,
+              geburtsdatum: isoNachDe(patient!.geburtsdatum),
+              strasse: patient!.strasse,
+              plz: patient!.plz,
+              ort: patient!.ort,
+              krankenkasse: patient!.krankenkasse,
+              versichertennummer: patient!.versichertennummer,
+            },
+            praxis: {
+              name: praxis.name,
+              strasse: praxis.strasse,
+              plz: praxis.plz,
+              ort: praxis.ort,
+              telefon: praxis.telefon,
+              email: praxis.email,
+              arztNr: praxis.arztNr,
+              betriebsstaettenNr: praxis.betriebsstaettenNr,
+              fachrichtung: praxis.fachrichtung,
+            },
+            signaturBild: praxis.signaturBild,
+            datum,
+          })
+        : await renderRezeptPdf({
+            typ: r.typ,
+            inhalt: JSON.parse(r.inhalt),
+            patient: patient
+              ? {
+                  name: patient.name,
+                  geburtsdatum: isoNachDe(patient.geburtsdatum),
+                  strasse: patient.strasse,
+                  plz: patient.plz,
+                  ort: patient.ort,
+                }
+              : null,
+            praxis: {
+              name: praxis.name,
+              strasse: praxis.strasse,
+              plz: praxis.plz,
+              ort: praxis.ort,
+              telefon: praxis.telefon,
+              email: praxis.email,
+            },
+            signaturBild: praxis.signaturBild,
+            datum,
+            format: "a4",
+          });
       return { dateiname: r.dokument.dateiname, base64: pdfBuf.toString("base64") };
     }),
 
