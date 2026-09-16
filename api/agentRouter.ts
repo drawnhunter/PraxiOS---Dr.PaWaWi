@@ -1320,4 +1320,442 @@ app.delete("/webhooks/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── Mail-Modul (1.15.0, ReWaWi-Sync v1.15–v1.17): Postfach, Entwürfe, ─────
+// ── Versand, Belege, Kontakte — pseudonymisiert wie gehabt ────────────────
+// ══════════════════════════════════════════════════════════════════════════
+app.get("/mails", async (c) => {
+  const { mailMails } = await import("@db/schema");
+  const { and, desc, eq, gte, lte, like: driLike, or, sql } = await import("drizzle-orm");
+  const { ladeSynonymKarte, maskiereGegenstelle } = await import("./lib/pseudonym");
+  const karte = await ladeSynonymKarte();
+  const q = c.req.query("q")?.trim();
+  const ordner = c.req.query("ordner");
+  const limit = Math.min(100, Number(c.req.query("limit") ?? 40));
+  const offset = Math.max(0, Number(c.req.query("offset") ?? 0) || 0);
+  const von = c.req.query("von")?.trim();
+  const bis = c.req.query("bis")?.trim();
+  const bedingungen = [];
+  if (ordner) bedingungen.push(eq(mailMails.ordner, ordner));
+  if (c.req.query("nurUngelesene") === "1" || c.req.query("nurUngelesene") === "true") {
+    bedingungen.push(eq(mailMails.gelesen, false));
+  }
+  if (c.req.query("nurMitAnhang") === "1" || c.req.query("nurMitAnhang") === "true") {
+    bedingungen.push(sql`JSON_LENGTH(${mailMails.anhaenge}) > 0`);
+  }
+  if (von && /^\d{4}-\d{2}-\d{2}$/.test(von)) bedingungen.push(gte(mailMails.datum, new Date(`${von}T00:00:00`)));
+  if (bis && /^\d{4}-\d{2}-\d{2}$/.test(bis)) bedingungen.push(lte(mailMails.datum, new Date(`${bis}T23:59:59`)));
+  if (q) {
+    const muster = `%${q}%`;
+    bedingungen.push(
+      or(
+        driLike(mailMails.betreff, muster),
+        driLike(mailMails.absenderName, muster),
+        driLike(mailMails.absenderAdresse, muster),
+        driLike(mailMails.textPlain, muster),
+      ),
+    );
+  }
+  const rows = await getDb()
+    .select()
+    .from(mailMails)
+    .where(bedingungen.length ? and(...bedingungen) : undefined)
+    .orderBy(desc(mailMails.datum), desc(mailMails.id))
+    .limit(limit)
+    .offset(offset);
+  return c.json({
+    anzahl: rows.length,
+    offset,
+    mails: rows.map((m) => ({
+      id: m.id, ordner: m.ordner, betreff: m.betreff,
+      absender: maskiereGegenstelle(karte, m.absenderName ?? m.absenderAdresse ?? ""),
+      datum: m.datum, gelesen: m.gelesen,
+      anzahlAnhaenge: m.anhaenge ? (JSON.parse(m.anhaenge) as unknown[]).length : 0,
+    })),
+  });
+});
+
+/** Sofort-Sync (optional gezielt: {kontoId?, ordner?} im Body). Wasserzeichen-Backfill läuft dabei weiter Richtung Vergangenheit. */
+app.post("/mails/sync", async (c) => {
+  const { emailKonten } = await import("@db/schema");
+  const { synchronisiereKonto } = await import("./imapDienst");
+  let kontoFilter: number | null = null;
+  let ordnerFilter: string | null = null;
+  try {
+    const body = await bodyLesen(c);
+    kontoFilter = body.kontoId ? Number(body.kontoId) : null;
+    ordnerFilter = body.ordner ? String(body.ordner) : null;
+  } catch { /* leerer Body = alle Konten */ }
+  const konten = await getDb().select({ id: emailKonten.id }).from(emailKonten);
+  const ergebnisse = [];
+  for (const k of konten) {
+    if (kontoFilter && k.id !== kontoFilter) continue;
+    ergebnisse.push({ kontoId: k.id, ...(await synchronisiereKonto(k.id, ordnerFilter)) });
+  }
+  await audit("mails_sync", { kontoFilter, ordnerFilter, ergebnisse });
+  return c.json({ ok: true, konten: ergebnisse });
+});
+
+/** Mails ohne Datum: Datum aus dem IMAP-Envelope nachpflegen (Fallback: created_at). */
+app.post("/mails/datum-heilen", async (c) => {
+  const { heileMailDaten } = await import("./imapDienst");
+  const ergebnis = await heileMailDaten();
+  await audit("mails_datum_heilung", ergebnis);
+  return c.json({ ok: true, ...ergebnis });
+});
+
+/** Ordner-Übersicht: welche Fächer existieren (je Konto) und wie viele Mails darin liegen. */
+app.get("/mail-ordner", async (c) => {
+  const { mailMails } = await import("@db/schema");
+  const { asc, sql } = await import("drizzle-orm");
+  const rows = await getDb()
+    .select({ ordner: mailMails.ordner, kontoId: mailMails.kontoId, anzahl: sql<number>`COUNT(*)` })
+    .from(mailMails)
+    .groupBy(mailMails.kontoId, mailMails.ordner)
+    .orderBy(asc(mailMails.kontoId), asc(mailMails.ordner));
+  return c.json({
+    ordner: rows.map((r) => ({ kontoId: r.kontoId, ordner: r.ordner, anzahl: Number(r.anzahl) })),
+    gesamt: rows.reduce((s, r) => s + Number(r.anzahl), 0),
+  });
+});
+
+app.get("/mail/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const { mailMails } = await import("@db/schema");
+  const { ladeSynonymKarte, maskiereGegenstelle } = await import("./lib/pseudonym");
+  const karte = await ladeSynonymKarte();
+  const m = await getDb().query.mailMails.findFirst({ where: eq(mailMails.id, id) });
+  if (!m) return c.json({ ok: false, fehler: "Mail nicht gefunden." }, 404);
+  let anhaenge: unknown[] = [];
+  try {
+    anhaenge = m.anhaenge ? (JSON.parse(m.anhaenge) as unknown[]) : [];
+  } catch { /* egal */ }
+  const basis = {
+    id: m.id, ordner: m.ordner, betreff: m.betreff,
+    absender: maskiereGegenstelle(karte, m.absenderName ?? ""),
+    absenderAdresse: m.absenderAdresse,
+    datum: m.datum, gelesen: m.gelesen, markiert: m.markiert,
+  };
+  // kurz=1: ohne textHtml (Newsletter-Blobs sind 100–600 KB) — Plaintext + Metadaten reichen
+  if (c.req.query("kurz") === "1" || c.req.query("kurz") === "true") {
+    return c.json({
+      ...basis, textPlain: m.textPlain, anhaenge,
+      htmlVorhanden: Boolean(m.textHtml), htmlLaenge: m.textHtml?.length ?? 0,
+    });
+  }
+  return c.json({ ...basis, textPlain: m.textPlain, textHtml: m.textHtml, anhaenge });
+});
+
+app.get("/mail/:id/anhang/:index", async (c) => {
+  const mailId = Number(c.req.param("id"));
+  const index = Number(c.req.param("index"));
+  const { mailMails, postEingang } = await import("@db/schema");
+  const { metaLesen } = await import("./lib/mailBeleg");
+  const db = getDb();
+  const m = await db.query.mailMails.findFirst({ where: eq(mailMails.id, mailId) });
+  if (!m) return c.json({ ok: false, fehler: "Mail nicht gefunden." }, 404);
+  const meta = metaLesen(m.anhaenge)[index];
+  if (!meta) return c.json({ ok: false, fehler: "Anhang nicht gefunden." }, 404);
+  if (!meta.postEingangId) return c.json({ ok: false, fehler: "Anhangtyp nur als Metadaten (kein Download)." }, 404);
+  const beleg = await db.query.postEingang.findFirst({ where: eq(postEingang.id, meta.postEingangId) });
+  if (!beleg?.dateiInhalt) return c.json({ ok: false, fehler: "Anhang-Datei nicht vorhanden." }, 404);
+  return c.json({ ok: true, dateiname: beleg.originalname, mime: beleg.mime, base64: beleg.dateiInhalt });
+});
+
+app.post("/mail/versenden", async (c) => {
+  const body = await bodyLesen(c);
+  const empfaenger = Array.isArray(body.empfaenger)
+    ? body.empfaenger.map(String)
+    : String(body.empfaenger ?? "").split(",").map((x) => x.trim());
+  if (empfaenger.filter(Boolean).length === 0) return c.json({ ok: false, fehler: "empfaenger fehlt (Array oder kommagetrennt)." }, 400);
+  const erlaubnis = await versandErlaubt(c, empfaenger);
+  if (!erlaubnis.ok) {
+    return c.json({ ok: false, fehler: "Direktversand gesperrt: weder Stufe „vollautomatik“ noch Token-Freigabeliste deckt alle Empfänger ab. Tipp: POST /mail/entwurf für den Mensch-Review-Weg." }, 403);
+  }
+  const betreff = String(body.betreff ?? "").trim();
+  const text = String(body.text ?? "");
+  if (!betreff || !text) return c.json({ ok: false, fehler: "betreff + text nötig." }, 400);
+  const anhaenge = Array.isArray(body.anhaenge)
+    ? (body.anhaenge as { dateiname?: unknown; base64?: unknown; mime?: unknown }[])
+        .filter((a) => a?.dateiname && a?.base64)
+        .map((a) => ({ dateiname: String(a.dateiname), base64: String(a.base64), mime: String(a.mime ?? "application/octet-stream") }))
+    : undefined;
+  const { versendeMail } = await import("./lib/mailVersand");
+  const r = await versendeMail({
+    kontoId: body.kontoId ? Number(body.kontoId) : undefined,
+    empfaenger,
+    cc: Array.isArray(body.cc) ? body.cc.map(String) : undefined,
+    bcc: Array.isArray(body.bcc) ? body.bcc.map(String) : undefined,
+    betreff,
+    text,
+    html: body.html ? String(body.html) : undefined,
+    anhaenge,
+    inReplyTo: body.inReplyTo ? String(body.inReplyTo) : null,
+    references: body.references ? String(body.references) : null,
+    mitSignatur: body.mitSignatur !== false,
+  });
+  await audit("mail_versendet", { empfaenger, betreff, via: erlaubnis.via, erfolg: r.ok, fehler: r.fehler });
+  if (!r.ok) return c.json({ ok: false, fehler: `Versand fehlgeschlagen: ${r.fehler}` }, 502);
+  return c.json({ ok: true, via: erlaubnis.via });
+});
+
+// ── Mail-Entwürfe (Agent legt vor, Mensch prüft & sendet in der UI) ────────
+app.post("/mail/entwurf", async (c) => {
+  const body = await bodyLesen(c);
+  const empfaenger = Array.isArray(body.empfaenger)
+    ? body.empfaenger.map(String).join(", ")
+    : String(body.empfaenger ?? "").trim();
+  const betreff = String(body.betreff ?? "").trim();
+  const text = String(body.text ?? body.html ?? "");
+  if (!empfaenger || !betreff || !text) return c.json({ ok: false, fehler: "empfaenger + betreff + text nötig." }, 400);
+  const { mailEntwuerfe } = await import("@db/schema");
+  const anhaenge = Array.isArray(body.anhaenge)
+    ? (body.anhaenge as { dateiname?: unknown; base64?: unknown; mime?: unknown }[])
+        .filter((a) => a?.dateiname && a?.base64)
+        .map((a) => ({ dateiname: String(a.dateiname), base64: String(a.base64), mime: String(a.mime ?? "application/octet-stream") }))
+    : null;
+  const [{ id }] = await getDb()
+    .insert(mailEntwuerfe)
+    .values({
+      empfaenger,
+      cc: Array.isArray(body.cc) ? body.cc.map(String).join(", ") : body.cc ? String(body.cc) : null,
+      bcc: Array.isArray(body.bcc) ? body.bcc.map(String).join(", ") : body.bcc ? String(body.bcc) : null,
+      kontoId: body.kontoId ? Number(body.kontoId) : null,
+      betreff,
+      text,
+      anhaenge: anhaenge ? JSON.stringify(anhaenge) : null,
+      inReplyTo: body.inReplyTo ? String(body.inReplyTo) : null,
+      referenzen: body.references ? String(body.references) : null,
+      quelle: "agent",
+    })
+    .$returningId();
+  await audit("mail_entwurf_angelegt", { id, empfaenger, betreff, anhaenge: anhaenge?.length ?? 0 });
+  return c.json({ ok: true, id, hinweis: "Entwurf liegt im Verfassen-Tab (Entwürfe-Liste) — der Mensch prüft und sendet." });
+});
+
+app.get("/mail-entwuerfe", async (c) => {
+  const { mailEntwuerfe } = await import("@db/schema");
+  const { desc, eq } = await import("drizzle-orm");
+  const kontoId = c.req.query("kontoId") ? Number(c.req.query("kontoId")) : null;
+  const rows = await getDb()
+    .select()
+    .from(mailEntwuerfe)
+    .where(kontoId ? eq(mailEntwuerfe.kontoId, kontoId) : undefined)
+    .orderBy(desc(mailEntwuerfe.updatedAt))
+    .limit(100);
+  return c.json({
+    anzahl: rows.length,
+    entwuerfe: rows.map((e) => ({
+      id: e.id, empfaenger: e.empfaenger, cc: e.cc, bcc: e.bcc, kontoId: e.kontoId,
+      betreff: e.betreff, text: e.text,
+      anhaenge: e.anhaenge ? (JSON.parse(e.anhaenge) as { dateiname: string }[]).map((a) => a.dateiname) : [],
+      quelle: e.quelle, aktualisiert: e.updatedAt,
+    })),
+  });
+});
+
+app.delete("/mail-entwurf/:id", async (c) => {
+  const { mailEntwuerfe } = await import("@db/schema");
+  const id = Number(c.req.param("id"));
+  await getDb().delete(mailEntwuerfe).where(eq(mailEntwuerfe.id, id));
+  await audit("mail_entwurf_verworfen", { id });
+  return c.json({ ok: true, verworfen: id });
+});
+
+/** Entwurf direkt senden (Gate: vollautomatik ODER Token-Freigabeliste deckt alle Empfänger). */
+app.post("/mail-entwurf/:id/senden", async (c) => {
+  const { mailEntwuerfe } = await import("@db/schema");
+  const id = Number(c.req.param("id"));
+  const db = getDb();
+  const e = await db.query.mailEntwuerfe.findFirst({ where: eq(mailEntwuerfe.id, id) });
+  if (!e) return c.json({ ok: false, fehler: "Entwurf nicht gefunden." }, 404);
+  const empfaenger = (e.empfaenger ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (empfaenger.length === 0) return c.json({ ok: false, fehler: "Entwurf hat keine Empfänger." }, 400);
+  const erlaubnis = await versandErlaubt(c, empfaenger);
+  if (!erlaubnis.ok) {
+    return c.json({ ok: false, fehler: "Direktversand gesperrt (weder vollautomatik noch Freigabeliste). Der Entwurf bleibt für den Mensch-Review-Weg in der UI." }, 403);
+  }
+  const { versendeMail } = await import("./lib/mailVersand");
+  const text = e.text ?? "";
+  const r = await versendeMail({
+    kontoId: e.kontoId ?? undefined,
+    empfaenger,
+    cc: e.cc ? e.cc.split(",").map((x) => x.trim()).filter(Boolean) : undefined,
+    bcc: e.bcc ? e.bcc.split(",").map((x) => x.trim()).filter(Boolean) : undefined,
+    betreff: e.betreff ?? "(kein Betreff)",
+    text: text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || text,
+    html: text.startsWith("<") ? text : undefined,
+    anhaenge: e.anhaenge ? (JSON.parse(e.anhaenge) as { dateiname: string; base64: string; mime: string }[]) : undefined,
+    inReplyTo: e.inReplyTo ?? null,
+    mitSignatur: true,
+  });
+  if (!r.ok) return c.json({ ok: false, fehler: `Versand fehlgeschlagen: ${r.fehler}` }, 502);
+  await db.delete(mailEntwuerfe).where(eq(mailEntwuerfe.id, id));
+  await audit("mail_entwurf_gesendet", { id, empfaenger, via: erlaubnis.via });
+  return c.json({ ok: true, via: erlaubnis.via, gesendetAn: empfaenger });
+});
+
+/** Aus einer vorhandenen Mail einen Antwort-/Weiterleiten-Entwurf bauen (Anhänge optional mitnehmen). */
+app.post("/mail/:id/als-entwurf", async (c) => {
+  const mailId = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const { mailMails } = await import("@db/schema");
+  const m = await getDb().query.mailMails.findFirst({ where: eq(mailMails.id, mailId) });
+  if (!m) return c.json({ ok: false, fehler: "Mail nicht gefunden." }, 404);
+  const empfaenger = String(body.empfaenger ?? m.absenderAdresse ?? "").trim();
+  if (!empfaenger) return c.json({ ok: false, fehler: "empfaenger fehlt (Original-Absender unbekannt)." }, 400);
+  const betreff = String(body.betreff ?? `Re: ${m.betreff ?? ""}`).trim();
+  const text = String(body.text ?? "");
+  if (!text) return c.json({ ok: false, fehler: "text fehlt (Entwurfs-Inhalt)." }, 400);
+
+  // Anhänge der Originalmail optional übernehmen (aus post_eingang)
+  let anhaenge: { dateiname: string; base64: string; mime: string }[] = [];
+  if (body.mitAnhaengen === true || body.mitAnhaengen === 1) {
+    const { metaLesen } = await import("./lib/mailBeleg");
+    const { postEingang } = await import("@db/schema");
+    for (const meta of metaLesen(m.anhaenge)) {
+      if (!meta.postEingangId) continue;
+      const p = await getDb().query.postEingang.findFirst({ where: eq(postEingang.id, meta.postEingangId) });
+      if (p?.dateiInhalt) anhaenge.push({ dateiname: p.originalname, base64: p.dateiInhalt, mime: p.mime ?? "application/octet-stream" });
+    }
+  }
+  const { mailEntwuerfe } = await import("@db/schema");
+  const [{ id }] = await getDb()
+    .insert(mailEntwuerfe)
+    .values({
+      empfaenger,
+      kontoId: m.kontoId,
+      betreff,
+      text,
+      anhaenge: anhaenge.length ? JSON.stringify(anhaenge) : null,
+      inReplyTo: m.messageId ?? null,
+      quelle: "agent",
+    })
+    .$returningId();
+  await audit("mail_als_entwurf", { mailId, entwurfId: id, anhaenge: anhaenge.length });
+  return c.json({ ok: true, id, empfaenger, betreff, anhaengeUebernommen: anhaenge.length });
+});
+
+app.post("/mail/:id/als-beleg", async (c) => {
+  const mailId = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const anhangIndex = body.anhangIndex !== undefined ? Number(body.anhangIndex) : undefined;
+  const { alsBelegIntern } = await import("./lib/mailBeleg");
+  try {
+    const r = await alsBelegIntern(mailId, anhangIndex);
+    await audit("mail_als_beleg", { mailId, anhangIndex, belegId: r.belegId });
+    return c.json({ ok: true, ...r });
+  } catch (e) {
+    return c.json({ ok: false, fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+// ── Kontakte-Kartei (Agenten-Pipeline: extrahieren → kuratieren → übernehmen)
+app.get("/kontakte", async (c) => {
+  const { kontakte } = await import("@db/schema");
+  const { asc, like, or } = await import("drizzle-orm");
+  const q = c.req.query("q")?.trim();
+  const rows = await getDb()
+    .select()
+    .from(kontakte)
+    .where(
+      q
+        ? or(
+            like(kontakte.name, `%${q}%`),
+            like(kontakte.email, `%${q}%`),
+            like(kontakte.firma, `%${q}%`),
+          )
+        : undefined,
+    )
+    .orderBy(asc(kontakte.name));
+  return c.json({
+    anzahl: rows.length,
+    kontakte: rows.map((k) => ({
+      id: k.id, name: k.name, email: k.email, telefon: k.telefon,
+      firma: k.firma, notiz: k.notiz, quelle: k.quelle, erstelltVon: k.erstelltVon,
+    })),
+  });
+});
+
+app.get("/mail/:id/anhang/:index/text", async (c) => {
+  const mailId = Number(c.req.param("id"));
+  const index = Number(c.req.param("index"));
+  const { mailMails, postEingang } = await import("@db/schema");
+  const { metaLesen } = await import("./lib/mailBeleg");
+  const db = getDb();
+  const m = await db.query.mailMails.findFirst({ where: eq(mailMails.id, mailId) });
+  if (!m) return c.json({ ok: false, fehler: "Mail nicht gefunden." }, 404);
+  const meta = metaLesen(m.anhaenge)[index];
+  if (!meta) return c.json({ ok: false, fehler: "Anhang nicht gefunden." }, 404);
+  if (!meta.postEingangId) return c.json({ ok: false, fehler: "Anhangtyp nur als Metadaten (kein Inhalt verfügbar)." }, 404);
+  const beleg = await db.query.postEingang.findFirst({ where: eq(postEingang.id, meta.postEingangId) });
+  if (!beleg?.dateiInhalt) return c.json({ ok: false, fehler: "Anhang-Datei nicht vorhanden." }, 404);
+  const { extrahiereAnhangText } = await import("./lib/anhangText");
+  const ergebnis = await extrahiereAnhangText(Buffer.from(beleg.dateiInhalt, "base64"), beleg.mime);
+  if (!ergebnis.ok) return c.json({ ok: false, methode: ergebnis.methode, fehler: ergebnis.fehler }, 422);
+  return c.json({
+    ok: true,
+    methode: ergebnis.methode,
+    dateiname: beleg.originalname,
+    mime: beleg.mime,
+    text: ergebnis.text,
+  });
+});
+
+// (Kalender: /termine existiert PaWaWi-nativ auf plan_entries weiter oben —
+// die ReWaWi-Variante verweist auf eine Tabelle, die es hier nicht gibt.)
+
+app.post("/mail/:id/gelesen", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const status = body.status === true || body.status === 1 || body.status === "1" || body.status === "true";
+  const { mailMails } = await import("@db/schema");
+  await getDb().update(mailMails).set({ gelesen: status }).where(eq(mailMails.id, id));
+  await audit("mail_gelesen", { id, status });
+  return c.json({ ok: true, id, gelesen: status });
+});
+
+/** Mail-Markierung (Brain-Flag, z. B. Follow-up). */
+app.post("/mail/:id/markierung", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const status = body.status === true || body.status === 1 || body.status === "1" || body.status === "true";
+  const { mailMails } = await import("@db/schema");
+  await getDb().update(mailMails).set({ markiert: status }).where(eq(mailMails.id, id));
+  await audit("mail_markierung", { id, status });
+  return c.json({ ok: true, id, markiert: status });
+});
+
+/** Mail in anderen IMAP-Ordner verschieben (Server-Move + lokale Aktualisierung). */
+app.post("/mail/:id/verschieben", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const ziel = String(body.ordner ?? "").trim();
+  if (!ziel) return c.json({ ok: false, fehler: "ordner (Ziel) fehlt." }, 400);
+  const { mailMails } = await import("@db/schema");
+  const db = getDb();
+  const m = await db.query.mailMails.findFirst({ where: eq(mailMails.id, id) });
+  if (!m) return c.json({ ok: false, fehler: "Mail nicht gefunden." }, 404);
+  const { verschiebeMail } = await import("./imapDienst");
+  const r = await verschiebeMail(m.kontoId, m.ordner, m.uid, ziel);
+  if (!r.ok) return c.json({ ok: false, fehler: r.fehler }, 502);
+  await db.update(mailMails).set({ ordner: ziel }).where(eq(mailMails.id, id));
+  await audit("mail_verschoben", { id, von: m.ordner, nach: ziel });
+  return c.json({ ok: true, id, ordner: ziel });
+});
+
+/** Versand-Log: was ging (automatisch) raus — mail_log der letzten 200 Sendungen. */
+app.get("/versand-log", async (c) => {
+  const { mailLog } = await import("@db/schema");
+  const rows = await getDb().select().from(mailLog).orderBy(desc(mailLog.gesendetAm)).limit(200);
+  return c.json({
+    anzahl: rows.length,
+    sendungen: rows.map((r) => ({
+      id: r.id, belegArt: r.belegArt, belegId: r.belegId, empfaenger: r.empfaenger,
+      betreff: r.betreff, erfolg: r.erfolg, fehler: r.fehler, gesendetAm: r.gesendetAm,
+    })),
+  });
+});
+
 export default app;

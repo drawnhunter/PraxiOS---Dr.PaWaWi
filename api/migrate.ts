@@ -36,6 +36,8 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "smtp_user", ddl: "ALTER TABLE company_settings ADD COLUMN smtp_user VARCHAR(255) NULL AFTER smtp_port" },
   { tabelle: "company_settings", spalte: "smtp_passwort_enc", ddl: "ALTER TABLE company_settings ADD COLUMN smtp_passwort_enc VARCHAR(500) NULL AFTER smtp_user" },
   { tabelle: "company_settings", spalte: "smtp_absender", ddl: "ALTER TABLE company_settings ADD COLUMN smtp_absender VARCHAR(255) NULL AFTER smtp_passwort_enc" },
+  // Mail-Modul (1.15.0): Text-Signatur
+  { tabelle: "company_settings", spalte: "signatur", ddl: "ALTER TABLE company_settings ADD COLUMN signatur VARCHAR(2000) NULL AFTER smtp_absender" },
   { tabelle: "products", spalte: "artikelnummer", ddl: "ALTER TABLE products ADD COLUMN artikelnummer VARCHAR(100) NULL AFTER import_namen" },
   { tabelle: "products", spalte: "barcode", ddl: "ALTER TABLE products ADD COLUMN barcode VARCHAR(100) NULL AFTER artikelnummer" },
   { tabelle: "products", spalte: "mindestbestand", ddl: "ALTER TABLE products ADD COLUMN mindestbestand DECIMAL(12,2) NULL AFTER barcode" },
@@ -57,6 +59,10 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "ics_token", ddl: "ALTER TABLE company_settings ADD COLUMN ics_token VARCHAR(48) NULL AFTER aufwandskonto_default" },
   { tabelle: "incoming_invoices", spalte: "konto", ddl: "ALTER TABLE incoming_invoices ADD COLUMN konto VARCHAR(10) NULL AFTER waehrung" },
   { tabelle: "incoming_invoices", spalte: "gegenkonto", ddl: "ALTER TABLE incoming_invoices ADD COLUMN gegenkonto VARCHAR(10) NULL AFTER konto" },
+  // Mail→Beleg (1.15.0): Kategorie + Beleg-Datei an der Eingangsrechnung
+  { tabelle: "incoming_invoices", spalte: "kategorie_id", ddl: "ALTER TABLE incoming_invoices ADD COLUMN kategorie_id BIGINT UNSIGNED NULL AFTER bemerkung" },
+  { tabelle: "incoming_invoices", spalte: "beleg_base64", ddl: "ALTER TABLE incoming_invoices ADD COLUMN beleg_base64 TEXT NULL AFTER kategorie_id" },
+  { tabelle: "incoming_invoices", spalte: "beleg_mime", ddl: "ALTER TABLE incoming_invoices ADD COLUMN beleg_mime VARCHAR(60) NULL AFTER beleg_base64" },
   // Privat-Rezepte & Atteste: Unterschriftsbild des Arztes (Stufe 1.3)
   { tabelle: "company_settings", spalte: "signatur_bild", ddl: "ALTER TABLE company_settings ADD COLUMN signatur_bild MEDIUMTEXT NULL AFTER age_secret" },
   // Proforma/Vorkasse + Therapiedepot (Stufe 1.3)
@@ -74,6 +80,15 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   // Agent-API v2 (1.13.0): Pseudonymisierung Gesundheitsdaten
   { tabelle: "company_settings", spalte: "agent_pseudonym", ddl: "ALTER TABLE company_settings ADD COLUMN agent_pseudonym TINYINT(1) NOT NULL DEFAULT 1 AFTER agent_autonomie" },
   { tabelle: "customers", spalte: "synonym", ddl: "ALTER TABLE customers ADD COLUMN synonym VARCHAR(20) NULL AFTER tags" },
+  // Mail-Modul (1.15.0): Konto-Vollausbau + Postfach-Sichtbarkeit
+  { tabelle: "email_konten", spalte: "ordner_liste", ddl: "ALTER TABLE email_konten ADD COLUMN ordner_liste TEXT NULL AFTER ordner" },
+  { tabelle: "email_konten", spalte: "smtp_host", ddl: "ALTER TABLE email_konten ADD COLUMN smtp_host VARCHAR(255) NULL AFTER ordner_liste" },
+  { tabelle: "email_konten", spalte: "smtp_port", ddl: "ALTER TABLE email_konten ADD COLUMN smtp_port INT NULL AFTER smtp_host" },
+  { tabelle: "email_konten", spalte: "smtp_benutzer", ddl: "ALTER TABLE email_konten ADD COLUMN smtp_benutzer VARCHAR(255) NULL AFTER smtp_port" },
+  { tabelle: "email_konten", spalte: "smtp_passwort_enc", ddl: "ALTER TABLE email_konten ADD COLUMN smtp_passwort_enc VARCHAR(500) NULL AFTER smtp_benutzer" },
+  { tabelle: "email_konten", spalte: "smtp_absender", ddl: "ALTER TABLE email_konten ADD COLUMN smtp_absender VARCHAR(255) NULL AFTER smtp_passwort_enc" },
+  { tabelle: "users", spalte: "mail_konto_ids", ddl: "ALTER TABLE users ADD COLUMN mail_konto_ids TEXT NULL AFTER gruppe_id" },
+  { tabelle: "suppliers", spalte: "synonym", ddl: "ALTER TABLE suppliers ADD COLUMN synonym VARCHAR(20) NULL AFTER kategorie_id" },
   // Agent-API v3 (1.14.0): Freigabeliste, Wiedervorlage-Aufgaben
   { tabelle: "agent_tokens", spalte: "freigabe_empfaenger", ddl: "ALTER TABLE agent_tokens ADD COLUMN freigabe_empfaenger TEXT NULL AFTER aktiv" },
   { tabelle: "agent_aufgaben", spalte: "faellig_am", ddl: "ALTER TABLE agent_aufgaben ADD COLUMN faellig_am DATE NULL AFTER erledigt_am" },
@@ -704,6 +719,78 @@ const NEUE_TABELLEN_2: { tabelle: string; ddl: string }[] = [
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
   },
+  // Mail-Modul (1.15.0)
+  {
+    tabelle: "mail_mails",
+    ddl: `CREATE TABLE IF NOT EXISTS mail_mails (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      konto_id BIGINT UNSIGNED NOT NULL,
+      ordner VARCHAR(100) NOT NULL DEFAULT 'INBOX',
+      uid BIGINT UNSIGNED NOT NULL,
+      message_id VARCHAR(255) NULL,
+      betreff VARCHAR(500) NULL,
+      absender_name VARCHAR(255) NULL,
+      absender_adresse VARCHAR(320) NULL,
+      empfaenger TEXT NULL,
+      datum TIMESTAMP NULL,
+      text_plain TEXT NULL,
+      text_html TEXT NULL,
+      anhaenge TEXT NULL,
+      gelesen TINYINT(1) NOT NULL DEFAULT 0,
+      markiert TINYINT(1) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX mail_eindeutig (konto_id, ordner, uid),
+      INDEX mail_datum_idx (datum),
+      CONSTRAINT mail_mails_konto_fk FOREIGN KEY (konto_id) REFERENCES email_konten(id) ON DELETE CASCADE
+    )`,
+  },
+  {
+    tabelle: "mail_regeln",
+    ddl: `CREATE TABLE IF NOT EXISTS mail_regeln (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      pattern VARCHAR(500) NOT NULL,
+      feld ENUM('absender','betreff') NOT NULL DEFAULT 'absender',
+      post_typ ENUM('rechnung','sonstiges') NOT NULL DEFAULT 'rechnung',
+      kategorie_id BIGINT UNSIGNED NULL,
+      prio INT NOT NULL DEFAULT 10,
+      aktiv TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "mail_entwuerfe",
+    ddl: `CREATE TABLE IF NOT EXISTS mail_entwuerfe (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      empfaenger VARCHAR(500) NULL,
+      cc VARCHAR(500) NULL,
+      bcc VARCHAR(500) NULL,
+      konto_id BIGINT UNSIGNED NULL,
+      betreff VARCHAR(500) NULL,
+      text TEXT NULL,
+      anhaenge TEXT NULL,
+      in_reply_to VARCHAR(500) NULL,
+      referenzen VARCHAR(1000) NULL,
+      quelle VARCHAR(20) NOT NULL DEFAULT 'mensch',
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    tabelle: "kontakte",
+    ddl: `CREATE TABLE IF NOT EXISTS kontakte (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(320) NOT NULL,
+      telefon VARCHAR(60) NULL,
+      firma VARCHAR(255) NULL,
+      notiz TEXT NULL,
+      quelle VARCHAR(40) NOT NULL DEFAULT 'manuell',
+      erstellt_von VARCHAR(40) NOT NULL DEFAULT 'mensch',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE INDEX kontakte_email_uniq (email)
+    )`,
+  },
 ];
 
 const NEUE_INDIZES: { tabelle: string; index: string; ddl: string }[] = [
@@ -780,6 +867,11 @@ const NACHSCHUB: { name: string; ddl: string }[] = [
     // Agent-Pseudonyme (1.13.0): P-0001 aus der ID ableiten, nur fehlende
     name: "customers-synonym-backfill",
     ddl: "UPDATE customers SET synonym = CONCAT('P-', LPAD(id, 4, '0')) WHERE synonym IS NULL",
+  },
+  {
+    // Lieferanten-Pseudonyme (1.15.0): L-0001, nur fehlende
+    name: "suppliers-synonym-backfill",
+    ddl: "UPDATE suppliers SET synonym = CONCAT('L-', LPAD(id, 4, '0')) WHERE synonym IS NULL",
   },
   {
     // Reihenfolge im Tag: Bestand in bisheriger Anzeige-Reihenfolge nummerieren

@@ -428,6 +428,7 @@ CREATE TABLE `suppliers` (
   `notizen` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `archiviert` tinyint(1) NOT NULL DEFAULT '0',
   `kategorie_id` bigint unsigned DEFAULT NULL,
+  `synonym` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,
   KEY `suppliers_name_idx` (`name`),
@@ -446,6 +447,7 @@ CREATE TABLE `users` (
   `role` enum('user','admin') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'user',
   `kalenderFarbe` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `gruppe_id` bigint unsigned DEFAULT NULL,
+  `mail_konto_ids` text COLLATE utf8mb4_unicode_ci,
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `lastSignInAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -719,6 +721,9 @@ CREATE TABLE `incoming_invoices` (
   `positionen_json` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `original_xml` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `bemerkung` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `kategorie_id` bigint unsigned DEFAULT NULL,
+  `beleg_base64` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `beleg_mime` varchar(60) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `incoming_eindeutig` (`lieferant_name`,`nummer`)
@@ -805,6 +810,12 @@ CREATE TABLE `email_konten` (
   `benutzer` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `passwort_enc` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
   `ordner` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'INBOX',
+  `ordner_liste` text COLLATE utf8mb4_unicode_ci,
+  `smtp_host` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smtp_port` int DEFAULT NULL,
+  `smtp_benutzer` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smtp_passwort_enc` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smtp_absender` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `route` enum('rechnung','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'rechnung',
   `intervall_minuten` int NOT NULL DEFAULT '10',
   `aktiv` tinyint(1) NOT NULL DEFAULT '1',
@@ -812,6 +823,73 @@ CREATE TABLE `email_konten` (
   `letzter_fehler` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `mail_mails` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `konto_id` bigint unsigned NOT NULL,
+  `ordner` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'INBOX',
+  `uid` bigint unsigned NOT NULL,
+  `message_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `betreff` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `absender_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `absender_adresse` varchar(320) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `empfaenger` text COLLATE utf8mb4_unicode_ci,
+  `datum` timestamp NULL DEFAULT NULL,
+  `text_plain` text COLLATE utf8mb4_unicode_ci,
+  `text_html` text COLLATE utf8mb4_unicode_ci,
+  `anhaenge` text COLLATE utf8mb4_unicode_ci,
+  `gelesen` tinyint(1) NOT NULL DEFAULT '0',
+  `markiert` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `mail_eindeutig` (`konto_id`,`ordner`,`uid`),
+  KEY `mail_datum_idx` (`datum`),
+  CONSTRAINT `mail_mails_konto_fk` FOREIGN KEY (`konto_id`) REFERENCES `email_konten` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `mail_regeln` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `pattern` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `feld` enum('absender','betreff') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'absender',
+  `post_typ` enum('rechnung','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'rechnung',
+  `kategorie_id` bigint unsigned DEFAULT NULL,
+  `prio` int NOT NULL DEFAULT '10',
+  `aktiv` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `mail_entwuerfe` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `empfaenger` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cc` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `bcc` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `konto_id` bigint unsigned DEFAULT NULL,
+  `betreff` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `text` text COLLATE utf8mb4_unicode_ci,
+  `anhaenge` text COLLATE utf8mb4_unicode_ci,
+  `in_reply_to` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `referenzen` varchar(1000) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `quelle` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'mensch',
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `kontakte` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `email` varchar(320) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `telefon` varchar(60) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `firma` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `notiz` text COLLATE utf8mb4_unicode_ci,
+  `quelle` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'manuell',
+  `erstellt_von` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'mensch',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `kontakte_email_uniq` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP TABLE IF EXISTS `post_eingang`;

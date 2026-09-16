@@ -34,6 +34,12 @@ export const MODUL_DEFS: ModulDef[] = [
     router: ["posteingang", "magicImport"],
   },
   {
+    id: "mail",
+    titel: "Mail",
+    beschreibung: "Postfach (IMAP), Verfassen/Tabs, Signaturen, Kontakte, Mail→Beleg",
+    router: ["postfach", "emailKonten", "kontakte"],
+  },
+  {
     id: "lager",
     titel: "Lager",
     beschreibung: "Bestände, Mindestbestände, Inventur, Handy-Scan, Etiketten",

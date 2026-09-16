@@ -28,6 +28,9 @@ import { documentRouter } from "./documentRouter";
 import { anamneseRouter } from "./anamneseRouter";
 import { austauschRouter } from "./austauschRouter";
 import { mailRouter } from "./mailRouter";
+import { mailPostfachRouter } from "./mailPostfachRouter";
+import { emailKontenRouter } from "./emailKontenRouter";
+import { kontaktRouter } from "./kontaktRouter";
 import { seriesRouter } from "./seriesRouter";
 import { einrechnungRouter } from "./einrechnungRouter";
 import { lagerRouter } from "./lagerRouter";
@@ -78,6 +81,9 @@ export const appRouter = createRouter({
   posteingang: posteingangRouter,
   magicImport: magicImportRouter,
   kontierung: kontierungRouter,
+  postfach: mailPostfachRouter,
+  emailKonten: emailKontenRouter,
+  kontakte: kontaktRouter,
   rezepte: rezeptRouter,
   protokolle: protokollRouter,
   unternehmen: unternehmenRouter,

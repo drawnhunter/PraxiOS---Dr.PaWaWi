@@ -19,6 +19,8 @@ import Austausch from "@/pages/Austausch";
 import IncomingInvoices from "@/pages/IncomingInvoices";
 import Lager from "@/pages/Lager";
 import Posteingang from "@/pages/Posteingang";
+import MailPostfach from "@/pages/Mail";
+import Kontakte from "@/pages/Kontakte";
 import Import from "@/pages/Import";
 import Zahlungsziele from "@/pages/Zahlungsziele";
 import Statistics from "@/pages/Statistics";
@@ -63,6 +65,8 @@ export default function App() {
         <Route path="/e-rechnung" element={<IncomingInvoices />} />
         <Route path="/e-rechnungen" element={<IncomingInvoices />} />
         <Route path="/lager" element={<Lager />} />
+        <Route path="/mail" element={<MailPostfach />} />
+        <Route path="/kontakte" element={<Kontakte />} />
         <Route path="/posteingang" element={<Posteingang />} />
         <Route path="/import" element={<Import />} />
         <Route path="/zahlungsziele" element={<Zahlungsziele />} />

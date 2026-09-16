@@ -300,6 +300,12 @@ if (env.isProduction) {
     } catch (e) {
       console.error("[hub] Client-Start fehlgeschlagen:", e);
     }
+    try {
+      const { starteImapDienst } = await import("./imapDienst");
+      starteImapDienst();
+    } catch (e) {
+      console.error("[imap] Dienst-Start fehlgeschlagen:", e);
+    }
   } catch (e) {
     console.error("[migrate/seed] fehlgeschlagen:", e);
   }

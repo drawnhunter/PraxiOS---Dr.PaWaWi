@@ -53,6 +53,8 @@ const OBEN: NavEintrag[] = [
 /** Pfad → Modul-ID (null = immer sichtbar). Spiegelt api/lib/module MODUL_DEFS. */
 const MODUL_JE_PFAD: Record<string, string> = {
   "/bank": "banking",
+  "/mail": "mail",
+  "/kontakte": "mail",
   "/posteingang": "postmanager",
   "/lager": "lager",
   "/anamnese": "anamnese",
@@ -82,6 +84,8 @@ const GRUPPEN: NavGruppe[] = [
       { to: "/rechnungen", label: "Rechnungen", icon: FileText, recht: "abrechnung" },
       { to: "/gutschriften", label: "Gutschriften", icon: Receipt, recht: "abrechnung" },
       { to: "/e-rechnungen", label: "Eingangsbelege", icon: FileDown, recht: "abrechnung" },
+      { to: "/mail", label: "Postfach", icon: MailOpen, recht: "abrechnung" },
+      { to: "/kontakte", label: "Kontakte", icon: Users, recht: "abrechnung" },
       { to: "/posteingang", label: "Post Manager", icon: MailOpen, recht: "abrechnung" },
       { to: "/zahlungsziele", label: "Zahlungsziele", icon: CalendarClock, recht: "abrechnung" },
       { to: "/bank", label: "Bank", icon: Landmark, recht: "abrechnung" },

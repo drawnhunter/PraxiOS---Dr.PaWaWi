@@ -1,5 +1,38 @@
 # Changelog — PraxiOS
 
+## [1.15.0] — 2026-09-16 — Mail-System komplett (ReWaWi-Sync v1.14–v1.16)
+
+### Mail (neues Modul, ReWaWi-Sync)
+- **Postfach**: IMAP-Abruf über Mail-Konten (Einstellungen → Mail), Ordner-
+  Entdeckung, Suche, Anhänge — Mails bleiben auf der Instanz
+- **Verfassen**: Editor mit CC/BCC, Anhängen, Signaturen; Entwürfe
+  speichern/laden; kontobezogener Versand (Absender = Konto, Fallback
+  Firmen-/Praxis-SMTP)
+- **Mail→Beleg**: Mail oder einzelner Anhang per Klick als Eingangsbeleg
+  (duplikatgeschützt; Beleg-Datei als base64 an der Eingangsrechnung,
+  GoBD-konform in der DB)
+- **Auto-Routing-Regeln**: Absender-/Betreff-Muster steuern Ablage beim
+  IMAP-Import
+- **Kontakte-Kartei**: eigene Kontaktliste (manuell + Extraktion aus dem
+  Mailverkehr: Vorschau → kuratieren → übernehmen)
+
+### Agent (Mail + Inhalt)
+- `GET /mails`, `GET /mail/:id`, Anhänge, `POST /mail/versenden`
+  (Vollautomatik-Gate), `POST /mail/entwurf` + Liste/Löschen/Senden
+  („KI macht vor, Mensch sendet ab"), `POST /mail/:id/als-entwurf`,
+  `POST /mail/:id/als-beleg`, `POST /mail/:id/gelesen` / `/markierung` /
+  `/verschieben`, `POST /mails/sync`, `GET /mail-ordner`, `GET /versand-log`
+- **Anhang-Inhaltserkennung**: `GET /mail/:id/anhang/:index/text` — pdftotext
+  mit OCR-Fallback (Tesseract), komplett serverseitig
+- `GET /kontakte` (Suche über Name/E-Mail/Firma)
+
+### Migration (automatisch beim Start)
+- Neue Tabellen: `email_konten`, `mail_mails`, `mail_regeln`,
+  `mail_entwuerfe`, `mail_log`, `kontakte`, `webhooks`, `agent_idempotenz`
+- `incoming_invoices`: `kategorie_id`, `beleg_base64`, `beleg_mime`
+
+---
+
 ## [1.14.0] — 2026-09-16 — Agent-API v3: Transparenz, Briefing, Rechnungs-Aktionen (ReWaWi-Sync v1.17)
 
 ### Neu (Agent-API)

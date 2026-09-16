@@ -62,6 +62,8 @@ export const companySettings = mysqlTable("company_settings", {
   smtpUser: varchar("smtp_user", { length: 255 }),
   smtpPasswortEnc: varchar("smtp_passwort_enc", { length: 500 }),
   smtpAbsender: varchar("smtp_absender", { length: 255 }),
+  // Mail-Signatur (1.15.0): wird an verfasste Mails angehängt
+  signatur: varchar("signatur", { length: 2000 }),
   // PraxiOS: Arzt-zu-Arzt-Austausch (age-Verschlüsselung)
   // Öffentlicher Schlüssel (wird an Kollegen gegeben)
   ageRecipient: varchar("age_recipient", { length: 100 }),
@@ -468,6 +470,8 @@ export const suppliers = mysqlTable(
       () => kategorien.id,
       { onDelete: "set null" },
     ),
+    // Agent-Pseudonym (1.15.0): „L-0001" — Bank-Gegenstellen-Auflösung
+    synonym: varchar("synonym", { length: 20 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => ({
@@ -610,6 +614,8 @@ export const users = mysqlTable("users", {
   kalenderFarbe: varchar("kalenderFarbe", { length: 20 }),
   // Rechte-Gruppe (Med./Kaufm. Personal oder eigene Gruppe); admin braucht keine
   gruppeId: bigint("gruppe_id", { mode: "number", unsigned: true }),
+  // Mail-Postfächer (1.15.0): JSON [kontoId,…] — null = alle Konten sichtbar
+  mailKontoIds: text("mail_konto_ids"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()
@@ -1037,6 +1043,10 @@ export const incomingInvoices = mysqlTable(
     positionenJson: text("positionen_json"),
     originalXml: text("original_xml"),
     bemerkung: text("bemerkung"),
+    // Mail→Beleg (1.15.0): Kategorie + Beleg-Datei direkt an der Eingangsrechnung
+    kategorieId: bigint("kategorie_id", { mode: "number", unsigned: true }),
+    belegBase64: text("beleg_base64"), // Beleg-Datei (PDF/JPG) als base64 — GoBD-Archiv in der DB
+    belegMime: varchar("beleg_mime", { length: 60 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [uniqueIndex("incoming_eindeutig").on(t.lieferantName, t.nummer)],
@@ -1111,6 +1121,12 @@ export const emailKonten = mysqlTable("email_konten", {
   benutzer: varchar("benutzer", { length: 255 }).notNull(),
   passwortEnc: varchar("passwort_enc", { length: 500 }).notNull(),
   ordner: varchar("ordner", { length: 100 }).notNull().default("INBOX"),
+  ordnerListe: text("ordner_liste"), // JSON: entdeckte Fächer (auto beim ersten Sync)
+  smtpHost: varchar("smtp_host", { length: 255 }),
+  smtpPort: int("smtp_port"),
+  smtpBenutzer: varchar("smtp_benutzer", { length: 255 }),
+  smtpPasswortEnc: varchar("smtp_passwort_enc", { length: 500 }),
+  smtpAbsender: varchar("smtp_absender", { length: 255 }),
   route: mysqlEnum("route", ["rechnung", "sonstiges"]).notNull().default("rechnung"),
   intervallMinuten: int("intervall_minuten").notNull().default(10),
   aktiv: boolean("aktiv").notNull().default(true),
@@ -1118,6 +1134,82 @@ export const emailKonten = mysqlTable("email_konten", {
   letzterFehler: varchar("letzter_fehler", { length: 500 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ── Mail-Postfach: empfangene Mails (IMAP-Abruf legt sie hier ab) ──────────
+export const mailMails = mysqlTable(
+  "mail_mails",
+  {
+    id: serial("id").primaryKey(),
+    kontoId: bigint("konto_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => emailKonten.id, { onDelete: "cascade" }),
+    ordner: varchar("ordner", { length: 100 }).notNull().default("INBOX"),
+    uid: bigint("uid", { mode: "number", unsigned: true }).notNull(),
+    messageId: varchar("message_id", { length: 255 }),
+    betreff: varchar("betreff", { length: 500 }),
+    absenderName: varchar("absender_name", { length: 255 }),
+    absenderAdresse: varchar("absender_adresse", { length: 320 }),
+    empfaenger: text("empfaenger"),
+    datum: timestamp("datum"),
+    textPlain: text("text_plain"),
+    textHtml: text("text_html"),
+    anhaenge: text("anhaenge"), // JSON: [{name, mime, groesse, postEingangId?}]
+    gelesen: boolean("gelesen").notNull().default(false),
+    markiert: boolean("markiert").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("mail_eindeutig").on(t.kontoId, t.ordner, t.uid),
+    index("mail_datum_idx").on(t.datum),
+  ],
+);
+
+// ── Mail-Regeln: Auto-Routing eingehender Mails (Absender/Betreff-Muster) ──
+export const mailRegeln = mysqlTable("mail_regeln", {
+  id: serial("id").primaryKey(),
+  pattern: varchar("pattern", { length: 500 }).notNull(),
+  feld: mysqlEnum("feld", ["absender", "betreff"]).notNull().default("absender"),
+  postTyp: mysqlEnum("post_typ", ["rechnung", "sonstiges"]).notNull().default("rechnung"),
+  kategorieId: bigint("kategorie_id", { mode: "number", unsigned: true }),
+  prio: int("prio").notNull().default(10),
+  aktiv: boolean("aktiv").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Mail-Entwürfe (beim Verfassen speichern) ───────────────────────────────
+export const mailEntwuerfe = mysqlTable("mail_entwuerfe", {
+  id: serial("id").primaryKey(),
+  empfaenger: varchar("empfaenger", { length: 500 }),
+  cc: varchar("cc", { length: 500 }),
+  bcc: varchar("bcc", { length: 500 }),
+  kontoId: bigint("konto_id", { mode: "number", unsigned: true }),
+  betreff: varchar("betreff", { length: 500 }),
+  text: text("text"),
+  anhaenge: text("anhaenge"), // JSON [{dateiname, base64, mime}] + Antwort-Verknüpfung
+  inReplyTo: varchar("in_reply_to", { length: 500 }),
+  referenzen: varchar("referenzen", { length: 1000 }),
+  quelle: varchar("quelle", { length: 20 }).notNull().default("mensch"), // mensch / agent
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Kontakte (Adressbuch; Quelle pro Kontakt dokumentiert — DSGVO) ────────
+export const kontakte = mysqlTable(
+  "kontakte",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    email: varchar("email", { length: 320 }).notNull(),
+    telefon: varchar("telefon", { length: 60 }),
+    firma: varchar("firma", { length: 255 }),
+    notiz: text("notiz"),
+    quelle: varchar("quelle", { length: 40 }).notNull().default("manuell"), // mail / kunde / manuell
+    erstelltVon: varchar("erstellt_von", { length: 40 }).notNull().default("mensch"), // agent / mensch / system
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  },
+  (t) => [uniqueIndex("kontakte_email_uniq").on(t.email)],
+);
 
 // ── Posteingang (Post Manager): gescannte Belege & Dokumente ────────────────
 // Der Beleg (base64 in MEDIUMTEXT) liegt unveränderbar in der DB — mysqldump

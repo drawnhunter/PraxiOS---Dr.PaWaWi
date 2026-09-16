@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { DatevExport } from "@/components/DatevExport";
+import { EmailEingang } from "@/components/EmailEingang";
 import { Benutzerverwaltung } from "@/components/Benutzerverwaltung";
 import { KategorienVerwaltung } from "@/components/KategorienVerwaltung";
 import { AKZENTFARBEN, PDF_LAYOUTS, akzentAnwenden } from "@/lib/design";
@@ -55,6 +56,7 @@ interface FirmenForm {
   smtpPort: number;
   smtpUser: string;
   smtpAbsender: string;
+  signatur: string;
   smtpPasswort: string;
   erinnerungAktiv: boolean;
   erinnerungTageVorher: number;
@@ -106,6 +108,7 @@ export default function SettingsPage() {
       smtpPort: s.smtpPort,
       smtpUser: s.smtpUser ?? "",
       smtpAbsender: s.smtpAbsender ?? "",
+      signatur: s.signatur ?? "",
       smtpPasswort: "",
       erinnerungAktiv: s.erinnerungAktiv ?? false,
       erinnerungTageVorher: s.erinnerungTageVorher,
@@ -315,6 +318,7 @@ export default function SettingsPage() {
                 smtpPort: firma.smtpPort,
                 smtpUser: firma.smtpUser || null,
                 smtpAbsender: firma.smtpAbsender || null,
+                signatur: firma.signatur || null,
                 erinnerungAktiv: firma.erinnerungAktiv,
                 erinnerungTageVorher: firma.erinnerungTageVorher,
                 patientenNrStart: firma.patientenNrStart,
@@ -410,6 +414,15 @@ export default function SettingsPage() {
               placeholder="z. B. IMTZ GmbH — Buchhaltung"
             />
           </div>
+          <div className="sm:col-span-2">
+            <Label>Signatur (wird an verfasste Mails angehängt)</Label>
+            <Textarea
+              value={firma.signatur}
+              onChange={(e) => setFirma({ ...firma, signatur: e.target.value })}
+              rows={4}
+              placeholder={"Mit freundlichen Grüßen\n…"}
+            />
+          </div>
           <div className="flex items-end gap-2">
             <Button
               variant="outline"
@@ -426,6 +439,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Mail-Eingang (Postfächer, IMAP) ── */}
+      <EmailEingang />
 
       {/* ── Terminerinnerungen ── */}
       <section className="rounded-lg border border-neutral-200 bg-white p-5">

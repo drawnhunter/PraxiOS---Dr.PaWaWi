@@ -55,6 +55,7 @@ const settingsInput = z.object({
   smtpPort: z.number().int().min(1).max(65535).default(587),
   smtpUser: z.string().nullable().optional(),
   smtpAbsender: z.string().nullable().optional(),
+  signatur: z.string().max(2000).nullable().optional(),
   smtpPasswort: z.string().max(200).optional(),
   erinnerungAktiv: z.boolean().optional(),
   erinnerungTageVorher: z.number().int().min(1).max(7).optional(),
