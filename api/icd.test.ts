@@ -22,6 +22,16 @@ describe("icdSuche (ICD-10-GM 2026, lokal)", () => {
     expect(t.every((x) => /akute/i.test(x.text) && /bronchitis/i.test(x.text))).toBe(true);
   });
 
+  it("Toleranz-Fallback: Teiltreffer nur, wenn nichts exakt passt (1.16.2)", () => {
+    // Ein Wort existiert nicht → Vorschläge über das andere Wort (gerankt)
+    const t = icdSuche("bronchitis wortdasnichtexistiert");
+    expect(t.length).toBeGreaterThan(0);
+    expect(t.some((x) => /bronchitis/i.test(x.text))).toBe(true);
+    // Strenge bleibt, wenn exakte Treffer existieren (Regression)
+    const t2 = icdSuche("akute bronchitis");
+    expect(t2.every((x) => /akute/i.test(x.text) && /bronchitis/i.test(x.text))).toBe(true);
+  });
+
   it("zu kurze Suche liefert nichts", () => {
     expect(icdSuche("J")).toEqual([]);
     expect(icdSuche("")).toEqual([]);

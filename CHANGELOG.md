@@ -1,5 +1,22 @@
 # Changelog — PraxiOS
 
+## [1.16.2] — 2026-09-16 — ICD-Eingabe direkt + flexiblere Suche
+
+### Verbesserungen (Feedback aus dem ersten Echtdruck)
+- **ICD-Eingabe ohne Umweg**: Bei Krankschreibung ist die ICD-Suche jetzt
+  direkt im Dialog sichtbar (nicht mehr hinter „Diagnose ausweisen"
+  versteckt) — sie landet ohnehin nur auf dem Kassen-Exemplar; beim freien
+  Attest bleibt die bisherige Checkbox-Regel
+- **ICD-Suche flexibler**: Toleranz-Fallback — wenn nicht alle Suchwörter
+  treffen, werden Teiltreffer nach Trefferzahl gerankt mit angeboten;
+  Synonymliste deutlich erweitert (Magen-Darm, Heuschnupfen, Burnout,
+  Harnwegsinfekt, Tennisarm, grauer/grüner Star u. v. m.)
+- **Formular-Feinheit**: das lange Label bei „voraussichtlich arbeitsunfähig
+  bis einschließlich" läuft nicht mehr in den Arztstempel-Block
+  (zweizeilig, Wert tiefer gesetzt)
+
+---
+
 ## [1.16.1] — 2026-09-16 — AU: immer BEIDE Ausfertigungen automatisch
 
 ### Änderung (alex' Vorgabe)

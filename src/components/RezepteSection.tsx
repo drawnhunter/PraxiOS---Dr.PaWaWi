@@ -165,8 +165,8 @@ export function RezepteSection({ patientId }: { patientId: number }) {
         feststellungsdatum: isoNachDe(festDatum),
         erstbescheinigung,
         feststellungsOrt: ortWahl === "anderer Ort" ? ortFrei.trim() || "Praxis" : ortWahl,
-        diagnoseAusweisen: diagAusweisen,
-        icdCodes: diagAusweisen && icdGewaehlt.length > 0 ? icdGewaehlt : undefined,
+        diagnoseAusweisen: diagAusweisen || (art === "krankschreibung" && icdGewaehlt.length > 0),
+        icdCodes: (diagAusweisen || art === "krankschreibung") && icdGewaehlt.length > 0 ? icdGewaehlt : undefined,
         // AU-Formular v2: Server erzeugt IMMER beide Ausfertigungen (1.16.1)
         arbeitsunfall: art === "krankschreibung" && auFlags.arbeitsunfall ? true : undefined,
         durchgangsarzt: art === "krankschreibung" && auFlags.durchgangsarzt ? true : undefined,
@@ -523,23 +523,35 @@ export function RezepteSection({ patientId }: { patientId: number }) {
               </div>
             )}
 
-            {/* ── Diagnose / ICD-10 (optional — Arbeitgeber-Exemplar-Regel) ── */}
+            {/* ── Diagnose / ICD-10 ── */}
             <div className="rounded-md border border-neutral-200 p-3">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-[#0F766E]"
-                  checked={diagAusweisen}
-                  onChange={(e) => setDiagAusweisen(e.target.checked)}
-                />
-                Diagnose mit ICD-10-Code auf dem Attest ausweisen
-              </label>
-              {!diagAusweisen && (
-                <p className="mt-1 text-xs text-neutral-400">
-                  Standard: keine Diagnose auf dem Attest (Arbeitgeber-Exemplar-Regel).
-                </p>
+              {art === "krankschreibung" ? (
+                <>
+                  <h4 className="text-sm font-medium">Diagnose(n) für das Kassen-Exemplar</h4>
+                  <p className="mt-0.5 text-xs text-neutral-400">
+                    ICD-10 suchen und hinzufügen — erscheint <strong>nur</strong> auf dem
+                    Krankenkassen-Exemplar, nie beim Arbeitgeber.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[#0F766E]"
+                      checked={diagAusweisen}
+                      onChange={(e) => setDiagAusweisen(e.target.checked)}
+                    />
+                    Diagnose mit ICD-10-Code auf dem Attest ausweisen
+                  </label>
+                  {!diagAusweisen && (
+                    <p className="mt-1 text-xs text-neutral-400">
+                      Standard: keine Diagnose auf dem Attest (Arbeitgeber-Exemplar-Regel).
+                    </p>
+                  )}
+                </>
               )}
-              {diagAusweisen && (
+              {(diagAusweisen || art === "krankschreibung") && (
                 <div className="mt-2 space-y-2">
                   {icdGewaehlt.map((c) => (
                     <div

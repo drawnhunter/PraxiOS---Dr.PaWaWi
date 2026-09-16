@@ -212,9 +212,14 @@ export async function renderAuPdf(input: AuPdfInput): Promise<Buffer> {
   feld(doc, M, cy, linksW, "arbeitsunfähig seit", auSeit, { fett: true, groesse: 11 });
   doc.save().moveTo(M, cy + 26).lineTo(M + linksW, cy + 26).lineWidth(0.6).strokeColor(LINIE).stroke().restore();
   cy += 34;
-  feld(doc, M, cy, linksW, "voraussichtlich arbeitsunfähig bis einschließlich oder letzter Tag der Arbeitsunfähigkeit", auBis, { fett: true, groesse: 11 });
-  doc.save().moveTo(M, cy + 26).lineTo(M + linksW, cy + 26).lineWidth(0.6).strokeColor(LINIE).stroke().restore();
-  cy += 34;
+  // Langes Label → zweizeilig klein, damit nichts in den Stempel-Block läuft
+  doc.font("Regular").fontSize(6.3).fillColor(GRAU).text(
+    "voraussichtlich arbeitsunfähig bis einschließlich oder\nletzter Tag der Arbeitsunfähigkeit",
+    M, cy, { width: linksW },
+  );
+  doc.font("Bold").fontSize(11).fillColor(DUNKEL).text(auBis, M, cy + 14, { width: linksW });
+  doc.save().moveTo(M, cy + 30).lineTo(M + linksW, cy + 30).lineWidth(0.6).strokeColor(LINIE).stroke().restore();
+  cy += 38;
   feld(doc, M, cy, linksW, "festgestellt am", festgestellt, { fett: true, groesse: 11 });
   doc.save().moveTo(M, cy + 26).lineTo(M + linksW, cy + 26).lineWidth(0.6).strokeColor(LINIE).stroke().restore();
   cy += 34;

@@ -39,6 +39,40 @@ const SYNONYME: Record<string, string[]> = {
   kopfschmerzen: ["kopfschmerz"],
   fieberblasen: ["herpes labialis"],
   munddrossel: ["soor"],
+  magendarm: ["gastroenteritis"],
+  bauchschmerzen: ["abdominelle schmerzen", "abdomen"],
+  halsschmerzen: ["pharyngitis", "tonsillitis"],
+  husten: ["husten"],
+  bronchitis: ["bronchitis"],
+  nasennebenhoehlen: ["sinusitis"],
+  mittelohr: ["otitis media"],
+  harnwegsinfekt: ["harnwegsinfektion", "zystitis"],
+  blasenentzuendung: ["zystitis"],
+  nierensteine: ["nephrolithiasis"],
+  kopfweh: ["kopfschmerz"],
+  schwindel: ["schwindel", "vertigo"],
+  blutarmut: ["anaemie"],
+  zuckerkrankheit: ["diabetes mellitus"],
+  schilddruese: ["schilddruese", "struma", "thyreoiditis"],
+  depression: ["depressiv"],
+  burnout: ["zustaende der erschoepfung", "erschöpfung"],
+  angst: ["angststoerung", "phobisch"],
+  schlafstoerung: ["insomnie", "schlaf"],
+  allergie: ["allergisch", "allergie"],
+  heuschnupfen: ["pollinose", "allergische rhinitis"],
+  asthma: ["asthma bronchiale"],
+  neurodermitis: ["atopische dermatitis", "endogenes ekzem"],
+  schuppenflechte: ["psoriasis"],
+  arthritis: ["arthritis"],
+  rheumatismus: ["rheumatismus"],
+  osteoporose: ["osteoporose"],
+  bandscheibe: ["bandscheiben"],
+  tennisarm: ["epikondylitis"],
+  karpaltunnel: ["karpaltunnelsyndrom"],
+  migraine: ["migraene"],
+  tinnitus: ["tinnitus"],
+  grauerStar: ["katarakt"],
+  gruenerStar: ["glaukom"],
 };
 
 /** Umlaut-robust: ä→ae etc., damit „Durchfall" und „diarrhö" beides findet. */
@@ -72,20 +106,31 @@ export function icdSuche(suche: string, limit = 25): IcdEintrag[] {
   });
 
   const codeTreffer: IcdEintrag[] = [];
-  const textTreffer: IcdEintrag[] = [];
+  const exakt: IcdEintrag[] = []; // alle Wörter (oder Synonyme) treffen
+  const teil: { e: IcdEintrag; score: number }[] = []; // nur ein Teil trifft
   for (let i = 0; i < katalog_.length; i++) {
     const [code, text] = katalog_[i];
     if (qCode.length >= 2 && code.startsWith(qCode)) {
       codeTreffer.push({ code, text });
       continue;
     }
-    if (
-      varianten.length > 0 &&
-      varianten.every((gruppe) => gruppe.some((v) => norm![i].includes(v)))
-    ) {
-      textTreffer.push({ code, text });
+    if (varianten.length === 0) continue;
+    const trefferWorte = varianten.filter((gruppe) =>
+      gruppe.some((v) => norm![i].includes(v)),
+    ).length;
+    if (trefferWorte === varianten.length) {
+      exakt.push({ code, text });
+    } else if (trefferWorte > 0 && varianten.length > 1) {
+      // Toleranz-Fallback: einzelne Wörter reichen, je mehr desto weiter oben
+      teil.push({ e: { code, text }, score: trefferWorte });
     }
-    if (codeTreffer.length + textTreffer.length >= limit * 3) break;
+    if (codeTreffer.length + exakt.length >= limit * 3) break;
   }
-  return [...codeTreffer, ...textTreffer].slice(0, limit);
+  // Toleranz-Fallback nur, wenn es KEINE exakten Treffer gibt — sonst bleibt
+  // die Trefferliste streng (alle Suchwörter müssen vorkommen).
+  if (codeTreffer.length === 0 && exakt.length === 0 && teil.length > 0) {
+    teil.sort((a, b) => b.score - a.score);
+    return teil.map((t) => t.e).slice(0, limit);
+  }
+  return [...codeTreffer, ...exakt].slice(0, limit);
 }
