@@ -120,6 +120,7 @@ export default function Portal() {
             <div>
               <Label>Ihre 4-stellige PIN</Label>
               <Input
+                type="password"
                 inputMode="numeric"
                 autoComplete="off"
                 maxLength={4}
@@ -154,6 +155,7 @@ export default function Portal() {
                 </p>
                 <div className="flex gap-2">
                   <Input
+                    type="password"
                     inputMode="numeric"
                     autoComplete="off"
                     maxLength={4}
@@ -163,6 +165,7 @@ export default function Portal() {
                     onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                   />
                   <Input
+                    type="password"
                     inputMode="numeric"
                     autoComplete="off"
                     maxLength={4}

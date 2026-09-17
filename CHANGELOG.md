@@ -1,5 +1,13 @@
 # Changelog — PraxiOS
 
+## [1.17.2] — 2026-09-17 — PIN-Eingabe maskiert
+
+### Kleinigkeit (alex' Feedback)
+- Portal-PIN wird jetzt beim Tippen mit Punkten maskiert (type=password,
+  numerische Tastatur bleibt) — beim Festlegen UND beim Login
+
+---
+
 ## [1.17.1] — 2026-09-16 — Portal-PIN-Siegel (First-Use-Claim)
 
 ### Neu (alex' Sicherheitsidee)
