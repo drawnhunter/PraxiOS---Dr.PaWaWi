@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { basisUrl } from "@/lib/links";
 import { kopiereInZwischenablage } from "@/lib/clipboard";
 import { Link } from "react-router";
 import type { inferRouterOutputs } from "@trpc/server";
@@ -468,11 +469,12 @@ function AboInhalt({
   onKopieren: () => void;
 }) {
   const utils = trpc.useUtils();
+  const settings = trpc.settings.get.useQuery(undefined, { retry: false });
   const [fehler, setFehler] = useState("");
   const [laedt, setLaedt] = useState(true);
   const neuToken = trpc.kalender.feedTokenNeu.useMutation({
     onSuccess: (r) => {
-      setAboUrl(`${window.location.origin}${r.pfad}`);
+      setAboUrl(`${basisUrl(settings.data?.oeffentlicheUrl)}${r.pfad}`);
       setLaedt(false);
     },
     onError: (e) => {
@@ -484,7 +486,7 @@ function AboInhalt({
   useEffect(() => {
     utils.kalender.feedUrl
       .fetch()
-      .then((r) => setAboUrl(`${window.location.origin}${r.pfad}`))
+      .then((r) => setAboUrl(`${basisUrl(settings.data?.oeffentlicheUrl)}${r.pfad}`))
       .catch((e) => setFehler(e.message))
       .finally(() => setLaedt(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps

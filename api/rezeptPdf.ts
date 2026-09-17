@@ -42,6 +42,10 @@ export interface RezeptPdfInput {
     ort: string;
     telefon?: string | null;
     email?: string | null;
+    /** Muster-16-Rahmen (1.17.0): LANR/BSNR/Fachrichtung aus den Praxis-Einstellungen. */
+    arztNr?: string | null;
+    betriebsstaettenNr?: string | null;
+    fachrichtung?: string | null;
   };
   /** base64-Data-URL (PNG/JPG) oder null → nur Unterschriftszeile. */
   signaturBild?: string | null;
@@ -90,7 +94,20 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
 
   const { praxis, patient, datum } = input;
 
-  // ── Praxis-Kopf (kompakt) ─────────────────────────────────────────────────
+  // ── Praxis-Kopf (kompakt) — bei Rezept/Praxisbedarf mit „Privatrezept"-
+  // Kennzeichnung rechts (Muster-16-Rahmen, 1.17.0) ─────────────────────────
+  const istRezeptArt = input.typ === "rezept" || input.typ === "praxisbedarf";
+  if (istRezeptArt) {
+    doc
+      .font("Bold")
+      .fontSize(9)
+      .fillColor(PETROL)
+      .text(input.typ === "rezept" ? "Privatrezept" : "Praxisbedarf", MARGIN, MARGIN + 2, {
+        width: W,
+        align: "right",
+        lineBreak: false,
+      });
+  }
   doc.font("Bold").fontSize(11.5).fillColor(PETROL).text(praxis.name, MARGIN, MARGIN);
   doc
     .font("Regular")
@@ -109,10 +126,27 @@ export async function renderRezeptPdf(input: RezeptPdfInput): Promise<Buffer> {
     .strokeColor(PETROL)
     .stroke();
 
+  // ── Muster-16-Nummernblock (1.17.0): BSNR · Arzt-Nr. · Datum — nur wenn
+  // wenigstens ein Wert gepflegt ist; bei Rezept/Praxisbedarf ──────────────
+  if (istRezeptArt && (praxis.arztNr || praxis.betriebsstaettenNr)) {
+    const nummern = [
+      praxis.betriebsstaettenNr ? `Betriebsstätten-Nr. ${praxis.betriebsstaettenNr}` : null,
+      praxis.arztNr ? `Arzt-Nr. ${praxis.arztNr}` : null,
+      `Datum ${datum}`,
+    ]
+      .filter(Boolean)
+      .join("   ·   ");
+    doc
+      .font("Regular")
+      .fontSize(7)
+      .fillColor(GRAU)
+      .text(nummern, MARGIN, kopfEnde + 4, { width: W, align: "left", lineBreak: false });
+  }
+
   // ── Empfänger: Patient ODER „zur Anwendung in der Praxis" ────────────────
   const istPraxisbedarf = input.typ === "praxisbedarf";
   const geb = patient?.geburtsdatum ? `, geb. am ${patient.geburtsdatum}` : "";
-  let y = kopfEnde + 10;
+  let y = kopfEnde + (istRezeptArt && (praxis.arztNr || praxis.betriebsstaettenNr) ? 18 : 10);
   if (istPraxisbedarf) {
     doc
       .font("Bold")

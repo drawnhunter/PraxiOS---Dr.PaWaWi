@@ -40,6 +40,7 @@ CREATE TABLE `company_settings` (
   `arzt_nr` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `betriebsstaetten_nr` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `fachrichtung` varchar(120) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `oeffentliche_url` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `standard_zahlungsziel` int NOT NULL DEFAULT '14',
   `fuss_text` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

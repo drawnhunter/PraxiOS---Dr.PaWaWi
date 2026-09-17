@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { kopiereInZwischenablage } from "@/lib/clipboard";
 import { trpc } from "@/providers/trpc";
+import { basisUrl } from "@/lib/links";
 import { datum } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +34,9 @@ export function PortalSection({ patientId }: { patientId: number }) {
   const [kopiert, setKopiert] = useState<number | null>(null);
   const [ablehnKommentar, setAblehnKommentar] = useState("");
 
-  const portalUrl = (token: string) => `${window.location.origin}/portal/${token}`;
+  const einstellungen = trpc.settings.get.useQuery(undefined, { retry: false });
+  const portalUrl = (token: string) =>
+    `${basisUrl(einstellungen.data?.oeffentlicheUrl)}/portal/${token}`;
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-5">

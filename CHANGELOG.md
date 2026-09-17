@@ -1,5 +1,25 @@
 # Changelog — PraxiOS
 
+## [1.17.0] — 2026-09-16 — Öffentliche Portal-URL + Rezept im Muster-16-Rahmen
+
+### Fix/Feature (alex' Feldbericht: WhatsApp erkennt Portal-Links nicht)
+- **Öffentliche Basis-URL** (Einstellungen → Praxis): Wird für alle Links
+  verwendet, die die Praxis verlassen — Patienten-Portal, Anamnesebögen,
+  Kalender-ICS, Zahlungsziele-Feed. Hintergrund: Die LAN-IP
+  (http://192.168.x.x:PORT) ist für Patienten außerhalb unerreichbar UND
+  WhatsApp erkennt IP:Port-Links nicht zuverlässig. Öffentliche Adresse
+  eintragen (z. B. https://drvetter.v6.army) → Links sind tappbar und
+  erreichbar. Leer = bisheriges Verhalten (aktuelle Adresse)
+- **Privatrezept im Muster-16-Rahmen**: „Privatrezept"-Kennzeichnung rechts
+  im Kopf, Nummernzeile „Betriebsstätten-Nr. · Arzt-Nr. · Datum" (aus den
+  neuen Praxis-Feldern; erscheint nur, wenn gepflegt). Apotheken erkennen
+  den bekannten Rahmen sofort
+
+### Migration (automatisch beim Start)
+- `company_settings`: `oeffentliche_url`
+
+---
+
 ## [1.16.2] — 2026-09-16 — ICD-Eingabe direkt + flexiblere Suche
 
 ### Verbesserungen (Feedback aus dem ersten Echtdruck)

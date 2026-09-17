@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { basisUrl } from "@/lib/links";
 import { kopiereInZwischenablage } from "@/lib/clipboard";
 import { trpc } from "@/providers/trpc";
 import { geld, datum as fmtDatum } from "@/lib/format";
@@ -51,6 +52,7 @@ export default function Zahlungsziele() {
 
   const eintraege = trpc.posteingang.zahlungsziele.useQuery();
   const ics = trpc.settings.icsStatus.useQuery();
+  const settings = trpc.settings.get.useQuery(undefined, { retry: false });
   const icsNeu = trpc.settings.icsNeu.useMutation({ onSuccess: () => utils.settings.icsStatus.invalidate() });
   const markPaid = trpc.einrechnung.markPaid.useMutation({
     onSuccess: () => {
@@ -60,7 +62,7 @@ export default function Zahlungsziele() {
   });
 
   const icsUrl = ics.data?.token
-    ? `${window.location.origin}/ics/zahlungsziele.ics?token=${ics.data.token}`
+    ? `${basisUrl(settings.data?.oeffentlicheUrl)}/ics/zahlungsziele.ics?token=${ics.data.token}`
     : "";
 
   const nachDatum = useMemo(() => {

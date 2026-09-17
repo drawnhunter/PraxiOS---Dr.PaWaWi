@@ -37,6 +37,9 @@ export const companySettings = mysqlTable("company_settings", {
   arztNr: varchar("arzt_nr", { length: 20 }),
   betriebsstaettenNr: varchar("betriebsstaetten_nr", { length: 20 }),
   fachrichtung: varchar("fachrichtung", { length: 120 }),
+  // Öffentliche Basis-URL (1.17.0): für Patienten-Links (Portal, Bögen, ICS) —
+  // die LAN-IP taugt nicht für WhatsApp/Empfänger außerhalb des Netzwerks.
+  oeffentlicheUrl: varchar("oeffentliche_url", { length: 255 }),
   standardZahlungsziel: int("standard_zahlungsziel").notNull().default(14),
   fussText: text("fuss_text"),
   // DATEV-Export (Buchungsstapel)

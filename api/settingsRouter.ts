@@ -27,6 +27,7 @@ const settingsInput = z.object({
   arztNr: z.string().max(20).nullable().optional(),
   betriebsstaettenNr: z.string().max(20).nullable().optional(),
   fachrichtung: z.string().max(120).nullable().optional(),
+  oeffentlicheUrl: z.string().max(255).nullable().optional(),
   standardZahlungsziel: z.number().int().min(0).max(120),
   fussText: z.string().nullable().optional(),
   datevBeraternummer: z.string().nullable().optional(),

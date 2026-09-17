@@ -42,6 +42,7 @@ interface FirmenForm {
   arztNr: string;
   betriebsstaettenNr: string;
   fachrichtung: string;
+  oeffentlicheUrl: string;
   standardZahlungsziel: number;
   fussText: string;
   datevBeraternummer: string;
@@ -128,6 +129,7 @@ export default function SettingsPage() {
       arztNr: s.arztNr ?? "",
       betriebsstaettenNr: s.betriebsstaettenNr ?? "",
       fachrichtung: s.fachrichtung ?? "",
+      oeffentlicheUrl: s.oeffentlicheUrl ?? "",
       standardZahlungsziel: s.standardZahlungsziel,
       fussText: s.fussText ?? "",
       datevBeraternummer: s.datevBeraternummer ?? "",
@@ -307,6 +309,18 @@ export default function SettingsPage() {
               onChange={(e) => setFirma({ ...firma, fachrichtung: e.target.value })}
             />
           </div>
+          <div className="sm:col-span-2">
+            <Label>Öffentliche URL (für Patienten-Links: Portal, Bögen, Kalender-Abo)</Label>
+            <Input
+              placeholder="z. B. https://praxis.example.de — leer = aktuelle Adresse verwenden"
+              value={firma.oeffentlicheUrl}
+              onChange={(e) => setFirma({ ...firma, oeffentlicheUrl: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-neutral-400">
+              Wichtig, wenn ihr über die LAN-IP arbeitet: Patienten erreichen 192.168.x.x nicht,
+              und WhatsApp erkennt solche Links nicht. Hier die öffentliche Adresse der Instanz eintragen.
+            </p>
+          </div>
           <div>
             <Label>Standard-Zahlungsziel</Label>
             <Select
@@ -363,6 +377,7 @@ export default function SettingsPage() {
                 arztNr: firma.arztNr || null,
                 betriebsstaettenNr: firma.betriebsstaettenNr || null,
                 fachrichtung: firma.fachrichtung || null,
+                oeffentlicheUrl: firma.oeffentlicheUrl || null,
                 fussText: firma.fussText || null,
                 kreditorStartnummer: firma.kreditorStartnummer,
                 aufwandskontoDefault: firma.aufwandskontoDefault || null,

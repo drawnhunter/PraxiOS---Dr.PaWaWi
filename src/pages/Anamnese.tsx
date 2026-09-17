@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { kopiereInZwischenablage } from "@/lib/clipboard";
 import { BLOCK_TYPEN, BLOCK_TYP_LABEL, type FormBlock } from "@contracts/anamnese";
 import { trpc } from "@/providers/trpc";
+import { basisUrl } from "@/lib/links";
 import { pdfHerunterladen } from "@/lib/downloads";
 import { BogenEditor } from "@/components/BogenEditor";
 import { Button } from "@/components/ui/button";
@@ -192,7 +193,8 @@ function LinkDialog({ formId, onClose }: { formId: number | null; onClose: () =>
     },
   });
 
-  const urlFuer = (token: string) => `${window.location.origin}/bogen/${token}`;
+  const settings = trpc.settings.get.useQuery(undefined, { retry: false });
+  const urlFuer = (token: string) => `${basisUrl(settings.data?.oeffentlicheUrl)}/bogen/${token}`;
 
   const qrAnzeigen = async (token: string) => {
     const url = urlFuer(token);
