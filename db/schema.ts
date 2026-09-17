@@ -1414,6 +1414,10 @@ export const patientPortalLinks = mysqlTable("patient_portal_links", {
   fehlversuche: int("fehlversuche").notNull().default(0),
   gesperrtBis: timestamp("gesperrt_bis"),
   letzterZugriffAm: timestamp("letzter_zugriff_am"),
+  // PIN-Siegel (1.17.1): beim ersten Login vom Patienten gesetzt; danach ist
+  // die PIN der zweite Faktor (statt Geburtsdatum). sha256 mit Salz.
+  pinHash: varchar("pin_hash", { length: 130 }),
+  pinGesetztAm: timestamp("pin_gesetzt_am"),
   createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
     () => users.id,
     { onDelete: "set null" },

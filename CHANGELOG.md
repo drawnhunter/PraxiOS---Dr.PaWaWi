@@ -1,5 +1,29 @@
 # Changelog — PraxiOS
 
+## [1.17.1] — 2026-09-16 — Portal-PIN-Siegel (First-Use-Claim)
+
+### Neu (alex' Sicherheitsidee)
+- **PIN-Siegel beim Patienten-Portal**: Beim ersten Login (Link +
+  Geburtsdatum) wählt der Patient eine **4-stellige PIN** (2× eingegeben).
+  Ab dann ist die PIN der zweite Faktor — das Geburtsdatum (schwaches,
+  weithin bekanntes Wissen) fällt weg
+- **Tamper-Signal**: War ein Fremder zuerst auf dem Link, sieht der echte
+  Patient eine PIN-Abfrage, die er nie gesetzt hat — Hinweistext auf der
+  Login-Seite weist ausdrücklich darauf hin („bitte Praxis informieren")
+- **PIN-Reset durch die Praxis** (Akte → Portal): löst Sperre, beendet alle
+  Portal-Sessions des Links (Pflicht bei Fremdzugriffs-Verdacht), wird im
+  Zugriffs-Audit protokolliert. Nächster Login = Geburtsdatum + neue PIN
+- **Praxis sieht den Siegel-Status** am Link („PIN versiegelt" / „noch nicht
+  gesetzt")
+- Rate-Limit unverändert (5 Fehlversuche → 60 min Sperre) — bei 10.000
+  PIN-Kombinationen ist Brute-Force praktisch ausgeschlossen. Gespeichert
+  als sha256 mit Zufallssalz (Klartext nirgends, Praxis kann nicht lesen)
+
+### Migration (automatisch beim Start)
+- `patient_portal_links`: `pin_hash`, `pin_gesetzt_am`
+
+---
+
 ## [1.17.0] — 2026-09-16 — Öffentliche Portal-URL + Rezept im Muster-16-Rahmen
 
 ### Fix/Feature (alex' Feldbericht: WhatsApp erkennt Portal-Links nicht)

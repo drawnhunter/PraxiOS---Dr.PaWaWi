@@ -9,6 +9,7 @@ import {
   customers,
   patientDatenAntraege,
   patientPortalLinks,
+  patientPortalSessions,
   patientPortalZugriffe,
   terminAnfragen,
 } from "@db/schema";
@@ -46,6 +47,32 @@ export const portalAdminRouter = createRouter({
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       await getDb().delete(patientPortalLinks).where(eq(patientPortalLinks.id, input.id));
+      return { ok: true };
+    }),
+
+  // PIN-Siegel zurücksetzen (1.17.1): PIN vergessen oder Verdacht auf
+  // Fremdzugriff → Patient setzt beim nächsten Login eine neue PIN
+  // (Weg über Geburtsdatum). Fehlversuche/Sperre werden mit gelöst.
+  pinZuruecksetzen: rechtQuery("akte")
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const link = await db.query.patientPortalLinks.findFirst({
+        where: eq(patientPortalLinks.id, input.id),
+      });
+      if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Link nicht gefunden." });
+      await db.transaction(async (tx) => {
+        await tx
+          .update(patientPortalLinks)
+          .set({ pinHash: null, pinGesetztAm: null, fehlversuche: 0, gesperrtBis: null })
+          .where(eq(patientPortalLinks.id, input.id));
+        // Laufende Sessions des Links beenden — bei Fremdzugriffs-Verdacht Pflicht
+        await tx.delete(patientPortalSessions).where(eq(patientPortalSessions.linkId, input.id));
+      });
+      await db.insert(patientPortalZugriffe).values({
+        patientId: link.patientId,
+        bereich: `pin-reset durch Praxis (User #${ctx.user.id})`,
+      });
       return { ok: true };
     }),
 

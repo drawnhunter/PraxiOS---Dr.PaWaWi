@@ -112,6 +112,9 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "fachrichtung", ddl: "ALTER TABLE company_settings ADD COLUMN fachrichtung VARCHAR(120) NULL AFTER betriebsstaetten_nr" },
   // Öffentliche Basis-URL (1.17.0)
   { tabelle: "company_settings", spalte: "oeffentliche_url", ddl: "ALTER TABLE company_settings ADD COLUMN oeffentliche_url VARCHAR(255) NULL AFTER fachrichtung" },
+  // Portal-PIN-Siegel (1.17.1)
+  { tabelle: "patient_portal_links", spalte: "pin_hash", ddl: "ALTER TABLE patient_portal_links ADD COLUMN pin_hash VARCHAR(130) NULL AFTER letzter_zugriff_am" },
+  { tabelle: "patient_portal_links", spalte: "pin_gesetzt_am", ddl: "ALTER TABLE patient_portal_links ADD COLUMN pin_gesetzt_am TIMESTAMP NULL AFTER pin_hash" },
   // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
   { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
   // Rabatte (ReWaWi-Sync 1.9): Positions- + Hauptrabatt

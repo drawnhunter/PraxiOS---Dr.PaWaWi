@@ -82,6 +82,9 @@ export default function Portal() {
   const einloggen = trpc.portal.einloggen.useMutation();
   const abmelden = trpc.portal.abmelden.useMutation();
   const [geb, setGeb] = useState("");
+  const [pin, setPin] = useState("");
+  const [pin2, setPin2] = useState("");
+  const [pinFehler, setPinFehler] = useState<string | null>(null);
 
   if (info.isLoading) {
     return <Rahmen><p className="text-center text-sm text-neutral-500">Lade …</p></Rahmen>;
@@ -99,32 +102,92 @@ export default function Portal() {
   }
 
   if (!session) {
+    const hatPin = info.data?.hatPin === true;
     return (
       <Rahmen>
         <div className="text-center">
           <ShieldCheck className="mx-auto mb-3 h-8 w-8 text-teal-700" />
           <h1 className="text-lg font-semibold">Patientenportal</h1>
           <p className="mt-2 text-sm text-neutral-500">
-            Guten Tag{info.data?.patientenName ? `, ${info.data.patientenName}` : ""}! Bitte melden Sie sich mit
-            Ihrem Geburtsdatum an (Sicherheitsprüfung).
+            Guten Tag{info.data?.patientenName ? `, ${info.data.patientenName}` : ""}!{" "}
+            {hatPin
+              ? "Bitte melden Sie sich mit Ihrer PIN an."
+              : "Bitte melden Sie sich mit Ihrem Geburtsdatum an (Sicherheitsprüfung)."}
           </p>
         </div>
         <div className="mt-5 space-y-3">
-          <div>
-            <Label>Ihr Geburtsdatum (TT.MM.JJJJ)</Label>
-            <Input
-              placeholder="z. B. 01.02.1980"
-              value={geb}
-              onChange={(e) => setGeb(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && absenden()}
-            />
-          </div>
+          {hatPin ? (
+            <div>
+              <Label>Ihre 4-stellige PIN</Label>
+              <Input
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={4}
+                placeholder="····"
+                className="text-center text-lg tracking-[0.5em]"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                onKeyDown={(e) => e.key === "Enter" && absenden()}
+              />
+              <p className="mt-2 text-center text-xs text-neutral-400">
+                Sie haben noch keine PIN gewählt, werden aber danach gefragt? Dann war
+                möglicherweise jemand vor Ihnen auf diesem Link — bitte informieren Sie
+                die Praxis.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <Label>Ihr Geburtsdatum (TT.MM.JJJJ)</Label>
+                <Input
+                  placeholder="z. B. 01.02.1980"
+                  value={geb}
+                  onChange={(e) => setGeb(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && absenden()}
+                />
+              </div>
+              <div className="rounded-md border border-teal-100 bg-teal-50/50 p-3">
+                <Label>Wählen Sie jetzt Ihre PIN (4 Ziffern)</Label>
+                <p className="mb-2 mt-0.5 text-xs text-neutral-500">
+                  Ab dem nächsten Besuch melden Sie sich nur noch mit dieser PIN an.
+                  Gut merken — die Praxis kann sie nicht einsehen, nur zurücksetzen.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={4}
+                    placeholder="PIN"
+                    className="text-center tracking-[0.4em]"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  />
+                  <Input
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={4}
+                    placeholder="Wiederholung"
+                    className="text-center tracking-[0.4em]"
+                    value={pin2}
+                    onChange={(e) => setPin2(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    onKeyDown={(e) => e.key === "Enter" && absenden()}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+          {pinFehler && <p className="text-center text-sm text-red-600">{pinFehler}</p>}
           <Button
             className="w-full"
-            disabled={einloggen.isPending || geb.trim().length < 8}
+            disabled={
+              einloggen.isPending ||
+              (hatPin
+                ? pin.length !== 4
+                : geb.trim().length < 8 || pin.length !== 4 || pin2.length !== 4)
+            }
             onClick={absenden}
           >
-            {einloggen.isPending ? "Prüfe …" : "Anmelden"}
+            {einloggen.isPending ? "Prüfe …" : hatPin ? "Anmelden" : "Anmelden und PIN festlegen"}
           </Button>
           {einloggen.error && (
             <p className="text-center text-sm text-red-600">{einloggen.error.message}</p>
@@ -138,17 +201,26 @@ export default function Portal() {
     );
 
     function absenden() {
-      einloggen.mutate(
-        { token, geburtsdatum: geb.trim() },
-        {
-          onSuccess: (r) => {
-            localStorage.setItem(`portal-session-${token}`, r.session);
-            localStorage.setItem(`portal-session-bis-${token}`, r.gueltigBis);
-            setSession(r.session);
-            setSessionBis(r.gueltigBis);
-          },
-        },
-      );
+      setPinFehler(null);
+      if (!info.data?.hatPin) {
+        if (pin !== pin2) {
+          setPinFehler("Die PINs stimmen nicht überein.");
+          return;
+        }
+        einloggen.mutate(
+          { token, geburtsdatum: geb.trim(), neuePin: pin },
+          { onSuccess: (r) => sessionStarten(r) },
+        );
+      } else {
+        einloggen.mutate({ token, pin }, { onSuccess: (r) => sessionStarten(r) });
+      }
+    }
+
+    function sessionStarten(r: { session: string; gueltigBis: string }) {
+      localStorage.setItem(`portal-session-${token}`, r.session);
+      localStorage.setItem(`portal-session-bis-${token}`, r.gueltigBis);
+      setSession(r.session);
+      setSessionBis(r.gueltigBis);
     }
   }
 

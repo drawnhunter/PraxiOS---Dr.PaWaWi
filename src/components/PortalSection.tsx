@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   ClipboardCopy,
+  KeyRound,
   Link2,
   ShieldCheck,
   Trash2,
@@ -24,6 +25,12 @@ export function PortalSection({ patientId }: { patientId: number }) {
   });
   const loeschen = trpc.portalAdmin.linkLoeschen.useMutation({
     onSuccess: () => utils.portalAdmin.links.invalidate({ patientId }),
+  });
+  const pinReset = trpc.portalAdmin.pinZuruecksetzen.useMutation({
+    onSuccess: () => {
+      utils.portalAdmin.links.invalidate({ patientId });
+      utils.portalAdmin.zugriffe.invalidate({ patientId });
+    },
   });
   const bestaetigen = trpc.portalAdmin.antragBestaetigen.useMutation({
     onSuccess: () => utils.portalAdmin.antraege.invalidate({ patientId }),
@@ -77,6 +84,11 @@ export function PortalSection({ patientId }: { patientId: number }) {
                   gültig bis {datum(l.gueltigBis)}
                   {abgelaufen && <span className="ml-1 text-red-500">(abgelaufen)</span>}
                   {l.letzterZugriffAm && ` · letzter Zugriff ${new Date(l.letzterZugriffAm).toLocaleString("de-DE")}`}
+                  {"pinHash" in l && (
+                    <span className={`ml-1 ${l.pinHash ? "text-teal-700" : "text-amber-600"}`}>
+                      {l.pinHash ? "· PIN versiegelt" : "· PIN noch nicht gesetzt"}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -92,6 +104,20 @@ export function PortalSection({ patientId }: { patientId: number }) {
                   <ClipboardCopy className="mr-1 h-3.5 w-3.5" />
                   {kopiert === l.id ? "kopiert!" : "Link kopieren"}
                 </Button>
+                {"pinHash" in l && Boolean(l.pinHash) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-amber-700"
+                    onClick={() =>
+                      window.confirm(
+                        "PIN zurücksetzen? Der Patient legt beim nächsten Login über das Geburtsdatum eine neue PIN fest. Laufende Portal-Sessions werden beendet.",
+                      ) && pinReset.mutate({ id: l.id })
+                    }
+                  >
+                    <KeyRound className="mr-1 h-3.5 w-3.5" /> PIN-Reset
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"

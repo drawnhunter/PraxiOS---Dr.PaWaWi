@@ -1098,6 +1098,8 @@ CREATE TABLE `patient_portal_links` (
   `fehlversuche` int NOT NULL DEFAULT '0',
   `gesperrt_bis` timestamp NULL DEFAULT NULL,
   `letzter_zugriff_am` timestamp NULL DEFAULT NULL,
+  `pin_hash` varchar(130) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pin_gesetzt_am` timestamp NULL DEFAULT NULL,
   `created_by` bigint unsigned DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

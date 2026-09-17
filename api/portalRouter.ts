@@ -25,7 +25,19 @@ import {
 import { env } from "./lib/env";
 
 const DATUM_RE = /^\d{2}\.\d{2}\.\d{4}$/;
+const PIN_RE = /^\d{4}$/;
 const SESSION_STUNDEN = 24;
+
+// PIN-Siegel (1.17.1): sha256 mit Zufallssalz, Format „salz:hash".
+// 4 Stellen sind nur Dank Rate-Limit (5 Versuche → 60 min Sperre) vertretbar.
+function pinHash(pin: string, salz?: string): string {
+  const s = salz ?? crypto.randomBytes(8).toString("hex");
+  return `${s}:${crypto.createHash("sha256").update(`${s}:${pin}`).digest("hex")}`;
+}
+function pinPruefen(pin: string, gespeichert: string): boolean {
+  const [salz] = gespeichert.split(":");
+  return pinHash(pin, salz) === gespeichert;
+}
 
 interface PortalBereiche {
   termine: boolean;
@@ -123,6 +135,9 @@ export const portalRouter = createRouter({
       return {
         patientenName: vorname,
         bereiche,
+        // PIN-Siegel: steuert, welche Login-Form der Patient sieht.
+        // Verrät nichts weiter — nur „PIN schon gesetzt: ja/nein".
+        hatPin: Boolean(link.pinHash),
       };
     }),
 
@@ -130,23 +145,19 @@ export const portalRouter = createRouter({
     .input(
       z.object({
         token: z.string().min(10).max(80),
-        geburtsdatum: z.string().regex(DATUM_RE, "Format TT.MM.JJJJ"),
+        // Erst-Login (kein PIN gesetzt): Geburtsdatum + neue PIN (2×, UI prüft)
+        geburtsdatum: z.string().regex(DATUM_RE, "Format TT.MM.JJJJ").optional(),
+        neuePin: z.string().regex(PIN_RE, "PIN muss 4 Ziffern haben").optional(),
+        // Folge-Logins (PIN gesetzt): nur PIN
+        pin: z.string().regex(PIN_RE, "PIN muss 4 Ziffern haben").optional(),
       }),
     )
     .mutation(async ({ input }) => {
       const db = getDb();
       const link = await ladeLink(input.token);
 
-      const patient = await db.query.customers.findFirst({
-        where: eq(customers.id, link.patientId),
-        columns: { id: true, geburtsdatum: true },
-      });
-      const erwartet = patient?.geburtsdatum
-        ? patient.geburtsdatum.split("-").reverse().join(".")
-        : null;
-      const stimmt = erwartet !== null && erwartet === input.geburtsdatum;
-
-      if (!stimmt) {
+      // Hilfsfunktion: Fehlversuch zählen (5 → 60 min Sperre)
+      const fehlschlag = async (grund: string): Promise<never> => {
         const versuche = link.fehlversuche + 1;
         const gesperrt = versuche >= 5;
         await db
@@ -160,8 +171,41 @@ export const portalRouter = createRouter({
           code: "UNAUTHORIZED",
           message: gesperrt
             ? "Zu viele Fehlversuche — Zugang für 60 Minuten gesperrt."
-            : "Geburtsdatum stimmt nicht mit den Praxis-Unterlagen überein.",
+            : grund,
         });
+      };
+
+      if (link.pinHash) {
+        // ── Folge-Login: PIN prüfen ────────────────────────────────────────
+        if (!input.pin) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Bitte Ihre 4-stellige PIN eingeben." });
+        }
+        if (!pinPruefen(input.pin, link.pinHash)) {
+          await fehlschlag("PIN stimmt nicht. Falls Sie keine PIN gesetzt haben, wenden Sie sich bitte an die Praxis.");
+        }
+      } else {
+        // ── Erst-Login: Geburtsdatum prüfen + PIN setzen (Siegel) ──────────
+        if (!input.geburtsdatum) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Bitte Geburtsdatum eingeben (TT.MM.JJJJ)." });
+        }
+        const patient = await db.query.customers.findFirst({
+          where: eq(customers.id, link.patientId),
+          columns: { id: true, geburtsdatum: true },
+        });
+        const erwartet = patient?.geburtsdatum
+          ? patient.geburtsdatum.split("-").reverse().join(".")
+          : null;
+        if (erwartet === null || erwartet !== input.geburtsdatum) {
+          await fehlschlag("Geburtsdatum stimmt nicht mit den Praxis-Unterlagen überein.");
+        }
+        if (!input.neuePin) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Bitte wählen Sie eine 4-stellige PIN." });
+        }
+        await db
+          .update(patientPortalLinks)
+          .set({ pinHash: pinHash(input.neuePin), pinGesetztAm: new Date() })
+          .where(eq(patientPortalLinks.id, link.id));
+        await audit(link.patientId, "pin-gesetzt");
       }
 
       // Erfolg: Fehlversuche zurücksetzen, Session anlegen (24 h)
