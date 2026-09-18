@@ -1,5 +1,29 @@
 # Changelog — PraxiOS
 
+## [1.18.0] — 2026-09-17 — Agent-API: Dokumenten-Batch-Upload (Bus #68)
+
+### Neu (Agent — schließt den Workflow „Fotos → Plan → Akte")
+- **`POST /patient/:id/dokumente`** — Batch-Upload (bis 25 Dateien je Aufruf):
+  `{dateien: [{dateiname, base64, kategorie?, dokumentdatum?, notiz?}], ocr?}`
+  Antwort je Datei: `{id, dateiname, kategorie, extraktionsStatus}`
+- **Kategorien**: voller Katalog (befund/arztbrief/rezept/einverstaendnis/
+  anamnesebogen/sonstiges) + Praxis-Sprech wird gemappt (labor→befund,
+  extern/therapieplan/scan→sonstiges)
+- **`ocr: true`** extrahiert den Text direkt beim Upload (pdftotext, OCR-
+  Fallback per Tesseract — Scans ohne Textebene bleiben für den Agenten
+  nicht länger blind); Ergebnis dauerhaft an der Akte (`ocr_text`,
+  `ocr_status`: text/ocr/keiner)
+- **`GET /patient/:id/dokumente`** — Liste mit Extraktions-Status
+- **`GET /dokument/:id/text`** — Text lesen; bei Bedarf on-demand-Extraktion
+  mit dauerhafter Ablage (Wiederholung kostet nichts)
+- Herkunft markiert (`quelle: agent`), jede Aktion im agent_log; Größenlimit
+  15 MB je Datei (Body-Limit der App: 50 MB)
+
+### Migration (automatisch beim Start)
+- `documents`: `dokumentdatum`, `quelle`, `ocr_text`, `ocr_status`
+
+---
+
 ## [1.17.2] — 2026-09-17 — PIN-Eingabe maskiert
 
 ### Kleinigkeit (alex' Feedback)

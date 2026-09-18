@@ -863,6 +863,11 @@ export const documents = mysqlTable(
     mimeType: varchar("mime_type", { length: 100 }),
     groesse: int("groesse", { unsigned: true }),
     notiz: varchar("notiz", { length: 500 }),
+    // Agenten-Upload (1.18.0): fachliches Datum + Herkunft + Text-Extraktion
+    dokumentdatum: date("dokumentdatum", { mode: "string" }),
+    quelle: varchar("quelle", { length: 20 }), // agent / mensch / portal (null = mensch)
+    ocrText: mediumtext("ocr_text"),
+    ocrStatus: varchar("ocr_status", { length: 10 }), // text / ocr / keiner
     uploadedBy: bigint("uploaded_by", { mode: "number", unsigned: true }).references(
       () => users.id,
       { onDelete: "set null" },

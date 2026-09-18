@@ -823,6 +823,164 @@ app.post("/patient", async (c) => {
   return c.json({ ok: true, id, pseudonym: `P-${String(id).padStart(4, "0")}`, hinweis: "Patient angelegt — Stammdaten bitte in der Akte vervollständigen/prüfen." });
 });
 
+// ── Dokumente: Batch-Upload in die Akte (Bus #68, 1.18.0) ─────────────────
+// Der Agent kann damit Scans/PDFs selbst ablegen — der bisher letzte
+// manuelle Schritt im Workflow „Fotos → Plan → Akte". Optional OCR direkt
+// beim Upload, damit der Inhalt später maschinell lesbar ist.
+const DOK_TYPEN: Record<string, string> = {
+  pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg",
+  png: "image/png", webp: "image/webp", gif: "image/gif", heic: "image/heic",
+};
+const DOK_KATEGORIEN = ["befund", "arztbrief", "rezept", "einverstaendnis", "anamnesebogen", "sonstiges"] as const;
+// Agenten-Begriffe → Katalog-Enum (labor/extern/therapieplan sind Praxis-Sprech)
+const DOK_KATEGORIE_MAP: Record<string, string> = {
+  labor: "befund", extern: "sonstiges", therapieplan: "sonstiges", scan: "sonstiges",
+};
+
+function mappeKategorie(k: unknown): string {
+  const roh = String(k ?? "").trim().toLowerCase();
+  if (!roh) return "sonstiges";
+  return (DOK_KATEGORIEN as readonly string[]).includes(roh) ? roh : (DOK_KATEGORIE_MAP[roh] ?? "sonstiges");
+}
+
+app.post("/patient/:id/dokumente", async (c) => {
+  const patientId = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const dateien = Array.isArray(body.dateien) ? body.dateien : null;
+  if (!dateien || dateien.length === 0) {
+    return c.json({ fehler: "dateien fehlt — Array aus {dateiname, base64, kategorie?, dokumentdatum?, notiz?}." }, 400);
+  }
+  if (dateien.length > 25) return c.json({ fehler: "Max. 25 Dateien pro Aufruf (Batch)." }, 400);
+  const ocrGewuenscht = body.ocr === true;
+  const db = getDb();
+  const patient = await db.query.customers.findFirst({ where: eq(customers.id, patientId), columns: { id: true } });
+  if (!patient) return c.json({ fehler: "Patient nicht gefunden." }, 404);
+
+  const { documents } = await import("@db/schema");
+  const { env } = await import("./lib/env");
+  const fsP = await import("node:fs/promises");
+  const pathM = await import("node:path");
+  const cryptoM = await import("node:crypto");
+  const { extrahiereAnhangText } = await import("./lib/anhangText");
+
+  const ergebnisse: Record<string, unknown>[] = [];
+  for (const d of dateien as Record<string, unknown>[]) {
+    const dateiname = String(d.dateiname ?? "").trim().slice(0, 255);
+    const ext = (dateiname.split(".").pop() ?? "").toLowerCase();
+    const mime = DOK_TYPEN[ext];
+    if (!dateiname || !mime) {
+      ergebnisse.push({ ok: false, dateiname: dateiname || "?", fehler: "Typ nicht erlaubt (pdf/jpg/jpeg/png/webp/gif/heic)." });
+      continue;
+    }
+    const buf = Buffer.from(String(d.base64 ?? ""), "base64");
+    if (buf.length < 50) {
+      ergebnisse.push({ ok: false, dateiname, fehler: "base64 fehlt oder Datei ist leer." });
+      continue;
+    }
+    if (buf.length > 15 * 1024 * 1024) {
+      ergebnisse.push({ ok: false, dateiname, fehler: "Datei zu groß (max. 15 MB je Datei)." });
+      continue;
+    }
+    const dokumentdatum = /^\d{4}-\d{2}-\d{2}$/.test(String(d.dokumentdatum ?? ""))
+      ? String(d.dokumentdatum) : null;
+
+    // Datei ablegen
+    const internerName = `${Date.now()}-${cryptoM.randomBytes(6).toString("hex")}.${ext}`;
+    const ordner = String(patientId);
+    const relativerPfad = `${ordner}/${internerName}`;
+    await fsP.mkdir(pathM.join(env.uploadDir, ordner), { recursive: true });
+    await fsP.writeFile(pathM.join(env.uploadDir, relativerPfad), buf);
+
+    // Optional OCR direkt beim Upload (Scans ohne Textebene bleiben sonst blind)
+    let ocrStatus: string | null = null;
+    let ocrText: string | null = null;
+    if (ocrGewuenscht) {
+      const erg = await extrahiereAnhangText(buf, mime);
+      ocrStatus = !erg.ok ? "keiner" : erg.methode === "pdftotext" ? "text" : "ocr";
+      ocrText = erg.ok ? (erg.text ?? null) : null;
+    }
+
+    const [{ id }] = await db
+      .insert(documents)
+      .values({
+        patientId,
+        kategorie: mappeKategorie(d.kategorie) as "sonstiges",
+        dateiname,
+        dateipfad: relativerPfad,
+        mimeType: mime,
+        groesse: buf.length,
+        notiz: d.notiz ? String(d.notiz).slice(0, 500) : null,
+        dokumentdatum,
+        quelle: "agent",
+        ocrText,
+        ocrStatus,
+      })
+      .$returningId();
+    ergebnisse.push({ ok: true, id, dateiname, kategorie: mappeKategorie(d.kategorie), extraktionsStatus: ocrStatus ?? (ocrGewuenscht ? "keiner" : null) });
+  }
+  const okAnzahl = ergebnisse.filter((e) => e.ok === true).length;
+  await audit("dokumente_hochgeladen", { patientId, anzahl: okAnzahl, gesamt: dateien.length, ocr: ocrGewuenscht });
+  return c.json({
+    ok: okAnzahl > 0,
+    hochgeladen: okAnzahl,
+    fehlgeschlagen: dateien.length - okAnzahl,
+    ergebnisse,
+  }, okAnzahl === 0 ? 400 : 200);
+});
+
+// Dokumente einer Akte auflisten (mit Extraktions-Status)
+app.get("/patient/:id/dokumente", async (c) => {
+  const patientId = Number(c.req.param("id"));
+  const rows = await db_queryDocs(patientId);
+  return c.json({
+    anzahl: rows.length,
+    dokumente: rows,
+  });
+});
+
+async function db_queryDocs(patientId: number) {
+  const { documents } = await import("@db/schema");
+  const rows = await getDb().query.documents.findMany({
+    where: eq(documents.patientId, patientId),
+    orderBy: [desc(documents.createdAt)],
+    limit: 200,
+  });
+  return rows.map((r) => ({
+    id: r.id, dateiname: r.dateiname, kategorie: r.kategorie, groesse: r.groesse,
+    dokumentdatum: r.dokumentdatum, notiz: r.notiz, quelle: r.quelle,
+    extraktionsStatus: r.ocrStatus, hochgeladenAm: r.createdAt,
+  }));
+}
+
+// Text eines Dokuments lesen (aus ocrText oder on-demand Extraktion)
+app.get("/dokument/:id/text", async (c) => {
+  const id = Number(c.req.param("id"));
+  const { documents } = await import("@db/schema");
+  const db = getDb();
+  const d = await db.query.documents.findFirst({ where: eq(documents.id, id) });
+  if (!d) return c.json({ ok: false, fehler: "Dokument nicht gefunden." }, 404);
+  if (d.ocrText) {
+    return c.json({ ok: true, id, dateiname: d.dateiname, extraktionsStatus: d.ocrStatus, text: d.ocrText });
+  }
+  // On-demand: jetzt extrahieren und Ergebnis dauerhaft ablegen
+  const { env } = await import("./lib/env");
+  const { readFile } = await import("node:fs/promises");
+  const pathM = await import("node:path");
+  const { extrahiereAnhangText } = await import("./lib/anhangText");
+  try {
+    const buf = await readFile(pathM.join(env.uploadDir, d.dateipfad));
+    const erg = await extrahiereAnhangText(buf, d.mimeType ?? "application/pdf");
+    const status = !erg.ok ? "keiner" : erg.methode === "pdftotext" ? "text" : "ocr";
+    await db.update(documents)
+      .set({ ocrText: erg.ok ? (erg.text ?? null) : null, ocrStatus: status })
+      .where(eq(documents.id, id));
+    if (!erg.ok) return c.json({ ok: false, id, extraktionsStatus: status, fehler: erg.fehler }, 422);
+    return c.json({ ok: true, id, dateiname: d.dateiname, extraktionsStatus: status, text: erg.text });
+  } catch (e) {
+    return c.json({ ok: false, fehler: e instanceof Error ? e.message : String(e) }, 500);
+  }
+});
+
 // ── Therapiepläne: lesen + Entwurf anlegen ─────────────────────────────────
 app.get("/therapieplaene", async (c) => {
   const pseudo = await pseudonymAn();
