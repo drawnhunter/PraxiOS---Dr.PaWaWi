@@ -25,6 +25,7 @@ import {
   therapyPlans,
 } from "@db/schema";
 import { env } from "./lib/env";
+import { jitsiBeitritt } from "./lib/jitsiJwt";
 
 const DATUM_RE = /^\d{2}\.\d{2}\.\d{4}$/;
 const PIN_RE = /^\d{4}$/;
@@ -562,12 +563,8 @@ export const portalRouter = createRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Online-Termin nicht gefunden." });
       }
       await audit(sess.patientId, "online-beitritt");
-      const s = await getDb().query.companySettings.findFirst({
-        where: eq(companySettings.id, 1),
-        columns: { jitsiBaseUrl: true },
-      });
-      const basis = s?.jitsiBaseUrl?.trim().replace(/\/+$/, "") || "https://meet.jit.si";
-      return { raumUrl: `${basis}/${t.raumCode}` };
+      const r = await jitsiBeitritt(t.raumCode, "Patient/in", false);
+      return { raumUrl: `${r.basis}/${t.raumCode}`, jwt: r.token };
     }),
 
   // ── Öffentlich: Gast-Zugang zum Online-Termin (eigener Token-Link) ───────
@@ -590,9 +587,15 @@ export const portalRouter = createRouter({
       }
       const s = await db.query.companySettings.findFirst({
         where: eq(companySettings.id, 1),
-        columns: { jitsiBaseUrl: true, name: true },
+        columns: { name: true },
       });
-      const basis = s?.jitsiBaseUrl?.trim().replace(/\/+$/, "") || "https://meet.jit.si";
+      let raumUrl: string | null = null;
+      let jwt: string | null = null;
+      if (gast.termin.status === "geplant") {
+        const r = await jitsiBeitritt(gast.termin.raumCode, gast.name, false);
+        raumUrl = `${r.basis}/${gast.termin.raumCode}`;
+        jwt = r.token;
+      }
       return {
         gastName: gast.name,
         titel: gast.termin.titel,
@@ -601,7 +604,8 @@ export const portalRouter = createRouter({
         zeitBis: gast.termin.zeitBis,
         status: gast.termin.status,
         praxisName: s?.name ?? "Praxis",
-        raumUrl: gast.termin.status === "geplant" ? `${basis}/${gast.termin.raumCode}` : null,
+        raumUrl,
+        jwt,
       };
     }),
 });

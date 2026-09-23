@@ -599,7 +599,7 @@ function OnlineTerminePortal({ session }: { session: string }) {
   const q = trpc.portal.onlineTermine.useQuery({ session }, { retry: false });
   const [beitritt, setBeitritt] = useState<number | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
-  const [raum, setRaum] = useState<{ url: string } | null>(null);
+  const [raum, setRaum] = useState<{ url: string; jwt?: string | null } | null>(null);
   if (q.isLoading) return <p className="text-sm text-neutral-500">Lade Online-Termine …</p>;
   if (q.isError) return <Fehler e={q.error} />;
   const termine = q.data?.termine ?? [];
@@ -636,7 +636,7 @@ function OnlineTerminePortal({ session }: { session: string }) {
                     setFehler(null);
                     try {
                       const r = await utils.portal.onlineTerminBeitritt.fetch({ session, id: t.id });
-                      setRaum({ url: r.raumUrl });
+                      setRaum({ url: r.raumUrl, jwt: r.jwt });
                     } catch (e) {
                       setFehler(e instanceof Error ? e.message : String(e));
                     } finally {
@@ -661,6 +661,7 @@ function OnlineTerminePortal({ session }: { session: string }) {
       {raum && (
         <JitsiRaum
           raumUrl={raum.url}
+          jwt={raum.jwt ?? null}
           anzeigeName="Patient/in"
           onSchliessen={() => setRaum(null)}
         />

@@ -8,7 +8,8 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, eq, gte } from "drizzle-orm";
 import { createRouter, rechtQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { companySettings, customers, onlineTerminGaeste, onlineTermine } from "@db/schema";
+import { customers, onlineTerminGaeste, onlineTermine } from "@db/schema";
+import { jitsiBeitritt } from "./lib/jitsiJwt";
 
 const DATUM_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ZEIT_RE = /^\d{2}:\d{2}$/;
@@ -21,14 +22,6 @@ const terminInput = z.object({
   zeitBis: z.string().regex(ZEIT_RE).nullable().optional(),
   notiz: z.string().trim().max(500).optional(),
 });
-
-async function ladeJitsiBasis(): Promise<string> {
-  const s = await getDb().query.companySettings.findFirst({
-    where: eq(companySettings.id, 1),
-    columns: { jitsiBaseUrl: true },
-  });
-  return (s?.jitsiBaseUrl?.trim().replace(/\/+$/, "") || "https://meet.jit.si");
-}
 
 export const onlineTerminRouter = createRouter({
   /** Kommende + alle Online-Termine (mit Patient + Gästen). */
@@ -134,19 +127,20 @@ export const onlineTerminRouter = createRouter({
       return { ok: true };
     }),
 
-  /** Beitritts-Infos für die Praxis (Raum-URL + eigener Gast-Zugang). */
+  /** Beitritts-Infos für die Praxis (Raum-URL + JWT + eigene Gast-Liste). */
   beitritt: rechtQuery("kalender")
     .input(z.object({ id: z.number().int() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const db = getDb();
       const t = await db.query.onlineTermine.findFirst({
         where: eq(onlineTermine.id, input.id),
         with: { gaeste: true },
       });
       if (!t) throw new TRPCError({ code: "NOT_FOUND", message: "Termin nicht gefunden." });
-      const basis = await ladeJitsiBasis();
+      const r = await jitsiBeitritt(t.raumCode, ctx.user.name || ctx.user.username || "Praxis", true);
       return {
-        raumUrl: `${basis}/${t.raumCode}`,
+        raumUrl: `${r.basis}/${t.raumCode}`,
+        jwt: r.token,
         gaeste: t.gaeste.map((g) => ({ id: g.id, name: g.name, token: g.token })),
       };
     }),

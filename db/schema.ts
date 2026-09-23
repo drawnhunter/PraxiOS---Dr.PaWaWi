@@ -43,6 +43,10 @@ export const companySettings = mysqlTable("company_settings", {
   // Online-Termine (1.19.0): Jitsi-Basis (Standard meet.jit.si; eigener Server
   // später per Eintrag, z. B. https://jitsi.praxis.example.de)
   jitsiBaseUrl: varchar("jitsi_base_url", { length: 255 }),
+  // Jitsi-JWT (1.19.2): Rollen serverseitig signieren — Praxis = Moderator,
+  // Patient/Gast = Teilnehmer. Kein „Wer leitet die Sitzung?"-Prompt mehr.
+  jitsiAppId: varchar("jitsi_app_id", { length: 60 }),
+  jitsiAppSecret: varchar("jitsi_app_secret", { length: 255 }),
   standardZahlungsziel: int("standard_zahlungsziel").notNull().default(14),
   fussText: text("fuss_text"),
   // DATEV-Export (Buchungsstapel)

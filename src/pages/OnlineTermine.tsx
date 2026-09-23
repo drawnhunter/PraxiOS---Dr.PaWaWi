@@ -3,6 +3,7 @@
 // Der Patient sieht seine Termine im Portal (Bereich „Online-Termine"),
 // Gäste bekommen eigene Token-Links (kein Portal nötig).
 import { useState } from "react";
+import { JitsiRaum } from "@/components/JitsiRaum";
 import { trpc } from "@/providers/trpc";
 import { datum } from "@/lib/format";
 import { basisUrl } from "@/lib/links";
@@ -130,9 +131,10 @@ export default function OnlineTermine() {
     else if (typeof dialog === "number") bearbeiten.mutate({ id: dialog, ...payload });
   };
 
+  const [raum, setRaum] = useState<{ url: string; jwt: string | null; name: string } | null>(null);
   const beitreten = async (id: number) => {
     const r = await utils.onlineTermine.beitritt.fetch({ id });
-    window.open(r.raumUrl, "_blank", "noopener");
+    setRaum({ url: r.raumUrl, jwt: r.jwt, name: r.gaeste.length ? "Praxis" : "Praxis" });
   };
 
   return (
@@ -293,6 +295,15 @@ export default function OnlineTermine() {
           );
         })}
       </div>
+
+      {raum && (
+        <JitsiRaum
+          raumUrl={raum.url}
+          jwt={raum.jwt}
+          anzeigeName={raum.name}
+          onSchliessen={() => setRaum(null)}
+        />
+      )}
 
       {/* ── Erstellen/Bearbeiten-Dialog ── */}
       <Dialog open={dialog !== null} onOpenChange={(o) => !o && setDialog(null)}>

@@ -44,6 +44,8 @@ interface FirmenForm {
   fachrichtung: string;
   oeffentlicheUrl: string;
   jitsiBaseUrl: string;
+  jitsiAppId: string;
+  jitsiAppSecret: string;
   standardZahlungsziel: number;
   fussText: string;
   datevBeraternummer: string;
@@ -132,6 +134,8 @@ export default function SettingsPage() {
       fachrichtung: s.fachrichtung ?? "",
       oeffentlicheUrl: s.oeffentlicheUrl ?? "",
       jitsiBaseUrl: s.jitsiBaseUrl ?? "",
+      jitsiAppId: s.jitsiAppId ?? "",
+      jitsiAppSecret: s.jitsiAppSecret ?? "",
       standardZahlungsziel: s.standardZahlungsziel,
       fussText: s.fussText ?? "",
       datevBeraternummer: s.datevBeraternummer ?? "",
@@ -325,6 +329,27 @@ export default function SettingsPage() {
               dann bleiben Gespräche komplett in eurer Infrastruktur (Datenschutz).
             </p>
           </div>
+          <div>
+            <Label>Jitsi App-ID</Label>
+            <Input
+              value={firma.jitsiAppId}
+              onChange={(e) => setFirma({ ...firma, jitsiAppId: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Jitsi App-Secret (JWT-Schlüssel)</Label>
+            <Input
+              type="password"
+              autoComplete="off"
+              value={firma.jitsiAppSecret}
+              onChange={(e) => setFirma({ ...firma, jitsiAppSecret: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-neutral-400">
+              Beide Werte kommen aus der Jitsi-Server-Konfiguration (JWT_APP_ID / JWT_APP_SECRET).
+              Ohne sie läuft der Raum im Testmodus — die „Wer leitet?"-Frage bleibt bestehen,
+              mit ihnen entscheidet der Server über die Rollen.
+            </p>
+          </div>
           <div className="sm:col-span-2">
             <Label>Öffentliche URL (für Patienten-Links: Portal, Bögen, Kalender-Abo)</Label>
             <Input
@@ -395,6 +420,8 @@ export default function SettingsPage() {
                 fachrichtung: firma.fachrichtung || null,
                 oeffentlicheUrl: firma.oeffentlicheUrl || null,
                 jitsiBaseUrl: firma.jitsiBaseUrl || null,
+                jitsiAppId: firma.jitsiAppId || null,
+                jitsiAppSecret: firma.jitsiAppSecret || null,
                 fussText: firma.fussText || null,
                 kreditorStartnummer: firma.kreditorStartnummer,
                 aufwandskontoDefault: firma.aufwandskontoDefault || null,

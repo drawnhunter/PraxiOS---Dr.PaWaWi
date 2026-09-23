@@ -86,6 +86,7 @@ export default function OnlineGast() {
       {raumOffen && q.data?.raumUrl && (
         <JitsiRaum
           raumUrl={q.data.raumUrl}
+          jwt={q.data.jwt ?? null}
           anzeigeName={q.data.gastName}
           onSchliessen={() => setRaumOffen(false)}
         />

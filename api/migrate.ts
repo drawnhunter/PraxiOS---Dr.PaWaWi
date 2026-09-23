@@ -122,6 +122,9 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "documents", spalte: "ocr_status", ddl: "ALTER TABLE documents ADD COLUMN ocr_status VARCHAR(10) NULL AFTER ocr_text" },
   // Online-Termine (1.19.0): Jitsi-Basis-URL
   { tabelle: "company_settings", spalte: "jitsi_base_url", ddl: "ALTER TABLE company_settings ADD COLUMN jitsi_base_url VARCHAR(255) NULL AFTER oeffentliche_url" },
+  // Jitsi-JWT (1.19.2): Rollen-Signatur
+  { tabelle: "company_settings", spalte: "jitsi_app_id", ddl: "ALTER TABLE company_settings ADD COLUMN jitsi_app_id VARCHAR(60) NULL AFTER jitsi_base_url" },
+  { tabelle: "company_settings", spalte: "jitsi_app_secret", ddl: "ALTER TABLE company_settings ADD COLUMN jitsi_app_secret VARCHAR(255) NULL AFTER jitsi_app_id" },
   // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
   { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
   // Rabatte (ReWaWi-Sync 1.9): Positions- + Hauptrabatt

@@ -29,10 +29,12 @@ function ladeJitsiSkript(basis: string): Promise<void> {
 
 export function JitsiRaum({
   raumUrl,
+  jwt,
   anzeigeName,
   onSchliessen,
 }: {
   raumUrl: string;
+  jwt?: string | null;
   anzeigeName: string;
   onSchliessen: () => void;
 }) {
@@ -53,6 +55,7 @@ export function JitsiRaum({
           width: "100%",
           height: "100%",
           userInfo: { displayName: anzeigeName },
+          ...(jwt ? { jwt } : {}),
           configOverwrite: {
             // Browser-first: Prejoin an (Kamera/Mikro-Check), kein App-Nudge
             prejoinPageEnabled: true,

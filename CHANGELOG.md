@@ -1,5 +1,23 @@
 # Changelog — PraxiOS
 
+## [1.19.2] — 2026-09-23 — Jitsi-JWT: Rollen serverseitig („Wer leitet?"-Prompt fällt weg)
+
+### Neu (für den eigenen Jitsi-Server)
+- **Jitsi-JWT-Aussteller** (HS256): Beitritte werden signiert — Praxis = Moderator
+  (Praxisname aus dem Login, lobbybypass, keine Rolle), Patient/Gast = Teilnehmer.
+  Die „Wer leitet die Sitzung?"-Frage erscheint bei niemandem mehr
+- **Raumschutz**: Mit JWT-Auth am Jitsi kommt ohne Token niemand in den Raum
+  (Fremde mit geratenem Code sind draußen); Gültigkeit 2 h je Token
+- **Neue Einstellungen**: Jitsi App-ID + App-Secret (aus der Server-Konfig);
+  ohne Werte läuft alles wie bisher (Testmodus)
+- **Praxis-Beitritt jetzt auch im Overlay** (statt Fremd-Tab) — alle drei Wege
+  (Portal, Gast, Praxis) sind identisch eingebettet
+
+### Migration (automatisch beim Start)
+- `company_settings`: `jitsi_app_id`, `jitsi_app_secret`
+
+---
+
 ## [1.19.1] — 2026-09-23 — Video-Raum eingebettet (kein App-Download)
 
 ### Verbesserung (alex' Test-Feedback)
