@@ -1,15 +1,18 @@
 // ── PraxiOS: Öffentliche Gast-Seite für Online-Termine (1.19.0) ────────────
 // Gäste brauchen kein Patienten-Portal — der Token-Link aus der Praxis reicht.
 // Zeigt Termin-Infos + Beitritts-Button (Jitsi-Raum, neuer Tab).
+import { useState } from "react";
 import { useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { datum } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { JitsiRaum } from "@/components/JitsiRaum";
 import { CalendarDays, Clock, ShieldCheck, Video, VideoOff } from "lucide-react";
 
 export default function OnlineGast() {
   const { token = "" } = useParams();
   const q = trpc.portal.onlineGast.useQuery({ token }, { retry: false });
+  const [raumOffen, setRaumOffen] = useState(false);
 
   return (
     <div className="min-h-screen bg-neutral-50 px-4 py-6 sm:py-10">
@@ -61,13 +64,13 @@ export default function OnlineGast() {
                   <Button
                     className="mt-5 w-full"
                     size="lg"
-                    onClick={() => window.open(q.data.raumUrl!, "_blank", "noopener")}
+                    onClick={() => setRaumOffen(true)}
                   >
                     <Video className="mr-2 h-5 w-5" /> Dem Video-Termin beitreten
                   </Button>
                   <p className="mt-3 text-xs text-neutral-400">
-                    Der Raum öffnet sich in einem neuen Tab (Jitsi Meet). Bitte erlauben Sie
-                    Kamera und Mikrofon. Tipp: ein paar Minuten früher beitreten.
+                    Der Raum öffnet sich direkt hier im Browser — keine App nötig. Bitte
+                    erlauben Sie Kamera und Mikrofon. Tipp: ein paar Minuten früher beitreten.
                   </p>
                 </>
               ) : null}
@@ -80,6 +83,13 @@ export default function OnlineGast() {
           )}
         </div>
       </div>
+      {raumOffen && q.data?.raumUrl && (
+        <JitsiRaum
+          raumUrl={q.data.raumUrl}
+          anzeigeName={q.data.gastName}
+          onSchliessen={() => setRaumOffen(false)}
+        />
+      )}
     </div>
   );
 }

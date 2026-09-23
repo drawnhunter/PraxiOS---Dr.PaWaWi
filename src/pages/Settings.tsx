@@ -319,8 +319,10 @@ export default function SettingsPage() {
               onChange={(e) => setFirma({ ...firma, jitsiBaseUrl: e.target.value })}
             />
             <p className="mt-1 text-xs text-neutral-400">
-              Basis-URL der Video-Räume. Mit einem eigenen Jitsi-Server bleiben die
-              Gespräche komplett in eurer Infrastruktur (Datenschutz).
+              Basis-URL des <strong>Jitsi-Servers</strong> für Video-Räume — <strong>nicht</strong> die
+              Adresse dieser App! Leer = meet.jit.si (Standard). Erst wenn ein eigener
+              Jitsi-Server läuft, hier dessen URL eintragen (z. B. https://jitsi.example.de) —
+              dann bleiben Gespräche komplett in eurer Infrastruktur (Datenschutz).
             </p>
           </div>
           <div className="sm:col-span-2">

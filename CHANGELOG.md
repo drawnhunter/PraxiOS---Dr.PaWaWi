@@ -1,5 +1,19 @@
 # Changelog — PraxiOS
 
+## [1.19.1] — 2026-09-23 — Video-Raum eingebettet (kein App-Download)
+
+### Verbesserung (alex' Test-Feedback)
+- **Video-Raum jetzt direkt IN der Seite** (Jitsi external_api als Vollbild-
+  Overlay): Patient (Portal) und Gäste (Token-Seite) beitreten ohne
+  App-Download-Nötigung und ohne Fremd-Tab — „Verlassen" führt zurück in
+  die App. Namen werden vorbefüllt (Gast-Name), App-Werbung im Jitsi-Frame
+  abgeschaltet
+- **Einstellungs-Falle entschärft**: Hinweis im Jitsi-Feld — die URL muss
+  auf einen JITSI-Server zeigen, NICHT auf diese App (sonst 404); bei
+  Ladefehler erklärt die Raum-Seite die Ursache statt still zu scheitern
+
+---
+
 ## [1.19.0] — 2026-09-17 — Online-Termine (Videosprechstunde)
 
 ### Neu (alex' Auftrag: erste Videosprechstunde ohne Teams/Zoom)

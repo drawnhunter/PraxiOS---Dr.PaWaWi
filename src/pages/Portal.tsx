@@ -8,6 +8,7 @@ import { useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { datum } from "@/lib/format";
 import { pdfHerunterladen } from "@/lib/downloads";
+import { JitsiRaum } from "@/components/JitsiRaum";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -598,6 +599,7 @@ function OnlineTerminePortal({ session }: { session: string }) {
   const q = trpc.portal.onlineTermine.useQuery({ session }, { retry: false });
   const [beitritt, setBeitritt] = useState<number | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
+  const [raum, setRaum] = useState<{ url: string } | null>(null);
   if (q.isLoading) return <p className="text-sm text-neutral-500">Lade Online-Termine …</p>;
   if (q.isError) return <Fehler e={q.error} />;
   const termine = q.data?.termine ?? [];
@@ -634,7 +636,7 @@ function OnlineTerminePortal({ session }: { session: string }) {
                     setFehler(null);
                     try {
                       const r = await utils.portal.onlineTerminBeitritt.fetch({ session, id: t.id });
-                      window.open(r.raumUrl, "_blank", "noopener");
+                      setRaum({ url: r.raumUrl });
                     } catch (e) {
                       setFehler(e instanceof Error ? e.message : String(e));
                     } finally {
@@ -648,7 +650,7 @@ function OnlineTerminePortal({ session }: { session: string }) {
               </div>
               {istHeute && (
                 <p className="mt-2 text-xs text-teal-700">
-                  Tipp: treten Sie ein paar Minuten früher bei und erlauben Sie Kamera &amp; Mikrofon.
+                  Der Raum öffnet sich direkt hier im Portal — bitte Kamera &amp; Mikrofon erlauben.
                 </p>
               )}
             </div>
@@ -656,6 +658,13 @@ function OnlineTerminePortal({ session }: { session: string }) {
         })}
       </div>
       {fehler && <p className="mt-2 text-sm text-red-600">{fehler}</p>}
+      {raum && (
+        <JitsiRaum
+          raumUrl={raum.url}
+          anzeigeName="Patient/in"
+          onSchliessen={() => setRaum(null)}
+        />
+      )}
     </div>
   );
 }
