@@ -43,6 +43,7 @@ interface FirmenForm {
   betriebsstaettenNr: string;
   fachrichtung: string;
   oeffentlicheUrl: string;
+  jitsiBaseUrl: string;
   standardZahlungsziel: number;
   fussText: string;
   datevBeraternummer: string;
@@ -130,6 +131,7 @@ export default function SettingsPage() {
       betriebsstaettenNr: s.betriebsstaettenNr ?? "",
       fachrichtung: s.fachrichtung ?? "",
       oeffentlicheUrl: s.oeffentlicheUrl ?? "",
+      jitsiBaseUrl: s.jitsiBaseUrl ?? "",
       standardZahlungsziel: s.standardZahlungsziel,
       fussText: s.fussText ?? "",
       datevBeraternummer: s.datevBeraternummer ?? "",
@@ -310,6 +312,18 @@ export default function SettingsPage() {
             />
           </div>
           <div className="sm:col-span-2">
+            <Label>Jitsi-Server (für Online-Termine)</Label>
+            <Input
+              placeholder="leer = https://meet.jit.si — eigener Server: https://jitsi.example.de"
+              value={firma.jitsiBaseUrl}
+              onChange={(e) => setFirma({ ...firma, jitsiBaseUrl: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-neutral-400">
+              Basis-URL der Video-Räume. Mit einem eigenen Jitsi-Server bleiben die
+              Gespräche komplett in eurer Infrastruktur (Datenschutz).
+            </p>
+          </div>
+          <div className="sm:col-span-2">
             <Label>Öffentliche URL (für Patienten-Links: Portal, Bögen, Kalender-Abo)</Label>
             <Input
               placeholder="z. B. https://praxis.example.de — leer = aktuelle Adresse verwenden"
@@ -378,6 +392,7 @@ export default function SettingsPage() {
                 betriebsstaettenNr: firma.betriebsstaettenNr || null,
                 fachrichtung: firma.fachrichtung || null,
                 oeffentlicheUrl: firma.oeffentlicheUrl || null,
+                jitsiBaseUrl: firma.jitsiBaseUrl || null,
                 fussText: firma.fussText || null,
                 kreditorStartnummer: firma.kreditorStartnummer,
                 aufwandskontoDefault: firma.aufwandskontoDefault || null,
@@ -1352,6 +1367,7 @@ function PortalAbschnitt() {
     atteste: "Atteste & Rezepte als PDF",
     daten: "Kontaktdaten + Änderungsanträge",
     terminanfragen: "Terminanfragen",
+    onlineTermine: "Online-Termine (Video)",
   };
 
   return (
@@ -1389,6 +1405,7 @@ function PortalAbschnitt() {
                     atteste: bereiche.atteste,
                     daten: bereiche.daten,
                     terminanfragen: bereiche.terminanfragen,
+                    onlineTermine: (bereiche as Record<string, boolean>).onlineTermine !== false,
                     [id]: e.target.checked,
                   } as typeof bereiche,
                 })

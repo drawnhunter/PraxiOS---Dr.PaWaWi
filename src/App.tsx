@@ -3,6 +3,8 @@ import Layout from "@/components/Layout";
 import TherapyImport from "@/pages/TherapyImport";
 import Dashboard from "@/pages/Dashboard";
 import Kalender from "@/pages/Kalender";
+import OnlineTermine from "@/pages/OnlineTermine";
+import OnlineGast from "@/pages/OnlineGast";
 import Patients from "@/pages/Patients";
 import PatientDetail from "@/pages/PatientDetail";
 import Plans from "@/pages/Plans";
@@ -49,6 +51,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/kalender" element={<Kalender />} />
+        <Route path="/online-termine" element={<OnlineTermine />} />
         <Route path="/patienten" element={<Patients />} />
         <Route path="/kunden" element={<Patients />} />
         <Route path="/patienten/:id" element={<PatientDetail />} />
@@ -93,6 +96,7 @@ export default function App() {
       </Route>
       <Route path="/bogen/:token" element={<Bogen />} />
       <Route path="/portal/:token" element={<Portal />} />
+      <Route path="/online/:token" element={<OnlineGast />} />
       <Route path="/login" element={<Login />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

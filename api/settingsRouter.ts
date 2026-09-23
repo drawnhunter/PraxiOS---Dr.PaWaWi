@@ -28,6 +28,7 @@ const settingsInput = z.object({
   betriebsstaettenNr: z.string().max(20).nullable().optional(),
   fachrichtung: z.string().max(120).nullable().optional(),
   oeffentlicheUrl: z.string().max(255).nullable().optional(),
+  jitsiBaseUrl: z.string().max(255).nullable().optional(),
   standardZahlungsziel: z.number().int().min(0).max(120),
   fussText: z.string().nullable().optional(),
   datevBeraternummer: z.string().nullable().optional(),
@@ -330,7 +331,7 @@ export const settingsRouter = createRouter({
       where: eq(companySettings.id, 1),
       columns: { portalAktiv: true, portalBereiche: true },
     });
-    const standard = { termine: true, therapieplan: true, dokumente: true, atteste: true, daten: true, terminanfragen: true };
+    const standard = { termine: true, therapieplan: true, dokumente: true, atteste: true, daten: true, terminanfragen: true, onlineTermine: true };
     let bereiche = standard;
     if (s?.portalBereiche) {
       try {
@@ -352,6 +353,7 @@ export const settingsRouter = createRouter({
             atteste: z.boolean(),
             daten: z.boolean(),
             terminanfragen: z.boolean(),
+            onlineTermine: z.boolean().optional(),
           })
           .optional(),
       }),

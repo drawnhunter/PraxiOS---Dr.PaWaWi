@@ -33,6 +33,7 @@ import {
   PencilLine,
   ShieldCheck,
   UserRound,
+  Video,
 } from "lucide-react";
 
 const KATEGORIE_LABEL: Record<string, string> = {
@@ -44,7 +45,7 @@ const KATEGORIE_LABEL: Record<string, string> = {
   sonstiges: "Sonstiges",
 };
 
-type BereichKey = "termine" | "plan" | "dokumente" | "atteste" | "daten" | "anfragen";
+type BereichKey = "termine" | "plan" | "dokumente" | "atteste" | "daten" | "anfragen" | "online";
 
 interface Bereiche {
   termine: boolean;
@@ -53,12 +54,14 @@ interface Bereiche {
   atteste: boolean;
   daten: boolean;
   terminanfragen: boolean;
+  onlineTermine?: boolean;
 }
 
 function menuEintraege(b: Bereiche | undefined): { key: BereichKey; label: string; icon: typeof CalendarDays }[] {
   if (!b) return [];
   const alle = [
     { key: "termine" as const, label: "Termine", icon: CalendarDays, on: b.termine },
+    { key: "online" as const, label: "Online-Termine", icon: Video, on: b.onlineTermine !== false },
     { key: "plan" as const, label: "Mein Verlauf", icon: ClipboardList, on: b.therapieplan },
     { key: "dokumente" as const, label: "Dokumente", icon: FileText, on: b.dokumente },
     { key: "atteste" as const, label: "Atteste & Rezepte", icon: FileDown, on: b.atteste },
@@ -297,6 +300,7 @@ export default function Portal() {
         {/* ── Detailansicht ──────────────────────────────────────────────── */}
         <main className="min-w-0">
           {aktiv === "termine" && <Termine session={session} />}
+          {aktiv === "online" && <OnlineTerminePortal session={session} />}
           {aktiv === "plan" && <Therapieplan session={session} />}
           {aktiv === "dokumente" && <Dokumente session={session} />}
           {aktiv === "atteste" && <Atteste session={session} />}
@@ -584,6 +588,74 @@ function Atteste({ session }: { session: string }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Online-Termine (Video, 1.19.0) ─────────────────────────────────────────
+function OnlineTerminePortal({ session }: { session: string }) {
+  const utils = trpc.useUtils();
+  const q = trpc.portal.onlineTermine.useQuery({ session }, { retry: false });
+  const [beitritt, setBeitritt] = useState<number | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
+  if (q.isLoading) return <p className="text-sm text-neutral-500">Lade Online-Termine …</p>;
+  if (q.isError) return <Fehler e={q.error} />;
+  const termine = q.data?.termine ?? [];
+  if (termine.length === 0) {
+    return (
+      <div>
+        <h2 className="mb-3 text-base font-semibold">Online-Termine</h2>
+        <p className="text-sm text-neutral-400">Derzeit sind keine Video-Termine geplant.</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <h2 className="mb-3 text-base font-semibold">Ihre Online-Termine</h2>
+      <div className="space-y-3">
+        {termine.map((t) => {
+          const heute = new Date().toISOString().slice(0, 10);
+          const istHeute = t.datum === heute;
+          return (
+            <div key={t.id} className={`rounded-xl border p-4 ${istHeute ? "border-teal-300 bg-teal-50/40" : "border-neutral-200"}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold">{t.titel}</div>
+                  <div className="mt-0.5 text-sm text-neutral-600">
+                    {istHeute ? <span className="font-medium text-teal-800">Heute, </span> : null}
+                    {datum(t.datum)} · <span className="tabular-nums">{t.zeitVon}{t.zeitBis ? `–${t.zeitBis}` : ""} Uhr</span>
+                  </div>
+                  {t.notiz && <div className="mt-1 text-xs text-neutral-400">{t.notiz}</div>}
+                </div>
+                <Button
+                  disabled={beitritt === t.id}
+                  onClick={async () => {
+                    setBeitritt(t.id);
+                    setFehler(null);
+                    try {
+                      const r = await utils.portal.onlineTerminBeitritt.fetch({ session, id: t.id });
+                      window.open(r.raumUrl, "_blank", "noopener");
+                    } catch (e) {
+                      setFehler(e instanceof Error ? e.message : String(e));
+                    } finally {
+                      setBeitritt(null);
+                    }
+                  }}
+                >
+                  <Video className="mr-1.5 h-4 w-4" />
+                  {beitritt === t.id ? "Öffne …" : "Beitreten"}
+                </Button>
+              </div>
+              {istHeute && (
+                <p className="mt-2 text-xs text-teal-700">
+                  Tipp: treten Sie ein paar Minuten früher bei und erlauben Sie Kamera &amp; Mikrofon.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {fehler && <p className="mt-2 text-sm text-red-600">{fehler}</p>}
     </div>
   );
 }

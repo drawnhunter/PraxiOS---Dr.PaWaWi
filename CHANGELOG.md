@@ -1,5 +1,31 @@
 # Changelog — PraxiOS
 
+## [1.19.0] — 2026-09-17 — Online-Termine (Videosprechstunde)
+
+### Neu (alex' Auftrag: erste Videosprechstunde ohne Teams/Zoom)
+- **Eigene Seite „Online-Termine"** (Menü, Recht `kalender`): Termin
+  erstellen (Patient, Titel, Datum, Von–Bis, Notiz), bearbeiten,
+  absagen/reaktivieren, löschen — der Video-Raum (zufälliger Code) wird
+  automatisch erzeugt; **Beitreten-Button** auch für die Praxis
+- **Patienten-Portal**: neuer (ab-)schaltbarer Bereich **„Online-Termine"**
+  — Blöcke mit Datum/Uhrzeit/Titel + Beitreten-Button; am Termin-Tag
+  hervorgehoben. Nur eigene Termine, Zugriff auditiert (wie alle Portal-
+  Bereiche)
+- **Gäste ohne Portal**: weitere Personen je Termin (Name, E-Mail optional)
+  mit eigenem Token-Link `/online/<token>` — Info-Seite mit Termin-Daten +
+  Beitreten-Button, Absage-Hinweis, „aufgerufen am"-Status für die Praxis.
+  Persönlicher Link, bitte nicht weitergeben
+- **Video-Technik**: Jitsi-Meet-kompatibel. Basis-URL in Einstellungen →
+  Praxis („Jitsi-Server"): Standard `meet.jit.si`; eigener Jitsi-Server
+  später nur per Eintrag — dann komplett in eigener Infrastruktur
+  (Datenschutz). Links nutzen die öffentliche URL (1.17.0) — WhatsApp-tauglich
+
+### Migration (automatisch beim Start)
+- Neue Tabellen: `online_termine`, `online_termin_gaeste`
+- `company_settings`: `jitsi_base_url`
+
+---
+
 ## [1.18.0] — 2026-09-17 — Agent-API: Dokumenten-Batch-Upload (Bus #68)
 
 ### Neu (Agent — schließt den Workflow „Fotos → Plan → Akte")

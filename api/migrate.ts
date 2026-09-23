@@ -120,6 +120,8 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "documents", spalte: "quelle", ddl: "ALTER TABLE documents ADD COLUMN quelle VARCHAR(20) NULL AFTER dokumentdatum" },
   { tabelle: "documents", spalte: "ocr_text", ddl: "ALTER TABLE documents ADD COLUMN ocr_text MEDIUMTEXT NULL AFTER quelle" },
   { tabelle: "documents", spalte: "ocr_status", ddl: "ALTER TABLE documents ADD COLUMN ocr_status VARCHAR(10) NULL AFTER ocr_text" },
+  // Online-Termine (1.19.0): Jitsi-Basis-URL
+  { tabelle: "company_settings", spalte: "jitsi_base_url", ddl: "ALTER TABLE company_settings ADD COLUMN jitsi_base_url VARCHAR(255) NULL AFTER oeffentliche_url" },
   // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
   { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
   // Rabatte (ReWaWi-Sync 1.9): Positions- + Hauptrabatt
@@ -179,6 +181,43 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       sheets TEXT NOT NULL,
       ergebnis TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  // Online-Termine (1.19.0)
+  {
+    tabelle: "online_termine",
+    ddl: `CREATE TABLE IF NOT EXISTS online_termine (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NULL,
+      titel VARCHAR(255) NOT NULL,
+      datum DATE NOT NULL,
+      zeit_von VARCHAR(5) NOT NULL,
+      zeit_bis VARCHAR(5) NULL,
+      raum_code VARCHAR(60) NOT NULL,
+      notiz VARCHAR(500) NULL,
+      status ENUM('geplant','abgesagt','dokumentiert') NOT NULL DEFAULT 'geplant',
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX ot_raum_uniq (raum_code),
+      INDEX ot_patient_idx (patient_id),
+      INDEX ot_datum_idx (datum),
+      CONSTRAINT ot_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT ot_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "online_termin_gaeste",
+    ddl: `CREATE TABLE IF NOT EXISTS online_termin_gaeste (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      termin_id BIGINT UNSIGNED NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(320) NULL,
+      token VARCHAR(64) NOT NULL,
+      zugegriffen_am TIMESTAMP NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX otg_token_uniq (token),
+      INDEX otg_termin_idx (termin_id),
+      CONSTRAINT otg_termin_fk FOREIGN KEY (termin_id) REFERENCES online_termine(id) ON DELETE CASCADE
     )`,
   },
   // PraxisWerk (Akte-Merge)

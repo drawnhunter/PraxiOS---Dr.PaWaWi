@@ -248,6 +248,7 @@ export const protokollVorlagenRelations = relations(protokollVorlagen, ({ one })
 
 // ── PraxiOS: Patienten-Portal ───────────────────────────────────────────────
 import { patientDatenAntraege, patientPortalLinks, patientPortalSessions, terminAnfragen } from "./schema";
+import { onlineTermine, onlineTerminGaeste } from "./schema";
 
 export const patientPortalLinksRelations = relations(patientPortalLinks, ({ one }) => ({
   patient: one(customers, {
@@ -264,6 +265,21 @@ export const patientPortalSessionsRelations = relations(patientPortalSessions, (
   patient: one(customers, {
     fields: [patientPortalSessions.patientId],
     references: [customers.id],
+  }),
+}));
+
+export const onlineTermineRelations = relations(onlineTermine, ({ one, many }) => ({
+  patient: one(customers, {
+    fields: [onlineTermine.patientId],
+    references: [customers.id],
+  }),
+  gaeste: many(onlineTerminGaeste),
+}));
+
+export const onlineTerminGaesteRelations = relations(onlineTerminGaeste, ({ one }) => ({
+  termin: one(onlineTermine, {
+    fields: [onlineTerminGaeste.terminId],
+    references: [onlineTermine.id],
   }),
 }));
 

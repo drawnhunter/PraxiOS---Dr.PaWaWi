@@ -7,13 +7,15 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, asc, desc, eq, gt } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   companySettings,
   customers,
   documents,
+  onlineTerminGaeste,
+  onlineTermine,
   patientDatenAntraege,
   patientPortalLinks,
   patientPortalSessions,
@@ -46,6 +48,7 @@ interface PortalBereiche {
   atteste: boolean;
   daten: boolean;
   terminanfragen: boolean;
+  onlineTermine: boolean;
 }
 
 const BEREICHE_STANDARD: PortalBereiche = {
@@ -55,6 +58,7 @@ const BEREICHE_STANDARD: PortalBereiche = {
   atteste: true,
   daten: true,
   terminanfragen: true,
+  onlineTermine: true,
 };
 
 async function ladeBereiche(): Promise<{ aktiv: boolean; bereiche: PortalBereiche }> {
@@ -514,5 +518,90 @@ export const portalRouter = createRouter({
       });
       await audit(sess.patientId, "terminanfrage");
       return { ok: true, hinweis: "Ihre Terminanfrage wurde übermittelt — die Praxis meldet sich." };
+    }),
+
+  // ── Geschützt per Session: Online-Termine (Video, 1.19.0) ────────────────
+  onlineTermine: publicQuery
+    .input(z.object({ session: z.string().min(10).max(80) }))
+    .query(async ({ input }) => {
+      const sess = await ladeSession(input.session);
+      const { bereiche } = await ladeBereiche();
+      bereichPruefen(bereiche, "onlineTermine");
+      await audit(sess.patientId, "online-termine");
+      const heute = new Date().toISOString().slice(0, 10);
+      const rows = await getDb().query.onlineTermine.findMany({
+        where: and(eq(onlineTermine.patientId, sess.patientId), eq(onlineTermine.status, "geplant")),
+        orderBy: [asc(onlineTermine.datum), asc(onlineTermine.zeitVon)],
+        limit: 20,
+      });
+      return {
+        termine: rows
+          .filter((t) => t.datum >= heute)
+          .map((t) => ({
+            id: t.id,
+            titel: t.titel,
+            datum: t.datum,
+            zeitVon: t.zeitVon,
+            zeitBis: t.zeitBis,
+            notiz: t.notiz,
+          })),
+      };
+    }),
+
+  onlineTerminBeitritt: publicQuery
+    .input(z.object({ session: z.string().min(10).max(80), id: z.number().int() }))
+    .query(async ({ input }) => {
+      const sess = await ladeSession(input.session);
+      const { bereiche } = await ladeBereiche();
+      bereichPruefen(bereiche, "onlineTermine");
+      const t = await getDb().query.onlineTermine.findFirst({
+        where: eq(onlineTermine.id, input.id),
+      });
+      // Nur eigene Termine (DSGVO: kein Fremdzugriff auf Raum-Codes)
+      if (!t || t.patientId !== sess.patientId || t.status !== "geplant") {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Online-Termin nicht gefunden." });
+      }
+      await audit(sess.patientId, "online-beitritt");
+      const s = await getDb().query.companySettings.findFirst({
+        where: eq(companySettings.id, 1),
+        columns: { jitsiBaseUrl: true },
+      });
+      const basis = s?.jitsiBaseUrl?.trim().replace(/\/+$/, "") || "https://meet.jit.si";
+      return { raumUrl: `${basis}/${t.raumCode}` };
+    }),
+
+  // ── Öffentlich: Gast-Zugang zum Online-Termin (eigener Token-Link) ───────
+  onlineGast: publicQuery
+    .input(z.object({ token: z.string().min(10).max(80) }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const gast = await db.query.onlineTerminGaeste.findFirst({
+        where: eq(onlineTerminGaeste.token, input.token),
+        with: { termin: { with: { patient: { columns: { name: true } } } } },
+      });
+      if (!gast) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Link ungültig — bitte bei der Praxis nachfragen." });
+      }
+      if (!gast.zugegriffenAm) {
+        await db
+          .update(onlineTerminGaeste)
+          .set({ zugegriffenAm: new Date() })
+          .where(eq(onlineTerminGaeste.id, gast.id));
+      }
+      const s = await db.query.companySettings.findFirst({
+        where: eq(companySettings.id, 1),
+        columns: { jitsiBaseUrl: true, name: true },
+      });
+      const basis = s?.jitsiBaseUrl?.trim().replace(/\/+$/, "") || "https://meet.jit.si";
+      return {
+        gastName: gast.name,
+        titel: gast.termin.titel,
+        datum: gast.termin.datum,
+        zeitVon: gast.termin.zeitVon,
+        zeitBis: gast.termin.zeitBis,
+        status: gast.termin.status,
+        praxisName: s?.name ?? "Praxis",
+        raumUrl: gast.termin.status === "geplant" ? `${basis}/${gast.termin.raumCode}` : null,
+      };
     }),
 });

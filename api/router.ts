@@ -24,6 +24,7 @@ import { invoiceImportRouter } from "./invoiceImportRouter";
 import { therapyImportRouter } from "./therapyImportRouter";
 import { planRouter } from "./planRouter";
 import { calendarRouter } from "./calendarRouter";
+import { onlineTerminRouter } from "./onlineTerminRouter";
 import { documentRouter } from "./documentRouter";
 import { anamneseRouter } from "./anamneseRouter";
 import { austauschRouter } from "./austauschRouter";
@@ -70,6 +71,7 @@ export const appRouter = createRouter({
   // PraxisWerk-Akte
   plaene: planRouter,
   kalender: calendarRouter,
+  onlineTermine: onlineTerminRouter,
   dokumente: documentRouter,
   anamnese: anamneseRouter,
   austausch: austauschRouter,

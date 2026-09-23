@@ -41,6 +41,7 @@ CREATE TABLE `company_settings` (
   `betriebsstaetten_nr` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `fachrichtung` varchar(120) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `oeffentliche_url` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `jitsi_base_url` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `standard_zahlungsziel` int NOT NULL DEFAULT '14',
   `fuss_text` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1110,6 +1111,40 @@ CREATE TABLE `patient_portal_links` (
   UNIQUE KEY `ppl_token_uniq` (`token`),
   CONSTRAINT `ppl_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
   CONSTRAINT `ppl_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `online_termine` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned DEFAULT NULL,
+  `titel` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `datum` date NOT NULL,
+  `zeit_von` varchar(5) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `zeit_bis` varchar(5) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `raum_code` varchar(60) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `notiz` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('geplant','abgesagt','dokumentiert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'geplant',
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ot_raum_uniq` (`raum_code`),
+  KEY `ot_patient_idx` (`patient_id`),
+  KEY `ot_datum_idx` (`datum`),
+  CONSTRAINT `ot_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ot_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `online_termin_gaeste` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `termin_id` bigint unsigned NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `email` varchar(320) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `token` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `zugegriffen_am` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `otg_token_uniq` (`token`),
+  KEY `otg_termin_idx` (`termin_id`),
+  CONSTRAINT `otg_termin_fk` FOREIGN KEY (`termin_id`) REFERENCES `online_termine` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `patient_portal_sessions` (

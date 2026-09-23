@@ -40,6 +40,9 @@ export const companySettings = mysqlTable("company_settings", {
   // Öffentliche Basis-URL (1.17.0): für Patienten-Links (Portal, Bögen, ICS) —
   // die LAN-IP taugt nicht für WhatsApp/Empfänger außerhalb des Netzwerks.
   oeffentlicheUrl: varchar("oeffentliche_url", { length: 255 }),
+  // Online-Termine (1.19.0): Jitsi-Basis (Standard meet.jit.si; eigener Server
+  // später per Eintrag, z. B. https://jitsi.praxis.example.de)
+  jitsiBaseUrl: varchar("jitsi_base_url", { length: 255 }),
   standardZahlungsziel: int("standard_zahlungsziel").notNull().default(14),
   fussText: text("fuss_text"),
   // DATEV-Export (Buchungsstapel)
@@ -1473,6 +1476,44 @@ export const patientDatenAntraege = mysqlTable("patient_daten_antraege", {
   ),
 });
 export type PatientDatenAntrag = typeof patientDatenAntraege.$inferSelect;
+
+// ── Online-Termine (Video, 1.19.0) ─────────────────────────────────────────
+// Video-Raum je Termin (Jitsi-kompatibel, Raum-Code = Zufall). Patient sieht
+// ihn im Portal (Bereich „Online-Termine"), Gäste über eigene Token-Links.
+export const onlineTermine = mysqlTable("online_termine", {
+  id: serial("id").primaryKey(),
+  patientId: bigint("patient_id", { mode: "number", unsigned: true }).references(
+    () => customers.id,
+    { onDelete: "cascade" },
+  ),
+  titel: varchar("titel", { length: 255 }).notNull(),
+  datum: date("datum", { mode: "string" }).notNull(),
+  zeitVon: varchar("zeit_von", { length: 5 }).notNull(),
+  zeitBis: varchar("zeit_bis", { length: 5 }),
+  raumCode: varchar("raum_code", { length: 60 }).notNull().unique(),
+  notiz: varchar("notiz", { length: 500 }),
+  status: mysqlEnum("status", ["geplant", "abgesagt", "dokumentiert"]).notNull().default("geplant"),
+  createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type OnlineTermin = typeof onlineTermine.$inferSelect;
+
+// Gäste eines Online-Termins (eigener Zugang per Token-Link — kein Portal nötig)
+export const onlineTerminGaeste = mysqlTable("online_termin_gaeste", {
+  id: serial("id").primaryKey(),
+  terminId: bigint("termin_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => onlineTermine.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  zugegriffenAm: timestamp("zugegriffen_am"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type OnlineTerminGast = typeof onlineTerminGaeste.$inferSelect;
 
 // Termin-Anfragen des Patienten (Praxis bestätigt/vergibt)
 export const terminAnfragen = mysqlTable("termin_anfragen", {

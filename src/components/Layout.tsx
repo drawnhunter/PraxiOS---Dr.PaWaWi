@@ -7,6 +7,7 @@ import type { Recht } from "@contracts/constants";
 import {
   LayoutDashboard,
   Calendar,
+  Video,
   ClipboardList,
   FileUp,
   Landmark,
@@ -48,6 +49,7 @@ type NavGruppe = { id: string; titel: string; eintraege: NavEintrag[] };
 const OBEN: NavEintrag[] = [
   { to: "/", label: "Übersicht", icon: LayoutDashboard, end: true },
   { to: "/kalender", label: "Kalender", icon: Calendar, recht: "kalender" },
+  { to: "/online-termine", label: "Online-Termine", icon: Video, recht: "kalender" },
 ];
 
 /** Pfad → Modul-ID (null = immer sichtbar). Spiegelt api/lib/module MODUL_DEFS. */
