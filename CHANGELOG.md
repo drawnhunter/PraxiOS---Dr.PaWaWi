@@ -1,5 +1,40 @@
 # Changelog — PraxiOS
 
+## [1.20.0] — 2026-09-24 — Mail-Pro + Editor-Upgrade (Runde-2-Sync ReWaWi v1.18–v1.20)
+
+### Mail-Pro (Backend, ReWaWi-Sync)
+- **Undo-Send + Senden-Später**: Ausgang-Zwischenpforte — Mails laufen über
+  eine serverseitige Queue (`status` am Entwurf: entwurf/ausgang/fehler);
+  Undo-Send-Fenster in Einstellungen (0–30 s), Später-Senden mit Datum/Zeit
+  (`geplantes_senden_am`)
+- **Signaturen pro Konto**: `signatur_neu` / `signatur_antwort` am Mail-Konto
+  (schlagen die globale Signatur)
+- **Abwesenheitsnotiz (serverseitig)**: pro Konto mit Zeitraum, nur-Kontakte-
+  Option, Frequenz-Limit 1×/4 Tage je Absender (`mail_autoreply_log`)
+- **Doppelversand-Schutz** über die Zwischenpforte (Doppelklick kann nichts
+  mehr doppelt senden)
+
+### Editor-Upgrade (MailEditor)
+- **Markdown-Input-Rules** (`**fett**`, `- `, `> `, `---`), **Textbausteine**
+  per Kürzel+TAB (eigene Verwaltung im Mail-Konto-Bereich), **Typo-
+  Autokorrektur** (de, in Einstellungen abschaltbar), **Emoji :Suche**,
+  Smart Paste, Undo/Redo, Rechtschreibung (de), Shortcut-Hilfe
+
+### Mail-Office
+- Fenster lösen/anbinden, Tabs keep-alive, **Ordner-Verwaltung** (erstellen/
+  umbenennen/löschen per Rechtsklick), Ordner-Favoriten, Konto-Reorder,
+  Adress-Chips (Kontakt anlegen/kopieren), Drucken/PDF, Entwürfe-Sidebar
+- Provider-Presets (Gmail/GMX/WEB.DE) im neuen Postfach-Dialog wieder drin
+- `mail_mails.markiert` (Stern-Markierung)
+
+### Migration (automatisch beim Start)
+- `email_konten` +7 Spalten (Signaturen, Abwesenheit), `mail_entwuerfe` +4
+  (status/versand/geplant), `company_settings` +2 (typo_korrektur,
+  undo_sende_sekunden), `mail_mails.markiert`, neue Tabellen
+  `mail_bausteine`, `mail_autoreply_log`
+
+---
+
 ## [1.19.2] — 2026-09-23 — Jitsi-JWT: Rollen serverseitig („Wer leitet?"-Prompt fällt weg)
 
 ### Neu (für den eigenen Jitsi-Server)

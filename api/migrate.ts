@@ -125,6 +125,21 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   // Jitsi-JWT (1.19.2): Rollen-Signatur
   { tabelle: "company_settings", spalte: "jitsi_app_id", ddl: "ALTER TABLE company_settings ADD COLUMN jitsi_app_id VARCHAR(60) NULL AFTER jitsi_base_url" },
   { tabelle: "company_settings", spalte: "jitsi_app_secret", ddl: "ALTER TABLE company_settings ADD COLUMN jitsi_app_secret VARCHAR(255) NULL AFTER jitsi_app_id" },
+  // ── Mail-Pro + Editor (1.20.0, ReWaWi-Sync v1.18–v1.20) ──
+  { tabelle: "email_konten", spalte: "signatur_neu", ddl: "ALTER TABLE email_konten ADD COLUMN signatur_neu TEXT NULL AFTER smtp_absender" },
+  { tabelle: "email_konten", spalte: "signatur_antwort", ddl: "ALTER TABLE email_konten ADD COLUMN signatur_antwort TEXT NULL AFTER signatur_neu" },
+  { tabelle: "email_konten", spalte: "abwesenheit_aktiv", ddl: "ALTER TABLE email_konten ADD COLUMN abwesenheit_aktiv TINYINT(1) NOT NULL DEFAULT 0 AFTER signatur_antwort" },
+  { tabelle: "email_konten", spalte: "abwesenheit_von", ddl: "ALTER TABLE email_konten ADD COLUMN abwesenheit_von VARCHAR(10) NULL AFTER abwesenheit_aktiv" },
+  { tabelle: "email_konten", spalte: "abwesenheit_bis", ddl: "ALTER TABLE email_konten ADD COLUMN abwesenheit_bis VARCHAR(10) NULL AFTER abwesenheit_von" },
+  { tabelle: "email_konten", spalte: "abwesenheit_text", ddl: "ALTER TABLE email_konten ADD COLUMN abwesenheit_text TEXT NULL AFTER abwesenheit_bis" },
+  { tabelle: "email_konten", spalte: "abwesenheit_nur_kontakte", ddl: "ALTER TABLE email_konten ADD COLUMN abwesenheit_nur_kontakte TINYINT(1) NOT NULL DEFAULT 0 AFTER abwesenheit_text" },
+  { tabelle: "mail_entwuerfe", spalte: "status", ddl: "ALTER TABLE mail_entwuerfe ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'entwurf' AFTER quelle" },
+  { tabelle: "mail_entwuerfe", spalte: "versand_versuch_am", ddl: "ALTER TABLE mail_entwuerfe ADD COLUMN versand_versuch_am DATETIME NULL AFTER status" },
+  { tabelle: "mail_entwuerfe", spalte: "versand_fehler", ddl: "ALTER TABLE mail_entwuerfe ADD COLUMN versand_fehler TEXT NULL AFTER versand_versuch_am" },
+  { tabelle: "mail_entwuerfe", spalte: "geplantes_senden_am", ddl: "ALTER TABLE mail_entwuerfe ADD COLUMN geplantes_senden_am DATETIME NULL AFTER versand_fehler" },
+  { tabelle: "company_settings", spalte: "typo_korrektur", ddl: "ALTER TABLE company_settings ADD COLUMN typo_korrektur TINYINT(1) NOT NULL DEFAULT 1 AFTER jitsi_app_secret" },
+  { tabelle: "company_settings", spalte: "undo_sende_sekunden", ddl: "ALTER TABLE company_settings ADD COLUMN undo_sende_sekunden INT NOT NULL DEFAULT 0 AFTER typo_korrektur" },
+  { tabelle: "mail_mails", spalte: "markiert", ddl: "ALTER TABLE mail_mails ADD COLUMN markiert TINYINT(1) NOT NULL DEFAULT 0 AFTER gelesen" },
   // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
   { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
   // Rabatte (ReWaWi-Sync 1.9): Positions- + Hauptrabatt
@@ -184,6 +199,29 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       sheets TEXT NOT NULL,
       ergebnis TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  // Mail-Pro (1.20.0): Textbausteine + Auto-Reply-Log
+  {
+    tabelle: "mail_bausteine",
+    ddl: `CREATE TABLE IF NOT EXISTS mail_bausteine (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      kuerzel VARCHAR(40) NOT NULL,
+      titel VARCHAR(120) NOT NULL,
+      inhalt TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE INDEX mail_bausteine_kuerzel_uniq (kuerzel)
+    )`,
+  },
+  {
+    tabelle: "mail_autoreply_log",
+    ddl: `CREATE TABLE IF NOT EXISTS mail_autoreply_log (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      konto_id BIGINT UNSIGNED NOT NULL,
+      absender VARCHAR(320) NOT NULL,
+      gesendet_am TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX marl_konto_absender_idx (konto_id, absender),
+      INDEX marl_gesendet_idx (gesendet_am)
     )`,
   },
   // Online-Termine (1.19.0)

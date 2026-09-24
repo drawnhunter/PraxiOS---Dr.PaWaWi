@@ -827,6 +827,13 @@ CREATE TABLE `email_konten` (
   `smtp_benutzer` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `smtp_passwort_enc` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `smtp_absender` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `signatur_neu` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `signatur_antwort` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `abwesenheit_aktiv` tinyint(1) NOT NULL DEFAULT '0',
+  `abwesenheit_von` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `abwesenheit_bis` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `abwesenheit_text` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `abwesenheit_nur_kontakte` tinyint(1) NOT NULL DEFAULT '0',
   `route` enum('rechnung','sonstiges') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'rechnung',
   `intervall_minuten` int NOT NULL DEFAULT '10',
   `aktiv` tinyint(1) NOT NULL DEFAULT '1',
@@ -851,6 +858,7 @@ CREATE TABLE `mail_mails` (
   `text_html` text COLLATE utf8mb4_unicode_ci,
   `anhaenge` text COLLATE utf8mb4_unicode_ci,
   `gelesen` tinyint(1) NOT NULL DEFAULT '0',
+  `markiert` tinyint(1) NOT NULL DEFAULT '0',
   `markiert` tinyint(1) NOT NULL DEFAULT '0',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -883,9 +891,33 @@ CREATE TABLE `mail_entwuerfe` (
   `in_reply_to` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `referenzen` varchar(1000) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `quelle` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'mensch',
+  `status` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'entwurf',
+  `versand_versuch_am` datetime DEFAULT NULL,
+  `versand_fehler` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `geplantes_senden_am` datetime DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `mail_bausteine` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `kuerzel` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `titel` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `inhalt` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `mail_bausteine_kuerzel_uniq` (`kuerzel`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `mail_autoreply_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `konto_id` bigint unsigned NOT NULL,
+  `absender` varchar(320) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `gesendet_am` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `marl_konto_absender_idx` (`konto_id`,`absender`),
+  KEY `marl_gesendet_idx` (`gesendet_am`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `kontakte` (

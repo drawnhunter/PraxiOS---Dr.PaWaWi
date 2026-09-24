@@ -47,6 +47,9 @@ export const companySettings = mysqlTable("company_settings", {
   // Patient/Gast = Teilnehmer. Kein „Wer leitet die Sitzung?"-Prompt mehr.
   jitsiAppId: varchar("jitsi_app_id", { length: 60 }),
   jitsiAppSecret: varchar("jitsi_app_secret", { length: 255 }),
+  // Mail-Pro (1.20.0): Typo-Autokorrektur + Undo-Send-Fenster (Sekunden)
+  typoKorrektur: boolean("typo_korrektur").notNull().default(true),
+  undoSendeSekunden: int("undo_sende_sekunden").notNull().default(0),
   standardZahlungsziel: int("standard_zahlungsziel").notNull().default(14),
   fussText: text("fuss_text"),
   // DATEV-Export (Buchungsstapel)
@@ -1147,6 +1150,15 @@ export const emailKonten = mysqlTable("email_konten", {
   smtpPasswortEnc: varchar("smtp_passwort_enc", { length: 500 }),
   smtpAbsender: varchar("smtp_absender", { length: 255 }),
   route: mysqlEnum("route", ["rechnung", "sonstiges"]).notNull().default("rechnung"),
+  // Pro-Konto-Signaturen (1.20.0, Sync ReWaWi): schlagen die globale Signatur
+  signaturNeu: text("signatur_neu"),
+  signaturAntwort: text("signatur_antwort"),
+  // Abwesenheitsnotiz (1.20.0): serverseitig, Frequenz-Limit 1×/4 Tage je Absender
+  abwesenheitAktiv: boolean("abwesenheit_aktiv").notNull().default(false),
+  abwesenheitVon: varchar("abwesenheit_von", { length: 10 }),
+  abwesenheitBis: varchar("abwesenheit_bis", { length: 10 }),
+  abwesenheitText: text("abwesenheit_text"),
+  abwesenheitNurKontakte: boolean("abwesenheit_nur_kontakte").notNull().default(false),
   intervallMinuten: int("intervall_minuten").notNull().default(10),
   aktiv: boolean("aktiv").notNull().default(true),
   letzterAbruf: timestamp("letzter_abruf"),
@@ -1208,8 +1220,32 @@ export const mailEntwuerfe = mysqlTable("mail_entwuerfe", {
   inReplyTo: varchar("in_reply_to", { length: 500 }),
   referenzen: varchar("referenzen", { length: 1000 }),
   quelle: varchar("quelle", { length: 20 }).notNull().default("mensch"), // mensch / agent
+  // Ausgang-Zwischenpforte (1.20.0): entwurf = in der Entwürfe-Liste,
+  // ausgang = Versand läuft/fehlgeschlagen (gegen Doppelklick + Verlust)
+  status: varchar("status", { length: 20 }).notNull().default("entwurf"),
+  versandVersuchAm: timestamp("versand_versuch_am"),
+  versandFehler: text("versand_fehler"),
+  // Geplante Zustellung (1.20.0): Undo-Send (Sekunden) + Senden-Später (Datum/Zeit)
+  geplantesSendenAm: timestamp("geplantes_senden_am"),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Textbausteine (1.20.0): Kürzel + TAB im Editor expandiert ──────────────
+export const mailBausteine = mysqlTable("mail_bausteine", {
+  id: serial("id").primaryKey(),
+  kuerzel: varchar("kuerzel", { length: 40 }).notNull().unique(),
+  titel: varchar("titel", { length: 120 }).notNull(),
+  inhalt: text("inhalt").notNull(), // HTML
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Auto-Reply-Log (1.20.0): Frequenz-Limit der Abwesenheitsnotiz ──────────
+export const mailAutoreplyLog = mysqlTable("mail_autoreply_log", {
+  id: serial("id").primaryKey(),
+  kontoId: bigint("konto_id", { mode: "number", unsigned: true }).notNull(),
+  absender: varchar("absender", { length: 320 }).notNull(),
+  gesendetAm: timestamp("gesendet_am").notNull().defaultNow(),
 });
 
 // ── Kontakte (Adressbuch; Quelle pro Kontakt dokumentiert — DSGVO) ────────

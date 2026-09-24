@@ -1,7 +1,18 @@
 // ── Geteilter Mail-Versand (Postfach + Agent-API) ──────────────────────────
 import { getDb } from "../queries/connection";
 import { mailLog } from "@db/schema";
+import { sql } from "drizzle-orm";
 import { ladeFirmaLive } from "../pdfBelege";
+
+/** Wandelt Text ohne Block-Tags in saubere <p>-Absätze (Doppel-Newline = Absatz, einfache = <br>). */
+function normalisiereHtml(html: string): string {
+  if (/<(p|div|table|ul|ol|blockquote|h[1-6])\b/i.test(html)) return html; // schon strukturiert
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return html
+    .split(/\r?\n\s*\r?\n/)
+    .map((absatz) => `<p>${esc(absatz.trim()).replace(/\r?\n/g, "<br>")}</p>`)
+    .join("");
+}
 
 export interface VersandEingabe {
   empfaenger: string[]; // E-Mail-Adressen
@@ -23,14 +34,45 @@ export async function versendeMail(e: VersandEingabe & { kontoId?: number }): Pr
   const { transporter, absender, kontoName } = await ladeSmtpKonto(e.kontoId);
   const firma = await ladeFirmaLive();
   const settings = await getDb().query.companySettings.findFirst();
-  const signatur = e.mitSignatur !== false && settings?.signatur ? `\n\n${settings.signatur}` : "";
+  // Signatur: Pro-Konto (neu vs. Antwort) schlägt die globale Firmen-Signatur
+  let signaturQuelle = settings?.signatur ?? null;
+  if (e.kontoId) {
+    const { emailKonten } = await import("@db/schema");
+    const { eq } = await import("drizzle-orm");
+    const konto = await getDb().query.emailKonten.findFirst({ where: eq(emailKonten.id, e.kontoId) });
+    const kontoSignatur = e.inReplyTo ? konto?.signaturAntwort : konto?.signaturNeu;
+    if (kontoSignatur?.trim()) signaturQuelle = kontoSignatur;
+  }
+  const signatur = e.mitSignatur !== false && signaturQuelle ? `\n\n${signaturQuelle}` : "";
   const text = `${e.text}${signatur}`;
-  const htmlBody = e.html
-    ? `${e.html}${signatur ? `<p style="color:#6b7280">${signatur.replace(/\n/g, "<br>")}</p>` : ""}`
+  // Plain-Text-„HTML" (KI-Entwürfe ohne Block-Tags) in saubere Absätze wandeln,
+  // Tabs/Leerzeichen-Layout bricht sonst in der Anzeige aus (s. Screenshot-Feedback)
+  const htmlRoh = e.html ? normalisiereHtml(e.html) : undefined;
+  const htmlBody = htmlRoh
+    ? `${htmlRoh}${signatur ? `<p style="color:#6b7280">${signatur.replace(/\n/g, "<br>")}</p>` : ""}`
     : undefined;
 
   const empfaengerListe = e.empfaenger.map((x) => x.trim()).filter(Boolean);
   if (empfaengerListe.length === 0) return { ok: false, fehler: "Kein Empfänger angegeben." };
+
+  // Doppelversand-Schutz: identische Mail (Empfänger + Betreff) wurde in den
+  // letzten 120 s erfolgreich versendet → blockieren (Race/Sync-Verzögerung).
+  try {
+    const { gte, and, eq: eqD } = await import("drizzle-orm");
+    const seit = new Date(Date.now() - 120_000);
+    const [{ n }] = await getDb()
+      .select({ n: sql`COUNT(*)` })
+      .from(mailLog)
+      .where(and(
+        eqD(mailLog.betreff, e.betreff),
+        gte(mailLog.gesendetAm, seit),
+        eqD(mailLog.erfolg, true),
+        sql`${mailLog.empfaenger} LIKE ${"%" + empfaengerListe[0] + "%"}`,
+      ));
+    if (Number(n) > 0) {
+      return { ok: false, fehler: `Doppelversand-Schutz: identische Mail (an ${empfaengerListe[0]}, gleicher Betreff) wurde vor weniger als 2 Minuten erfolgreich versendet.` };
+    }
+  } catch { /* Schutz darf den Versand nicht blockieren */ }
 
   const mailDaten = {
     from: `"${absender}" <${firma.email ?? absender}>`,
@@ -138,19 +180,25 @@ async function legeInGesendetAb(
 
   // Sofort lokal sichtbar (nur mit echter UID — der Sync dedupt darüber sauber)
   if (uid) {
+    const vonAdresse = String(mailDaten.from ?? "");
+    const vonMatch = vonAdresse.match(/^"?([^"<]+)"?\s*<([^>]+)>$/);
     await db.insert(mailMails).values({
       kontoId,
       ordner: treffer,
       uid,
       messageId: messageId ?? null,
       betreff: String(mailDaten.subject ?? ""),
-      absenderName: null,
-      absenderAdresse: null, // eigenes Konto — Anzeige nutzt kontoName im UI
+      absenderName: vonMatch ? vonMatch[1].trim() : konto.name,
+      absenderAdresse: vonMatch ? vonMatch[2].trim() : (konto.smtpBenutzer ?? konto.benutzer),
       empfaenger: String(mailDaten.to ?? ""),
       datum: new Date(),
       textPlain: String(mailDaten.text ?? "").slice(0, 4_000_000),
       textHtml: typeof mailDaten.html === "string" ? mailDaten.html.slice(0, 4_000_000) : null,
-      anhaenge: JSON.stringify(anhaenge.map((a) => ({ name: a.dateiname, mime: a.mime, groesse: a.base64.length, postEingangId: null }))),
+      // Anhänge gesendeter Mails: Inhalt direkt im Meta (postEingang bleibt sauber)
+      anhaenge: JSON.stringify(anhaenge.map((a) => ({
+        name: a.dateiname, mime: a.mime, groesse: Math.floor(a.base64.length * 0.75),
+        postEingangId: null, inhalt: a.base64,
+      }))),
       gelesen: true,
     }).catch(() => undefined); // Kollision (UID doch schon da) → Sync regelt
   }
