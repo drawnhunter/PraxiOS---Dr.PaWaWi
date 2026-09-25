@@ -1,5 +1,10 @@
 FROM node:24-slim
 
+# Produkt-Stempel (PraxiOS-Instanz-Pass): Image trägt seine Reihe maschinenlesbar.
+LABEL org.praxios.produkt="pawawi" \
+      org.praxios.produkt-name="Dr.PaWaWi — Akte & Abrechnung" \
+      org.praxios.hersteller="PraxiOS"
+
 # Lokale OCR (Post Manager): Tesseract mit deutschem Sprachpaket + pdftoppm —
 # Belegdaten verlassen den Server nie (keine Cloud-KI).
 RUN apt-get update \

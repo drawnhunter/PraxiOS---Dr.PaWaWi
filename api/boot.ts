@@ -316,6 +316,10 @@ if (env.isProduction) {
 
   const port = parseInt(process.env.PORT || "3000");
   serve({ fetch: app.fetch, port }, () => {
+    // Produkt-Stempel ins Boot-Log (1.20.1): Hub/Logs erkennen die Reihe sofort
+    import("./lib/version").then((v) => {
+      console.log(`[stempel] ${v.APP_HERSTELLER} ${v.APP_PRODUKT_NAME} · produkt=${v.APP_PRODUKT} · v${v.APP_VERSION}`);
+    }).catch(() => undefined);
     console.log(`Server running on http://localhost:${port}/`);
   });
 }

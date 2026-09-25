@@ -1,5 +1,22 @@
 # Changelog — PraxiOS
 
+## [1.20.1] — 2026-09-24 — Produkt-Stempel + Versionsregel
+
+### Neu (alex' Auftrag: Instanzen sollen Reihe + Neu-Version maschinell erkennen)
+- **Produkt-Stempel** (PraxiOS-Instanz-Pass, Sync ReWaWi v1.17.4):
+  `praxios-produkt.json` am Repo-Root (`produkt: pawawi`), Docker-LABELs
+  `org.praxios.produkt*`, Boot-Log-Zeile `[stempel]`, Felder in
+  `api/lib/version.ts` (`APP_PRODUKT/-NAME/-HERSTELLER`)
+- **VERSIONSREGEL.md** (bindend ab jetzt): MAJOR.MINOR.PATCH mit klaren
+  Erhöhungsregeln, einzige Wahrheit `api/lib/version.ts`, numerische
+  Tripel-Vergleichsregel (nie Stringvergleich — `1.9.2 < 1.10.0`),
+  **Hoheitsregel: Hub stellt Paket nur bei produkt(Paket) === produkt(Instanz)
+  bereit** (gegen Quereinspielung wie am 18.09.)
+- Tests erweitert: Versionsformat-Pflicht + Stempel-Konsistenz
+  (praxios-produkt.json === version.ts)
+
+---
+
 ## [1.20.0] — 2026-09-24 — Mail-Pro + Editor-Upgrade (Runde-2-Sync ReWaWi v1.18–v1.20)
 
 ### Mail-Pro (Backend, ReWaWi-Sync)
