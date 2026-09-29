@@ -140,6 +140,8 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "company_settings", spalte: "typo_korrektur", ddl: "ALTER TABLE company_settings ADD COLUMN typo_korrektur TINYINT(1) NOT NULL DEFAULT 1 AFTER jitsi_app_secret" },
   { tabelle: "company_settings", spalte: "undo_sende_sekunden", ddl: "ALTER TABLE company_settings ADD COLUMN undo_sende_sekunden INT NOT NULL DEFAULT 0 AFTER typo_korrektur" },
   { tabelle: "mail_mails", spalte: "markiert", ddl: "ALTER TABLE mail_mails ADD COLUMN markiert TINYINT(1) NOT NULL DEFAULT 0 AFTER gelesen" },
+  // Rechnungs-Präfix konfigurierbar (1.20.2) — war „RK" hart codiert
+  { tabelle: "company_settings", spalte: "rechnungs_prefix", ddl: "ALTER TABLE company_settings ADD COLUMN rechnungs_prefix VARCHAR(20) NOT NULL DEFAULT 'R' AFTER undo_sende_sekunden" },
   // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
   { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
   // Rabatte (ReWaWi-Sync 1.9): Positions- + Hauptrabatt

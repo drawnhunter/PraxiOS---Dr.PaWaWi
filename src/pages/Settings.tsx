@@ -46,6 +46,7 @@ interface FirmenForm {
   jitsiBaseUrl: string;
   jitsiAppId: string;
   jitsiAppSecret: string;
+  rechnungsPrefix: string;
   standardZahlungsziel: number;
   fussText: string;
   datevBeraternummer: string;
@@ -136,6 +137,7 @@ export default function SettingsPage() {
       jitsiBaseUrl: s.jitsiBaseUrl ?? "",
       jitsiAppId: s.jitsiAppId ?? "",
       jitsiAppSecret: s.jitsiAppSecret ?? "",
+      rechnungsPrefix: s.rechnungsPrefix ?? "R",
       standardZahlungsziel: s.standardZahlungsziel,
       fussText: s.fussText ?? "",
       datevBeraternummer: s.datevBeraternummer ?? "",
@@ -315,6 +317,18 @@ export default function SettingsPage() {
               onChange={(e) => setFirma({ ...firma, fachrichtung: e.target.value })}
             />
           </div>
+          <div>
+            <Label>Rechnungsnummern-Präfix</Label>
+            <Input
+              placeholder="z. B. R oder TV"
+              value={firma.rechnungsPrefix}
+              onChange={(e) => setFirma({ ...firma, rechnungsPrefix: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-neutral-400">
+              Format: <code>&lt;PRÄFIX&gt; NN JJJJ</code> (z. B. „R 03 2026"). GoBD-Hinweis:
+              die Änderung wirkt nur auf NEUE Rechnungen; bestehende Nummern bleiben unverändert.
+            </p>
+          </div>
           <div className="sm:col-span-2">
             <Label>Jitsi-Server (für Online-Termine)</Label>
             <Input
@@ -422,6 +436,7 @@ export default function SettingsPage() {
                 jitsiBaseUrl: firma.jitsiBaseUrl || null,
                 jitsiAppId: firma.jitsiAppId || null,
                 jitsiAppSecret: firma.jitsiAppSecret || null,
+                rechnungsPrefix: firma.rechnungsPrefix || "R",
                 fussText: firma.fussText || null,
                 kreditorStartnummer: firma.kreditorStartnummer,
                 aufwandskontoDefault: firma.aufwandskontoDefault || null,

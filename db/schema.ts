@@ -50,6 +50,9 @@ export const companySettings = mysqlTable("company_settings", {
   // Mail-Pro (1.20.0): Typo-Autokorrektur + Undo-Send-Fenster (Sekunden)
   typoKorrektur: boolean("typo_korrektur").notNull().default(true),
   undoSendeSekunden: int("undo_sende_sekunden").notNull().default(0),
+  // Rechnungsnummern-Präfix (1.20.2): war „RK" hart codiert (Dr.ReWaWi-Erbe).
+  // Format bleibt „<PRÄFIX> NN JJJJ"; GoBD: Änderung wirkt nur auf NEUE Rechnungen.
+  rechnungsPrefix: varchar("rechnungs_prefix", { length: 20 }).notNull().default("R"),
   standardZahlungsziel: int("standard_zahlungsziel").notNull().default(14),
   fussText: text("fuss_text"),
   // DATEV-Export (Buchungsstapel)

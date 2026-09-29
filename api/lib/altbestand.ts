@@ -11,7 +11,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "../queries/connection";
 import { bankAccounts, companySettings, customers, invoiceItems, invoices, numberSequences } from "@db/schema";
-import { centToDecimal, formatInvoiceNumber } from "../queries/invoicing";
+import { centToDecimal, formatInvoiceNumber, ladeRechnungsPrefix } from "../queries/invoicing";
 
 export interface AltbestandGruppe {
   nummer: string;
@@ -51,9 +51,10 @@ async function kreisAnhebenFallsEigenesFormat(nummer: string): Promise<void> {
   if (!m) return;
   const jahr = Number(m[1]);
   const n = Number(m[2]);
-  // Nur wenn die Darstellung exakt der eigenen entspricht (z. B. "2026-003",
-  // nicht "2026-3" oder "2026-0003"), ist es wirklich derselbe Kreis.
-  if (formatInvoiceNumber(jahr, n) !== nummer) return;
+  // Nur wenn die Darstellung exakt der eigenen entspricht (mit dem aktuellen
+  // Präfix der Instanz), ist es wirklich derselbe Kreis.
+  const prefix = await ladeRechnungsPrefix();
+  if (formatInvoiceNumber(jahr, n, prefix) !== nummer) return;
   const db = getDb();
   await db
     .insert(numberSequences)

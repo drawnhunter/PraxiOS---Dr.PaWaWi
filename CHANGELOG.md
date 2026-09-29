@@ -1,5 +1,22 @@
 # Changelog — PraxiOS
 
+## [1.20.2] — 2026-09-24 — Rechnungsnummern-Präfix konfigurierbar („RK" entfernt)
+
+### Fix (alex' Fund: Rechnung trug fremde Initialen)
+- Der Präfix „RK" war hart codiert (Dr.ReWaWi-Erbe aus dem Fork) — jede
+  PaWaWi-Instanz schrieb Dr. Kühnel's Initialen auf ihre Rechnungen
+- **Neu: Einstellungen → Praxis → Rechnungsnummern-Präfix** (Standard „R",
+  Format `<PRÄFIX> NN JJJJ`). GoBD-sauber: wirkt nur auf NEUE Rechnungen,
+  bestehende Nummern bleiben unangetastet; der Nummernkreis läuft weiter
+- Mit-repariert: die Nummernkreis-Selbstheilung im Boot-Seed parste das
+  „RK"-Muster hart codiert — jetzt generisch (numerisches Glied vor dem
+  Jahr), prefix-agnostisch
+
+### Migration (automatisch beim Start)
+- `company_settings`: `rechnungs_prefix` (Standard „R")
+
+---
+
 ## [1.20.1] — 2026-09-24 — Produkt-Stempel + Versionsregel
 
 ### Neu (alex' Auftrag: Instanzen sollen Reihe + Neu-Version maschinell erkennen)

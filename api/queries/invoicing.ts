@@ -37,9 +37,21 @@ export async function nextNumber(
   return naechste;
 }
 
-// Dr.ReWaWi: Dr. Kühnel's Nummernschema, z. B. „RK 06 2026"
-export function formatInvoiceNumber(jahr: number, n: number): string {
-  return `RK ${String(n).padStart(2, "0")} ${jahr}`;
+// Rechnungsnummern (1.20.2): Präfix konfigurierbar (Einstellungen → Praxis).
+// Format: „<PRÄFIX> NN JJJJ" — früher war „RK" (Dr.ReWaWi-Erbe) hart codiert.
+export function formatInvoiceNumber(jahr: number, n: number, prefix: string): string {
+  const p = (prefix || "R").trim() || "R";
+  return `${p} ${String(n).padStart(2, "0")} ${jahr}`;
+}
+
+/** Lädt den konfigurierten Rechnungs-Präfix (Fallback „R"). */
+export async function ladeRechnungsPrefix(): Promise<string> {
+  const { companySettings } = await import("@db/schema");
+  const s = await getDb().query.companySettings.findFirst({
+    where: eq(companySettings.id, 1),
+    columns: { rechnungsPrefix: true },
+  });
+  return s?.rechnungsPrefix?.trim() || "R";
 }
 
 export function formatCreditNoteNumber(n: number): string {

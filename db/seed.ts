@@ -28,18 +28,27 @@ export async function seedNummernkreise() {
 
   // Selbstheilung: Zähler nie hinter den real vergebenen Nummern zurücklassen
   // (deckt auch Bestände ab, die vom alten Reset-Bug betroffen waren).
-  await db.execute(
-    sql`UPDATE number_sequences ns
-        SET letzte_nummer = GREATEST(
-          ns.letzte_nummer,
-          COALESCE((
-            SELECT MAX(CAST(SUBSTRING(i.nummer, 4, 2) AS UNSIGNED))
-            FROM invoices i
-            WHERE i.nummer LIKE CONCAT('RK % ', ${jahr})
-          ), 0)
-        )
-        WHERE ns.typ = 'invoice' AND ns.jahr = ${jahr}`,
-  );
+  // 1.20.2: generisch statt hart codiertem „RK"-Muster — der Präfix ist
+  // konfigurierbar; wir parsen das numerische Glied vor dem Jahres-Suffix.
+  const { invoices } = await import("./schema");
+  const { like } = await import("drizzle-orm");
+  const vorhandene = await db
+    .select({ nummer: invoices.nummer })
+    .from(invoices)
+    .where(like(invoices.nummer, `% ${jahr}`));
+  let maxN = 0;
+  for (const r of vorhandene) {
+    if (!r.nummer) continue;
+    const m = r.nummer.match(/(\d+)\s+\d{4}$/);
+    if (m) maxN = Math.max(maxN, Number(m[1]));
+  }
+  if (maxN > 0) {
+    await db.execute(
+      sql`UPDATE number_sequences ns
+          SET letzte_nummer = GREATEST(ns.letzte_nummer, ${maxN})
+          WHERE ns.typ = 'invoice' AND ns.jahr = ${jahr}`,
+    );
+  }
 }
 
 /**

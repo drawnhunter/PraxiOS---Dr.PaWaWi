@@ -24,6 +24,7 @@ import {
   centToDecimal,
   nextNumber,
   formatInvoiceNumber,
+  ladeRechnungsPrefix,
 } from "./queries/invoicing";
 
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format: JJJJ-MM-TT");
@@ -321,9 +322,10 @@ export const invoiceRouter = createRouter({
         // importierte Original-Belege belegt, jede vergebene Nummer existiert
         // genau einmal.
         let nr = "";
+        const prefix = await ladeRechnungsPrefix();
         for (let versuch = 0; versuch < 1000; versuch++) {
           const n = await nextNumber(tx, "invoice", jahr);
-          nr = formatInvoiceNumber(jahr, n);
+          nr = formatInvoiceNumber(jahr, n, prefix);
           const [kollision] = await tx
             .select({ id: invoices.id })
             .from(invoices)

@@ -31,6 +31,7 @@ const settingsInput = z.object({
   jitsiBaseUrl: z.string().max(255).nullable().optional(),
   jitsiAppId: z.string().max(60).nullable().optional(),
   jitsiAppSecret: z.string().max(255).nullable().optional(),
+  rechnungsPrefix: z.string().max(20).optional(),
   standardZahlungsziel: z.number().int().min(0).max(120),
   fussText: z.string().nullable().optional(),
   datevBeraternummer: z.string().nullable().optional(),

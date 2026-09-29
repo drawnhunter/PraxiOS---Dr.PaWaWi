@@ -355,7 +355,7 @@ export async function seedTeil2(ctx: {
   const [{ id: rechnungId }] = await db
     .insert(invoices)
     .values({
-      nummer: formatInvoiceNumber(jahr, 1),
+      nummer: formatInvoiceNumber(jahr, 1, "R"),
       status: "finalisiert",
       customerId: maria,
       rechnungsdatum: "2026-08-10",
@@ -400,7 +400,7 @@ export async function seedTeil2(ctx: {
   const [{ id: schlussId }] = await db
     .insert(invoices)
     .values({
-      nummer: formatInvoiceNumber(jahr, 2),
+      nummer: formatInvoiceNumber(jahr, 2, "R"),
       status: "finalisiert",
       customerId: thomas,
       rechnungsdatum: "2026-08-10",
