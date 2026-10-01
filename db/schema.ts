@@ -333,6 +333,9 @@ export const invoices = mysqlTable(
     // Proforma bekommt NIE eine Nummer (kein GoBD-Beleg, nur Zahlungsaufforderung)
     nummer: varchar("nummer", { length: 20 }).unique(),
     typ: mysqlEnum("typ", ["standard", "proforma"]).notNull().default("standard"),
+    // Behandlungszeitraum (1.21.0, Agent #110): Text, erscheint als Notizzeile
+    // auf dem Beleg-PDF (Proforma/Vorkasse-Vorlage)
+    behandlungszeitraum: varchar("behandlungszeitraum", { length: 200 }),
     status: mysqlEnum("status", ["entwurf", "finalisiert", "storniert"])
       .notNull()
       .default("entwurf"),

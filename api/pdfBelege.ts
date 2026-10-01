@@ -89,7 +89,11 @@ export async function ladeRechnungsBeleg(id: number): Promise<{ beleg: PdfBeleg;
       datum: r.rechnungsdatum,
       faellig: r.faelligkeitsdatum,
       leistungsdatum: r.leistungsdatum,
-      pdfNotiz: r.pdfNotiz,
+      // Behandlungszeitraum (Agent #110) als Notizzeile auf dem Beleg
+      pdfNotiz:
+        [r.behandlungszeitraum ? `Behandlungszeitraum: ${r.behandlungszeitraum}` : null, r.pdfNotiz]
+          .filter(Boolean)
+          .join("\n") || null,
       bezahltCent: Math.round(Number(r.bezahltBetrag) * 100),
       firma,
       bank,

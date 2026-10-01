@@ -233,6 +233,7 @@ CREATE TABLE `invoices` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `nummer` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `typ` enum('standard','proforma') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'standard',
+  `behandlungszeitraum` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('entwurf','finalisiert','storniert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'entwurf',
   `abschlag_betrag` decimal(12,2) DEFAULT NULL,
   `proforma_von_id` bigint unsigned DEFAULT NULL,

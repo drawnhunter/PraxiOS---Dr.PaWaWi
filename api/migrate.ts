@@ -142,6 +142,8 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "mail_mails", spalte: "markiert", ddl: "ALTER TABLE mail_mails ADD COLUMN markiert TINYINT(1) NOT NULL DEFAULT 0 AFTER gelesen" },
   // Rechnungs-Präfix konfigurierbar (1.20.2) — war „RK" hart codiert
   { tabelle: "company_settings", spalte: "rechnungs_prefix", ddl: "ALTER TABLE company_settings ADD COLUMN rechnungs_prefix VARCHAR(20) NOT NULL DEFAULT 'R' AFTER undo_sende_sekunden" },
+  // Behandlungszeitraum am Beleg (1.21.0, Agent #110)
+  { tabelle: "invoices", spalte: "behandlungszeitraum", ddl: "ALTER TABLE invoices ADD COLUMN behandlungszeitraum VARCHAR(200) NULL AFTER typ" },
   // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
   { tabelle: "company_settings", spalte: "backup_zuletzt_am", ddl: "ALTER TABLE company_settings ADD COLUMN backup_zuletzt_am TIMESTAMP NULL AFTER patienten_nr_prefix" },
   // Rabatte (ReWaWi-Sync 1.9): Positions- + Hauptrabatt

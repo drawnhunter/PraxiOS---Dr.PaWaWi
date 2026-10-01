@@ -621,6 +621,9 @@ app.post("/rechnung-entwurf", async (c) => {
       kundeOrt: kunde.ort,
       kundeLand: kunde.land,
       pdfNotiz: body.pdfNotiz ? String(body.pdfNotiz) : null,
+      // Proforma/Vorkasse + Behandlungszeitraum (Agent #110)
+      typ: body.typ === "proforma" ? "proforma" : "standard",
+      behandlungszeitraum: body.behandlungszeitraum ? String(body.behandlungszeitraum).slice(0, 200) : null,
       bemerkung: "Erstellt per Agent-API (Kimi Claw) — bitte prüfen.",
       netto: centToDecimal(totals.nettoCent),
       ust: centToDecimal(totals.ustCent),
@@ -1446,6 +1449,116 @@ app.post("/rechnung/:id/stornieren", async (c) => {
   });
   await audit("rechnung_storniert", { id, nummer: r.nummer, gutschrift: nummer });
   return c.json({ ok: true, rechnung: r.nummer, gutschrift: nummer, hinweis: "Vollstorno gebucht — GoBD-Gutschrift finalisiert." });
+});
+
+// ── Vorschuss/Proforma-Workflow (1.21.0, Agent #110) ───────────────────────
+// Die Logik lebt in den tRPC-Prozeduren (GoBD-geprüft) — der Agent ruft sie
+// über einen Caller auf, statt sie zu duplizieren.
+
+/** Ruft den App-Router mit einem Admin-Kontext auf (Erster Admin der Instanz). */
+async function rechnungCaller() {
+  const { users } = await import("@db/schema");
+  const admin = await getDb().query.users.findFirst({ where: eq(users.role, "admin") });
+  if (!admin) throw new Error("Kein Admin-Nutzer in der Instanz gefunden.");
+  const { appRouter } = await import("./router");
+  return appRouter.createCaller({
+    req: new Request("http://localhost/agent-bridge"),
+    resHeaders: new Headers(),
+    user: admin,
+  });
+}
+
+app.post("/rechnung/:id/finalisieren", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.invoices.finalize({ id });
+    await audit("rechnung_finalisiert", { id, nummer: r.nummer });
+    return c.json({ ok: true, ...r });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+app.post("/rechnung/:id/vorkasse-setzen", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const proformaId = body.proformaId === null || body.proformaId === undefined ? null : Number(body.proformaId);
+  try {
+    const caller = await rechnungCaller();
+    await caller.invoices.vorkasseSetzen({ id, proformaId });
+    await audit("vorkasse_gesetzt", { id, proformaId });
+    return c.json({ ok: true, id, proformaId, hinweis: proformaId === null ? "Vorkassen-Verknüpfung entfernt." : "Vorkasse verrechnet (Abschlag = gezahlter Vorschuss)." });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+app.post("/rechnung/:id/in-rechnung-umwandeln", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.invoices.inRechnungUmwandeln({ id });
+    await audit("proforma_umgewandelt", { id, neueId: r.id });
+    return c.json({ ok: true, proformaId: id, rechnungId: r.id });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+app.post("/rechnung/:id/gutschrift", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const betrag = body.betrag !== undefined && body.betrag !== null ? Number(body.betrag) : null;
+  try {
+    if (betrag !== null && (!Number.isFinite(betrag) || betrag <= 0)) {
+      return c.json({ fehler: "betrag muss eine positive Zahl sein (oder weglassen für Vollstorno)." }, 400);
+    }
+    const r = await getDb().query.invoices.findFirst({ where: eq(invoices.id, id) });
+    if (!r) return c.json({ fehler: "Rechnung nicht gefunden." }, 404);
+    const brutto = Number(r.brutto);
+    if (betrag === null || Math.abs(betrag - brutto) < 0.005) {
+      // Vollstorno: bestehende GoBD-Logik (finalisierte Gutschrift)
+      const caller = await rechnungCaller();
+      await caller.invoices.createCreditNote({ invoiceId: id, grund: body.grund ? String(body.grund) : undefined });
+      await audit("gutschrift_voll", { id, nummer: r.nummer });
+      return c.json({ ok: true, id, nummer: r.nummer, art: "vollstorno", hinweis: "GoBD-Gutschrift finalisiert." });
+    }
+    // Teilkorrektur: Gutschrift-ENTWURF mit einer Korrekturposition (0 % USt)
+    const { creditNotes, creditNoteItems } = await import("@db/schema");
+    const db = getDb();
+    const [{ id: gId }] = await db
+      .insert(creditNotes)
+      .values({
+        invoiceId: id,
+        datum: heute(),
+        grund: (body.grund ? String(body.grund) : "Teilkorrektur") + " (Agent-API)",
+        kundeName: r.kundeName,
+        kundeZusatz: r.kundeZusatz,
+        kundeStrasse: r.kundeStrasse,
+        kundePlz: r.kundePlz,
+        kundeOrt: r.kundeOrt,
+        kundeLand: r.kundeLand,
+        netto: betrag.toFixed(2),
+        ust: "0.00",
+        brutto: betrag.toFixed(2),
+        status: "entwurf",
+      })
+      .$returningId();
+    await db.insert(creditNoteItems).values({
+      creditNoteId: gId,
+      position: 1,
+      bezeichnung: "Korrektur (Teilgutschrift)",
+      menge: "1",
+      einheit: "Stück",
+      einzelpreis: betrag.toFixed(2),
+      ustSatz: 0,
+    });
+    await audit("gutschrift_teil_entwurf", { id, gutschriftId: gId, betrag });
+    return c.json({ ok: true, id, gutschriftId: gId, betrag: betrag.toFixed(2), art: "teilgutschrift_entwurf", hinweis: "Teilgutschrift als ENTWURF angelegt — Finalisierung erfolgt durch einen Menschen (GoBD)." });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
 });
 
 // ── Webhooks verwalten ─────────────────────────────────────────────────────

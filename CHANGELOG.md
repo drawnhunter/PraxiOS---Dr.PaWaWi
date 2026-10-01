@@ -1,5 +1,30 @@
 # Changelog — PraxiOS
 
+## [1.21.0] — 2026-10-01 — Agent-API: Vorschuss/Proforma-Workflow komplett (Bus #110)
+
+### Neu (Axons Auftrag: Vorschuss komplett per Agent-API)
+- **`POST /rechnung-entwurf` erweitert**: optional `typ: "proforma"` +
+  `behandlungszeitraum` (Text, erscheint als Notizzeile „Behandlungszeitraum:
+  …" auf dem Beleg-PDF — Proforma/Vorkasse-Vorlage)
+- **`POST /rechnung/:id/finalisieren`**: Proforma-Regel serverseitig (keine
+  Nummer, Snapshots einfrieren, ggf. Vorkassen-Abschlag verrechnen,
+  Doppel-Verrechnung geprüft)
+- **`POST /rechnung/:id/vorkasse-setzen` `{proformaId|null}`**: Abschlags-
+  Verrechnung auf (Entwurfs-)Schlussrechnung anhängen/ablösen
+- **`POST /rechnung/:id/in-rechnung-umwandeln`**: finalisierte Proforma →
+  Schlussrechnung (Kopie inkl. Positionen)
+- **`POST /rechnung/:id/gutschrift` `{betrag?, grund}`**: weggelassen/gleich
+  Brutto = Vollstorno (GoBD, finalisiert); kleiner = Teilgutschrift als
+  ENTWURF mit Korrekturposition (Finalisierung bleibt beim Menschen)
+- Implementierung ruft die geprüften tRPC-Prozeduren über einen Caller auf —
+  **keine duplizierte Geschäftslogik**, Admin-Kontext = erster Admin der Instanz
+- `GET /rechnung/:id/pdf` (GoBD-PDF, inkl. Proforma-Layout) war bereits da
+
+### Migration (automatisch beim Start)
+- `invoices`: `behandlungszeitraum` (VARCHAR 200)
+
+---
+
 ## [1.20.2] — 2026-09-24 — Rechnungsnummern-Präfix konfigurierbar („RK" entfernt)
 
 ### Fix (alex' Fund: Rechnung trug fremde Initialen)
