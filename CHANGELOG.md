@@ -1,5 +1,20 @@
 # Changelog — PraxiOS
 
+## [1.21.1] — 2026-10-02 — Agent-API: Rezepte erstklassig (Bus #117)
+
+### Neu
+- **`POST /rezept`**: Rezept als erstklassiges Objekt anlegen (patientId oder
+  fuzzy-Name, positionen[{name, staerke?, menge?, dosierung?, pzn?}],
+  notiz) — baut exakt das UI-PDF (A5, Muster-16-Rahmen, Signatur-Stempel,
+  LANR/BSNR), legt Dokument + rezepte-Zeile + Timeline ab; ersetzt den
+  Workaround „Dokument-Upload mit kategorie=rezept"
+- **`GET /rezepte` einbeziehend**: hochgeladene Rezept-Dateien
+  (Kategorie „rezept", z. B. per /patient/:id/dokumente) erscheinen jetzt in
+  der Liste mit `quelle: "dokument-upload"` — bisher blieb die Liste bei
+  alten Einträgen hängen, weil nur die rezepte-Tabelle gelesen wurde
+
+---
+
 ## [1.21.0] — 2026-10-01 — Agent-API: Vorschuss/Proforma-Workflow komplett (Bus #110)
 
 ### Neu (Axons Auftrag: Vorschuss komplett per Agent-API)

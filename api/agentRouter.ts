@@ -1195,17 +1195,161 @@ app.get("/rezepte", async (c) => {
     orderBy: [desc(rezepte.createdAt)],
     limit: 100,
   });
+  // 1.21.1 (Bus #117): Auch hochgeladene Rezepte einbeziehen — Dateien mit
+  // Kategorie „rezept" (z. B. per /patient/:id/dokumente hochgeladen) waren
+  // bisher unsichtbar, die Liste „blieb bei alten Einträgen hängen".
+  const { documents } = await import("@db/schema");
+  const uploads = await db.query.documents.findMany({
+    where: patientId
+      ? and(eq(documents.patientId, patientId), eq(documents.kategorie, "rezept"))
+      : eq(documents.kategorie, "rezept"),
+    orderBy: [desc(documents.createdAt)],
+    limit: 100,
+  });
+  const uploadIds = new Set(rows.map((r) => r.documentId).filter(Boolean));
   const patienten = new Map<number, Kunde>();
   for (const k of await db.select().from(customers)) patienten.set(k.id, k);
-  return c.json({
-    anzahl: rows.length,
-    rezepte: rows.map((r) => ({
+  const liste = [
+    ...rows.map((r) => ({
       id: r.id,
+      quelle: "rezept",
       typ: r.typ,
       erstelltAm: r.createdAt,
       patient: r.patientId ? patientMaske(patienten.get(r.patientId)!, pseudo) : null,
       hinweis: "Nur Metadaten — PDF-Inhalte verlassen den Server nicht (Gesundheitsdaten).",
     })),
+    ...uploads
+      .filter((u) => !uploadIds.has(u.id))
+      .map((u) => ({
+        id: u.id,
+        quelle: "dokument-upload" as const,
+        typ: "rezept" as const,
+        dateiname: u.dateiname,
+        dokumentdatum: u.dokumentdatum,
+        erstelltAm: u.createdAt,
+        patient: u.patientId ? patientMaske(patienten.get(u.patientId)!, pseudo) : null,
+        hinweis: "Hochgeladene Datei (kein PaWaWi-Rezept-Objekt) — Inhalt verlässt den Server nicht.",
+      })),
+  ].sort((a, b) => new Date(b.erstelltAm).getTime() - new Date(a.erstelltAm).getTime());
+  return c.json({ anzahl: liste.length, rezepte: liste });
+});
+
+// ── Rezept erstellen (1.21.1, Bus #117): erstklassiges Objekt statt ───────
+// Workaround über Dokument-Upload. Baut exakt das PDF, das die UI erzeugt
+// (renderRezeptPdf, Signatur-Stempel), legt Dokument + rezepte-Zeile ab.
+app.post("/rezept", async (c) => {
+  const body = await bodyLesen(c);
+  const db = getDb();
+
+  let patient: Kunde | undefined;
+  if (body.patientId) {
+    patient = await db.query.customers.findFirst({ where: eq(customers.id, Number(body.patientId)) });
+  } else if (body.patient) {
+    const alle = await db.select().from(customers);
+    const t = besterTreffer(alle, String(body.patient), (k) => k.name);
+    patient = t?.treffer;
+  }
+  if (!patient) return c.json({ fehler: "Patient nicht gefunden (patientId oder patient als Name angeben)." }, 404);
+
+  const positionen = Array.isArray(body.positionen) ? body.positionen : [];
+  if (positionen.length === 0) {
+    return c.json({ fehler: "positionen fehlt: [{name, staerke?, menge?, dosierung?, pzn?}]" }, 400);
+  }
+  if (positionen.length > 10) return c.json({ fehler: "Max. 10 Positionen pro Rezept." }, 400);
+  const medikamente = positionen.map((p: Record<string, unknown>) => {
+    const name = String(p.name ?? "").trim();
+    if (!name) throw new Error("Jede Position braucht einen Namen.");
+    return {
+      name: name.slice(0, 300),
+      staerke: p.staerke ? String(p.staerke).slice(0, 100) : undefined,
+      menge: p.menge ? String(p.menge).slice(0, 100) : undefined,
+      dosierung: p.dosierung ? String(p.dosierung).slice(0, 300) : undefined,
+      pzn: p.pzn ? String(p.pzn).slice(0, 20) : undefined,
+    };
+  });
+
+  const praxis = await db.query.companySettings.findFirst({ where: eq(companySettings.id, 1) });
+  if (!praxis) return c.json({ fehler: "Praxisdaten fehlen (Einstellungen hinterlegen)." }, 409);
+
+  const cryptoM = await import("node:crypto");
+  const fsP = await import("node:fs/promises");
+  const pathM = await import("node:path");
+  const { documents } = await import("@db/schema");
+  const { env } = await import("./lib/env");
+  const { renderRezeptPdf } = await import("./rezeptPdf");
+
+  const heuteDe = new Date().toLocaleDateString("de-DE");
+  const isoNachDe = (iso: string | null | undefined) =>
+    iso ? iso.split("-").reverse().join(".") : null;
+  const pdfBuf = await renderRezeptPdf({
+    typ: "rezept",
+    inhalt: { medikamente, hinweis: body.notiz ? String(body.notiz).slice(0, 1000) : undefined },
+    patient: {
+      name: patient.name,
+      geburtsdatum: isoNachDe(patient.geburtsdatum),
+      strasse: patient.strasse,
+      plz: patient.plz,
+      ort: patient.ort,
+    },
+    praxis: {
+      name: praxis.name,
+      strasse: praxis.strasse,
+      plz: praxis.plz,
+      ort: praxis.ort,
+      telefon: praxis.telefon,
+      email: praxis.email,
+      arztNr: praxis.arztNr,
+      betriebsstaettenNr: praxis.betriebsstaettenNr,
+      fachrichtung: praxis.fachrichtung,
+    },
+    signaturBild: praxis.signaturBild,
+    datum: heuteDe,
+  });
+
+  const internerName = `${Date.now()}-${cryptoM.randomBytes(6).toString("hex")}.pdf`;
+  const relativerPfad = `${patient.id}/${internerName}`;
+  await fsP.mkdir(pathM.join(env.uploadDir, String(patient.id)), { recursive: true });
+  await fsP.writeFile(pathM.join(env.uploadDir, relativerPfad), pdfBuf);
+
+  const [{ id: documentId }] = await db
+    .insert(documents)
+    .values({
+      patientId: patient.id,
+      kategorie: "rezept",
+      dateiname: `Privatrezept ${heuteDe}.pdf`,
+      dateipfad: relativerPfad,
+      mimeType: "application/pdf",
+      groesse: pdfBuf.length,
+      quelle: "agent",
+    })
+    .$returningId();
+
+  const [{ id }] = await db
+    .insert(rezepte)
+    .values({
+      patientId: patient.id,
+      typ: "rezept",
+      inhalt: JSON.stringify({ medikamente, hinweis: body.notiz ?? null }),
+      documentId,
+    })
+    .$returningId();
+
+  const { schreibeTimeline } = await import("./lib/timeline");
+  await schreibeTimeline({
+    patientId: patient.id,
+    typ: "dokument",
+    titel: "Privatrezept erstellt (Agent)",
+    beschreibung: medikamente.map((m) => m.name).join(", "),
+  });
+  await audit("rezept_erstellt", { id, patientId: patient.id, positionen: medikamente.length });
+  return c.json({
+    ok: true,
+    id,
+    documentId,
+    patient: patient.synonym ?? `P-${String(patient.id).padStart(4, "0")}`,
+    dateiname: `Privatrezept ${heuteDe}.pdf`,
+    format: "a5",
+    hinweis: "Rezept als PDF angelegt (A5, Signatur-Stempel). Nächster Schritt: Versand/Übergabe.",
   });
 });
 
