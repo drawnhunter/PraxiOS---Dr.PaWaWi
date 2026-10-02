@@ -1,5 +1,15 @@
 # Changelog — PraxiOS
 
+## [1.21.2] — 2026-10-02 — Fix: Negativpositionen in Summen (Bus #112)
+
+### Fix
+- `computeTotals` klemmte negative Positionen (Korrekturen/Rabattzeilen) via
+  `Math.max(0, …)` auf 0 — Agent-Rechnungen mit Negativposition hatten damit
+  eine falsche Summe. Negative Zeilen werden jetzt korrekt mitgezählt; der
+  Schutz gegen „Hauptrabatt frisst Zeile über Null" bleibt für positive Zeilen
+
+---
+
 ## [1.21.1] — 2026-10-02 — Agent-API: Rezepte erstklassig (Bus #117)
 
 ### Neu

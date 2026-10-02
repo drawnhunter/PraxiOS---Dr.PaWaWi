@@ -125,7 +125,13 @@ export function computeTotals(
     }
   }
 
-  const zeilenNettoCent = nachPositionen.map((n, i) => Math.max(0, n - zeilenHaupAnteil[i]));
+  // Negative Positionen (Korrekturen/Rabattzeilen) dürfen NICHT auf 0 geklemmt
+  // werden (Bus #112: Agent-Rechnung mit Negativposition hatte falsche Summe).
+  // Das Math.max(0,…) bleibt nur als Schutz, wenn der Hauptrabatt eine Zeile
+  // über den Nullpunkt hinaus fressen würde.
+  const zeilenNettoCent = nachPositionen.map((n, i) =>
+    n < 0 ? n : Math.max(0, n - zeilenHaupAnteil[i]),
+  );
   const nettoCent = zeilenNettoCent.reduce((a, b) => a + b, 0);
 
   const proSatz = new Map<number, number>();
