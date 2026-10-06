@@ -1,5 +1,20 @@
 # Changelog — PraxiOS
 
+## [1.21.3] — 2026-10-02 — Apotheken-Recht: Rezeptur-Hinweis im Praxisbedarf (BVerwG 3 C 2.24)
+
+### Änderung (alex' Anlass: Urteil März 2026)
+- **Praxisbedarf-Bestellung trägt jetzt Rechtshinweis** (Seitenkopf + Dialog):
+  nur für Fertigarzneimittel — Rezepturen/Defekturen dürfen Apotheken seit
+  BVerwG 3 C 2.24 nur noch patientenindividuell abgeben; dafür ist der
+  Patientenrezept-Flow vorgesehen (Akte → Attest & Rezepte bzw. Agent
+  POST /rezept aus v1.21.1)
+- Dokument-PDF unverändert (gilt unverändert für Fertigarzneimittel)
+- Backlog-Idee (Option C): Rezeptur-Flag je Artikel mit Auto-Routing auf die
+  passende Belegart — folgt, sobald die Apotheke klärt, welche Positionen
+  sie als Rezeptur einstuft
+
+---
+
 ## [1.21.2] — 2026-10-02 — Fix: Negativpositionen in Summen (Bus #112)
 
 ### Fix

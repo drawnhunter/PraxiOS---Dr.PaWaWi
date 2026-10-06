@@ -205,6 +205,10 @@ function PraxisbedarfSection() {
             </h2>
             <p className="mt-0.5 text-xs text-neutral-400">
               „Zur Anwendung in der Praxis" — ohne Patientenbezug, mit PZN für die Apotheke.
+              <span className="mt-0.5 block text-amber-700">
+                Rechtshaken (BVerwG 3 C 2.24): nur für Fertigarzneimittel — Rezepturen bitte
+                patientenindividuell als Rezept ausstellen.
+              </span>
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => { setFehler(null); setOffen(true); }}>
@@ -260,6 +264,13 @@ function PraxisbedarfSection() {
           <DialogHeader>
             <DialogTitle>Praxisbedarf-Bestellung erstellen</DialogTitle>
           </DialogHeader>
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <strong>Nur für Fertigarzneimittel</strong> (zugelassene Fertigprodukte).
+            Seit BVerwG 3 C 2.24 (März 2026) dürfen Apotheken <strong>Rezepturen/Defekturen</strong>
+            (apothekenindividuell hergestellte Zubereitungen) nur noch <strong>patientenindividuell</strong>
+            abgeben — diese bitte als Patientenrezept in der Akte erstellen
+            („Attest &amp; Rezepte“ im Patienten) bzw. vom Agenten per <code>POST /rezept</code>.
+          </div>
           <datalist id="bedarf-vorschlaege">
             {(produkte.data ?? []).map((p) => (
               <option key={p.id} value={p.name} />
