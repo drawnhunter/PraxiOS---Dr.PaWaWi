@@ -1,91 +1,222 @@
-# Dr.PaWaWi Agent-API — Leitfaden (Stand v1.14.0)
+# Dr.PaWaWi Agent-API — Leitfaden (kanonisch)
 
-REST-API für externe Agenten (Kimi Claw). Basis: `https://<host>/api/agent`
-Auth: `Authorization: Bearer ax_…` (Token aus Einstellungen → Agent-API, Klartext nur einmalig).
-Fehler: `{"ok": false, "fehler": "Klartext"}` mit HTTP-Status 400/401/403/404/409/502.
+**Für externe Agenten (Kimi Claw u. a.).** Diese Datei ist die Referenz —
+gelesen werden muss sie **vor** dem ersten Auftrag. Stand: v1.23.0.
 
-## DSGVO-Modell (Gesundheitsdaten — strenger als ReWaWi)
+---
 
-**Pseudonymisierung an der API-Grenze** (Standard: an, Einstellungen → Agent-API):
-Patienten erscheinen als `P-0001` + Jahrgang + Ort. Klarnamen, volle Adressen,
-E-Mails, Telefonnummern und Geburtsdaten bleiben im System. **PDF-Inhalte
-(Rezepte, Atteste, Befunde) verlassen den Server grundsätzlich nicht.**
+## 1. Einstieg — erst prüfen, dann handeln
 
-Hinweis: Pseudonymisierte Daten bleiben personenbezogene Daten. Zum vollständigen
-Bild gehören AVV mit dem KI-Anbieter und VVT-Eintrag „KI-Agent".
+```bash
+GET /api/agent/status
+Authorization: Bearer ax_…
+```
 
-## Autonomie-Stufen (Einstellungen → Agent-API)
-- `vorschlag` (Standard): Lesen + Entwürfe/Aufgaben/Anlagen — Freigabe immer beim Menschen
-- `vollautomatik`: zusätzlich Direktversand (Rechnungen per Mail)
-- **Granulare Freigabe pro Token** (ab 1.14): Token-Feld `freigabeEmpfaenger` (JSON-Array mit Adressen oder `@domain`) erlaubt Direktversand an genau diese Empfänger auch in Stufe `vorschlag`
+Antwort: `{ ok: true, produkt: "pawawi", version: "1.23.0", autonomie: "vorschlag" }`.
+**Immer zuerst aufrufen** — die Versionsangabe sagt dir, welche Endpunkte
+verfügbar sind (diese Doku = v1.23.0). Gibt die Instanz eine ältere Version,
+gelten nicht alle Endpunkte dieser Liste.
 
-## Transparenz & Vertrauen (ab 1.14)
-- `GET /audit-log?von=&bis=&aktion=&limit=` → jede Agent-Aktion mit Zeitstempel
-- **Idempotenz**: Header `Idempotenz-Key: <beliebig>` bei POSTs → Retry liefert die gespeicherte Antwort (`x-idempotent-replay: 1`), nichts dupliziert
-- **Webhooks**: `POST /webhooks {ereignis: "bankbuchung.neu", url}` · `GET /webhooks` · `DELETE /webhooks/:id` (5 s Timeout, Fehlerzähler; `mail.neu` folgt mit dem Mail-Modul)
-- `GET /uebersicht/heute` → Morgen-Briefing in einem Call: heutige Termine, überfällige Rechnungen, offene Bankbuchungen ohne Zuordnung, offene Aufgaben
-- `GET /zahlungsziele?von=&bis=` → fällige Ausgangs-/Eingangsrechnungen + Mahnfristen mit `ueberfaellig`-Flag
+## 2. Authentifizierung
 
-## Erweiterungen Bestand (ab 1.14)
-- Kunden-Suite: `GET /kunde/:id` · `PUT /kunde/:id` · `GET /kunde/nach-email/:email` · `GET /kunde/:id/rechnungen`
-- Rechnungen: `GET /rechnung/:id/pdf` (GoBD-PDF als base64) · `POST /rechnung/:id/zahlung {betrag?, datum?}` · `POST /rechnung/:id/stornieren` (GoBD-Vollstorno mit Gutschrift)
-- Aufgaben: `faelligAm`, `prioritaet` (niedrig/normal/hoch), `referenz` `{art: "rechnung"|"beleg"|"patient"|"plan", id}`
+- Header: `Authorization: Bearer ax_…` (RFC 6750 — nicht `X-Agent-Token`)
+- Token wird in der Instanz angelegt (Einstellungen → Agent-API), Klartext nur
+  einmalig sichtbar; serverseitig sha256-gehasht
+- **Autonomie-Stufen** (Einstellungen → Agent-API): `vorschlag` (Standard —
+  Schreib-Endpunkte legen Entwürfe an, Versand ist gesperrt) ↔ `vollautomatik`
+  (Versand erlaubt). Feinsteuerung je Token: `freigabe_empfaenger`
+  (Adressen/@domains, die auch in `vorschlag` direkt versandt werden dürfen)
+- Jede Schreibaktion landet im `agent_log` (sichtbar per `GET /audit-log`)
+- Jede Lektion der App = siehe Abschnitt „Wenn etwas fehlt" (unten)
 
-## Status
-- `GET /status` → `{produkt, version, zeit}`
+## 3. Antwort-Konventionen (Envelope) — **lies das zuerst, wenn etwas „ins Leere greift"**
 
-## Patienten (ab 1.13.0)
-- `GET /patienten?q=&limit=` → Liste (pseudonymisiert; q = Namenssuche serverseitig)
-- `GET /patient/nach-name/:name` → bis zu 5 Kandidaten (fuzzy, `{id, pseudonym, jahrgang, ort, score}`)
-- `GET /patient/:id` → Detail (pseudonymisiert)
-- `POST /patient` → Quick-Add `{name* („Nachname, Vorname“), geburtsdatum? (JJJJ-MM-TT), strasse?, plz?, ort?, email?, telefon?, krankenkasse?}` — **Dubletten-Prüfung** (Name + Geburtsdatum → 409 mit `vorhanden.id`) · Patientennummer aus dem Nummernkreis · Synonym P-#### automatisch
+Es gibt **kein Wrapper-Objekt**. Die Regeln sind fest:
 
-## Therapiepläne (ab 1.13.0)
-- `GET /therapieplaene?patientId=&status=` → Liste (ohne Papierkorb)
-- `GET /therapieplan/:id` → Plan mit allen Einträgen
-- `POST /therapieplan-entwurf` → Plan als **„geplant"** anlegen (Praxis aktiviert):
-  ```json
-  {
-    "patientId": 42,              // oder "patient": "Name" (fuzzy)
-    "titel": "Therapieplan KW 40–42",
-    "vonDatum": "2026-10-05",
-    "bisDatum": "2026-10-23",
-    "diagnoseZiele": "…",
-    "eintraege": [
-      { "datum": "2026-10-05", "zeitVon": "09:00", "leistungText": "Vitamin C 7,5 g", "menge": "1" },
-      { "datum": "2026-10-05", "leistungId": 123 }
-    ]
-  }
-  ```
-  Validierung: 1–500 Einträge, Datum im Zeitraum, `leistungId` muss im Katalog
-  existieren (`GET /leistungskatalog`), `leistungText` wird aus dem Katalog
-  ergänzt, wenn nur `leistungId` gegeben. Reihenfolge je Tag = Übergabereihenfolge.
+| Fall | HTTP | Body |
+|---|---|---|
+| Erfolg (Liste) | 200 | `{ anzahl: N, <schlüssel>: [...] }` |
+| Erfolg (Aktion/Anlage) | 200 | `{ ok: true, id: …, … }` |
+| Fehler (Validierung/Zustand) | 400 / 404 / 409 | `{ fehler: "menschlich lesbarer Grund" }` |
+| Fehler (Auth) | 401 | `{ fehler: "Bearer-Token fehlt …" / "Token ungültig oder deaktiviert." }` |
 
-## Termine / Kalender (ab 1.13.0)
-- `GET /termine?von=&bis=&patientId=` → Plan-Einträge im Zeitraum (JJJJ-MM-TT)
+**Konsequenzen für den Agenten:**
+- **HTTP-Status zuerst lesen.** Bei ≠ 200 gibt es kein `ok`-Feld, sondern `fehler`.
+- Listen haben IMMER `anzahl` + einen Schlüssel (z. B. `rechnungen`, `produkte`,
+  `eintraege`). Der Schlüssel steht in der Tabelle unten je Endpunkt.
+- Roh-JSON ist die Wahrheit — keine `data`-/`result`-Hülle, keine Meta-Blöcke.
 
-## Rezepte & Atteste (ab 1.13.0 — nur Metadaten)
-- `GET /rezepte?patientId=` → `[{id, typ, erstelltAm, patient}]` — **keine Inhalte** (Gesundheitsdaten bleiben lokal)
+## 4. Idempotenz & Wiederholung
 
-## Rechnungen & Finanzen (aus ReWaWi-Sync, Kunden = Patienten)
-- `GET /offene-rechnungen` · `GET /entwuerfe` · `GET /rechnung/:id` · `GET /kunden-ohne-rechnung?tage=`
-- `GET /mahnungen` · `POST /mahnung {rechnungId, stufe?}` · `DELETE /entwurf/:id` (nur Entwürfe, GoBD)
-- `POST /rechnung-entwurf {kundenId|kunde, items:[{bezeichnung, menge?, einzelpreis, ustSatz?}], pdfNotiz?}`
-- `POST /rechnung/:id/versenden` → **vollautomatik** erforderlich
-- `GET /kunden` · `POST /kunde` (Quick-Add; für Patienten besser `POST /patient` nutzen!)
-- `GET /leistungskatalog`
+Bei jedem **POST** den Header `Idempotenz-Key: <eindeutig>` mitschicken
+(z. B. `uuid`). Ein Retry nach Timeout liefert die gespeicherte Antwort mit
+`x-idempotent-replay: 1` — **nichts dupliziert**. Ohne Key bei Retry kann
+doppeltes Anlegen passieren.
 
-## Banking
-- `GET /kontostand` · `GET /bankbuchungen?tage=` · `GET /bankbuchung/:id`
-- `GET /zahlungsabgleich` (Auto-Match-Vorschläge)
-- `POST /bankbuchung/:id/zuordnen {rechnungId|nummer|eingangsrechnungId}` · `POST /bankbuchung/:id/loesen` (Reversal)
-- `GET /import-status`
+## 5. Pseudonymisierung (DSGVO, Gesundheitsdaten)
 
-## Aufgabenliste (Wiedervorlage)
-- `GET /aufgaben` · `POST /aufgaben {text*}` · `POST /aufgaben/:id/erledigt`
+Listen zeigen standardmäßig **P-Nummern** (`P-0001`) statt Klarnamen,
+wenn in den Einstellungen die Pseudonymisierung aktiv ist (Standard: an).
+E-Mail-Adressen kommen domänen-maskiert. **Klartext nur dort, wo es der
+Auftrag braucht** (z. B. PDF-Erzeugung für den konkreten Patienten). Bank-
+Gegenstellen: bekannte Partner als Synonym, unbekannte maskiert.
 
-## Stolpersteine (FAQ)
-- **Windows-curl**: einfache Anführungszeichen um JSON funktionieren in cmd.exe **nicht** — doppelte + Escape (`\"`) oder `--data @body.json`. Auf Linux/Mac ist `'…'` korrekt.
-- **Patient vs. Kunde**: PaWaWi-Kunden SIND Patienten. Für die Akte immer `POST /patient` (Dubletten-Prüfung + Patientennummer) — `POST /kunde` ist das generische ReWaWi-Erbe ohne diese Prüfungen.
-- **Pläne aktivieren**: Der Agent legt Therapiepläne bewusst nur als „geplant" an. Aktivierung/Dokumentation erfolgt durch die Praxis (medizinische Hoheit).
-- **Jede Aktion nachvollziehbar**: `agent_log` (sichtbar in Einstellungen → Agent-API).
+## 6. Endpunkt-Katalog (v1.23.0)
+
+Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
+
+### Status & Übersicht
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/status` | Produkt, Version, Autonomie-Stufe |
+| GET | `/uebersicht/heute` | Morgen-Briefing (Termine, offene Rechnungen, offene Bankbuchungen, Aufgaben) |
+| GET | `/audit-log` | Vollständige Agent-Aktionshistorie (`?von=&bis=&aktion=`) |
+| GET | `/zahlungsziele` | Fällige Aus-/Eingangsrechnungen + Mahnfristen (mit Überfällig-Flag) |
+
+### Patienten (Gesundheitsdaten — streng)
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/patienten` | Liste (Pseudonyme) |
+| GET | `/patient/nach-name/:name` | Suche (fuzzy) |
+| GET | `/patient/:id` | Detail |
+| POST | `/patient` | Anlegen (Dubletten-Prüfung Name+Geburtsdatum, 409 bei Treffer) |
+| PUT | `/kunde/:id` | Stammdaten ändern |
+| POST | `/patient/:id/dokumente` | **Batch-Upload** (≤25 Dateien; `{dateien:[{dateiname,base64,kategorie?,dokumentdatum?,notiz?}], ocr?}` → je Datei `{id, extraktionsStatus}`) |
+| GET | `/patient/:id/dokumente` | Dokumente der Akte (mit Extraktions-Status) |
+| GET | `/dokument/:id/text` | Text eines Dokuments (OCR on-demand, dauerhaft abgelegt) |
+
+### Therapiepläne
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/therapieplaene` | Liste (`?patientId=`, `?status=`) |
+| GET | `/therapieplan/:id` | Plan + Einträge lesen |
+| POST | `/therapieplan` (= `/therapieplan-entwurf`) | Plan anlegen `{patientId, titel, vonDatum, bisDatum, eintraege[]}` |
+| POST | `/therapieplan/:id/eintraege` | Einträge füllen (Array oder Einzel-Felder) |
+| PUT | `/therapieplan/:id/eintraege/:eintragId` | Eintrag ändern (stattgefundene Einträge sind gesperrt) |
+| DELETE | `/therapieplan/:id/eintraege/:eintragId` | Eintrag löschen (ebenfalls nur geplante) |
+
+### Leistungen / Produkte (Katalog)
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/leistungen` (= `/leistungskatalog`) | Katalog (`?q=`), {leistungId, name, preis, ustSatz, kategorie} |
+| GET | `/produkte` | Sortiment + EK/VK + Lagerbestand + Mindestbestand (`?q=`) |
+| GET | `/waren` | Alias (schlank) |
+| GET | `/warengruppen` | Kategorien |
+| POST | `/produkte` | Produkt anlegen (Dubletten-Schutz per Name → 409) |
+| PUT | `/produkt/:id` | Produkt ändern |
+| DELETE | `/produkt/:id` | GoBD-sicher: deaktiviert statt gelöscht, wenn referenziert |
+
+### Rechnungen / Vorkasse / Gutschriften
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/rechnungen` | Liste (`?patientId=&q=&von=&bis=&status=`) |
+| GET | `/rechnung/:id` | Detail inkl. Positionen |
+| GET | `/rechnung/:id/pdf` | GoBD-PDF (base64), Proforma-Layout inklusive |
+| GET | `/offene-rechnungen` | Offen/überfällig |
+| GET | `/kunden-ohne-rechnung` | Kunden ohne Rechnung seit X |
+| POST | `/rechnung-entwurf` (= `/rechnungen`) | Entwurf `{kundenId\|kunde, items[], typ?, behandlungszeitraum?, pdfNotiz?}` |
+| POST | `/rechnung/:id/finalisieren` | Finalisieren (Proforma bekommt keine Nummer) |
+| POST | `/rechnung/:id/zahlung` | Zahlung buchen `{betrag?, datum?}` |
+| POST | `/rechnung/:id/vorkasse-setzen` | `{proformaId\|null}` — Abschlag verrechnen/ablösen |
+| POST | `/rechnung/:id/in-rechnung-umwandeln` | Proforma → Schlussrechnung |
+| POST | `/rechnung/:id/gutschrift` | `{betrag?, grund}` — weglassen = Vollstorno (GoBD); kleiner = Teilgutschrift-Entwurf |
+| POST | `/rechnung/:id/stornieren` | Vollstorno (Legacy-Alias) |
+| POST | `/rechnung/:id/versenden` | Versand (Vollautomatik-Gate / Freigabeliste) |
+| GET | `/entwuerfe` / DELETE `/entwurf/:id` | Entwürfe lesen/löschen |
+| GET/POST | `/mahnungen`, `/mahnung` | Mahnwesen lesen/versenden |
+| GET | `/zahlungsabgleich` | Offene Bank-Zuordnungen |
+
+### Banking
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/bankbuchungen` | Liste (`?q=&von=&bis=&betragMin=&betragMax=&kontoId=`) |
+| GET | `/bankbuchung/:id` | Detail |
+| POST | `/bankbuchung/:id/zuordnen` | Zuordnung (mit Reversal) |
+| POST | `/bankbuchung/:id/loesen` | Zuordnung auflösen |
+| GET | `/kontostand` | Salden je Konto (bankAccountId explizit) |
+| GET | `/import-status` | Import-Status |
+
+### Rezepte & Dokumente (Formulare)
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/rezepte` | Rezepte + hochgeladene Rezept-Dateien (quelle: rezept/dokument-upload) |
+| POST | `/rezept` | Privatrezept erzeugen `{patientId\|patient, positionen[{name,staerke?,menge?,dosierung?,pzn?}], notiz?}` → A5-PDF mit Signatur |
+
+### Mail
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/mails` | Liste (`?q=&ordner=&von=&bis=`) |
+| GET | `/mail/:id` | Lesen; `GET /mail/:id/anhang/:index[/text]` Anhänge |
+| POST | `/mail/entwurf` | Entwurf (KI macht vor, Mensch sendet ab) |
+| GET | `/mail-entwuerfe` / DELETE `/mail-entwurf/:id` / POST `/mail-entwurf/:id/senden` | Entwürfe verwalten/senden |
+| POST | `/mail/versenden` | Direktversand (Vollautomatik/Freigabeliste) |
+| POST | `/mail/:id/als-entwurf` | Weiterleitung mit Anhang-Übernahme |
+| POST | `/mail/:id/als-beleg` | Mail/Anhang als Eingangsbeleg |
+| POST | `/mail/:id/gelesen` · `/markierung` · `/verschieben` | Status (IMAP-Move) |
+| POST | `/mails/sync` | Gezielter Sync `{kontoId?, ordner?}` |
+| GET | `/mail-ordner` · GET `/versand-log` | Ordner / Versand-Protokoll |
+
+### Kontakte, Aufgaben, Kalender
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/kontakte` | Suche (`?q=` Name/E-Mail/Firma) |
+| GET/POST | `/aufgaben` | Aufgaben lesen/anlegen (`faelligAm`, `prioritaet`, `referenz`) |
+| POST | `/aufgaben/:id/erledigt` | Erledigen |
+| GET | `/termine` | Praxis-Kalender (`?von=&bis=&patientId=`) |
+
+### Webhooks
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET/POST/DELETE | `/webhooks` | `bankbuchung.neu` feuert beim Bankimport |
+
+## 7. Fehlerkatalog
+
+| HTTP | Bedeutung | Aktion des Agenten |
+|---|---|---|
+| 401 | Token fehlt/ungültig/deaktiviert | Token prüfen; **nie** weiterreichen, melden |
+| 400 | Validierung (Feld fehlt/Format) | `fehler`-Text lesen, Eingabe korrigieren |
+| 404 | Objekt nicht gefunden | ID prüfen; bei Endpunkt: Doku prüfen (Aliase beachten!) |
+| 409 | Konflikt/Zustand (Duplikat, GoBD-Regel, Doppel-Verrechnung) | Text lesen — enthält die Lösung; nicht wiederholen |
+| 429 | Rate-Limit | Backoff + Retry mit Idempotenz-Key |
+
+## 8. Wenn etwas fehlt — der Meldeweg (verbindlich)
+
+**Nicht raten, nicht improvisieren.** Reihenfolge:
+
+1. Diese Doku prüfen (inkl. Aliase — siehe Katalog).
+2. Prüfen, ob die Instanz aktuell ist (`GET /status` → Version).
+3. Fehlt die Funktion wirklich → **präzise Anforderung auf dem Bus** stellen
+   (Label `inbox-pawawi`), mit dem Muster:
+
+   ```text
+   Endpunkt: POST /therapieplan/:id/eintraege/:eintragId/verschieben
+   Payload: { neuesDatum: "JJJJ-MM-TT" }
+   Erwartete Antwort: { ok: true, eintragId, datum }
+   Use-Case: Agent verschiebt Infusion auf nächsten Tag bei Ausfall
+   ```
+
+   Kurz, konkret, mit Nutzen — das wird gebaut.
+4. Bei Fehlverhalten eines **vorhandenen** Endpunkts: Bug-Meldung mit
+   Request/Response-Rohdaten.
+
+## 9. Beispiele (cURL)
+
+```bash
+# 1. Status
+curl -s "$BASE/api/agent/status" -H "Authorization: Bearer $TOKEN"
+
+# 2. Plan-Eintrag füllen (idempotent)
+curl -s -X POST "$BASE/api/agent/therapieplan/2/eintraege" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -H "Idempotenz-Key: plan2-2026-10-08-hyperthermie" \
+  -d '{"datum":"2026-10-08","leistungText":"Hyperthermie","menge":"1","zeitVon":"10:00"}'
+
+# 3. Proforma-Vorschuss
+curl -s -X POST "$BASE/api/agent/rechnung-entwurf" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"kundenId":4000005,"typ":"proforma","behandlungszeitraum":"05.10.–09.10.2026","items":[{"bezeichnung":"Vorschuss Therapie KW41","einzelpreis":"4000","ustSatz":0}]}'
+```
+
+---
+*Diese Datei ist die kanonische Referenz. Bei Abweichung Doku ↔ Verhalten
+gilt das Verhalten der aktuellen Version — und das ist ein Bug zum Melden.*

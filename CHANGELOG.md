@@ -1,5 +1,21 @@
 # Changelog — PraxiOS
 
+## [1.23.1] — 2026-10-14 — Kanonischer Agent-Leitfaden (docs/agent-api.md)
+
+### Doku (alex' Auftrag: Agenten sollen immer wissen, was sie können)
+- **`docs/agent-api.md`** ist jetzt die kanonische Referenz: Auth (Bearer,
+  Autonomie-Stufen, Freigabelisten), **Antwort-Konventionen explizit**
+  (kein Envelope-Wrapper — `{ok:true,…}` bei Erfolg, `{fehler}` + HTTP-Code
+  bei Fehlern, Listen mit `anzahl` + Schlüssel), kompletter Endpunkt-Katalog
+  (89 Endpunkte, gruppiert), Idempotenz/Webhooks, Pseudonymisierung,
+  Fehlerkatalog mit Aktionen, **verbindlicher Meldeweg** für fehlende
+  Funktionen (Bus-Template mit Endpunkt/Payload/Antwort/Use-Case), cURL-
+  Beispiele
+- Anlass: Axons Feld-Auswertung griff ins Leere, weil das Envelope-Format
+  nirgends schriftlich war — jetzt ist es das
+
+---
+
 ## [1.23.0] — 2026-10-14 — Agent-API: Produkte/Leistungen schreiben
 
 ### Neu (alex' Auftrag: Stammdaten per Agent pflegen — kein Lagerbestand nötig)
