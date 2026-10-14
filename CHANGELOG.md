@@ -1,5 +1,23 @@
 # Changelog — PraxiOS
 
+## [1.22.0] — 2026-10-14 — Agent-API: Abrechnungs-Workflow komplett (Bus #165)
+
+### Neu (Axons Auftrag: Vetter-Abrechnung + Waren-Abgleich mit Kühnel)
+- **Leistungskatalog**: `GET /leistungen (?q=)` — Grundlage für Plan-Einträge
+  und Abrechnung (leistungId/name/preis/kategorie)
+- **Therapieplan schreiben**: `POST /therapieplan/:id/eintraege` (Batch oder
+  Einzeln), `PUT /therapieplan/:id/eintraege/:eintragId`, `DELETE` — mit
+  Validierung (Datum im Zeitraum, Katalog-Prüfung, stattgefundene Einträge
+  sind dokumentarisch gesperrt), Reihenfolge ans Tagesende, Audit
+- **`POST /therapieplan`** — Alias für den bestehenden Plan-Entwurf
+- **Waren/Lager**: `GET /produkte` (Sortiment + EK/VK + Lagerbestand aus
+  Bewegungen + Mindestbestand), `GET /waren` (Alias), `GET /warengruppen`
+  (Kategorien) — Grundlage für den Vetter↔Kühnel-Abgleich
+- **Rechnungen**: `GET /rechnungen` (Filter: patientId, q, von, bis, status),
+  `POST /rechnungen` — Alias auf den Entwurf-Endpunkt
+
+---
+
 ## [1.21.3] — 2026-10-02 — Apotheken-Recht: Rezeptur-Hinweis im Praxisbedarf (BVerwG 3 C 2.24)
 
 ### Änderung (alex' Anlass: Urteil März 2026)

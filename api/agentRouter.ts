@@ -2173,4 +2173,249 @@ app.get("/versand-log", async (c) => {
   });
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// ── Abrechnungs-Workflow (1.22.0, Bus #165): Leistungskatalog, ────────────
+// ── Therapieplan-Schreiben, Waren/Lager-Abgleich, Rechnungen ──────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+/** Leistungskatalog als Agent-Form (id↔name↔preis). Aliase für Robustheit. */
+async function ladeLeistungen(q?: string) {
+  const rows = (await getDb().query.products.findMany()).filter((p) => p.aktiv);
+  const qn = q?.trim().toLowerCase();
+  return rows
+    .filter((p) => !qn || p.name.toLowerCase().includes(qn) || (p.artikelnummer ?? "").toLowerCase().includes(qn))
+    .map((p) => ({
+      leistungId: p.id,
+      name: p.name,
+      preis: Number(p.preisNetto),
+      ustSatz: p.ustSatz,
+      kategorie: p.kategorie,
+      einheit: p.einheit,
+      artikelnummer: p.artikelnummer,
+    }));
+}
+app.get("/leistungen", async (c) => {
+  const liste = await ladeLeistungen(c.req.query("q"));
+  return c.json({ anzahl: liste.length, leistungen: liste });
+});
+
+// ── Waren/Lager (Vetter ↔ Kühnel-Abgleich): Sortiment + Bestand ───────────
+app.get("/produkte", async (c) => {
+  const db = getDb();
+  const qn = c.req.query("q")?.trim().toLowerCase();
+  const { lagerBewegungen, kategorien } = await import("@db/schema");
+  const rows = await db.query.products.findMany();
+  const bew = await db.select().from(lagerBewegungen);
+  const bestand = new Map<number, number>();
+  for (const b of bew) {
+    const delta = b.typ === "zugang" ? Number(b.menge) : b.typ === "abgang" ? -Number(b.menge) : Number(b.menge) * 0; // korrektur/inventur: 0-Netto (Siehe Lager)
+    bestand.set(b.productId, (bestand.get(b.productId) ?? 0) + delta);
+  }
+  const katNamen = new Map((await db.select().from(kategorien)).map((k) => [k.name, k.id]));
+  const liste = rows
+    .filter((p) => !qn || p.name.toLowerCase().includes(qn) || (p.artikelnummer ?? "").toLowerCase().includes(qn))
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      artikelnummer: p.artikelnummer,
+      barcode: p.barcode,
+      einheit: p.einheit,
+      preisNetto: Number(p.preisNetto),
+      ekPreisNetto: p.ekPreisNetto ? Number(p.ekPreisNetto) : null,
+      ustSatz: p.ustSatz,
+      kategorie: p.kategorie,
+      kategorieId: p.kategorie ? (katNamen.get(p.kategorie) ?? null) : null,
+      aktiv: p.aktiv,
+      lagerAktiv: p.lagerAktiv,
+      lagerbestand: p.lagerAktiv ? (bestand.get(p.id) ?? 0) : null,
+      mindestbestand: p.mindestbestand ? Number(p.mindestbestand) : null,
+    }));
+  return c.json({ anzahl: liste.length, produkte: liste });
+});
+// Alias: Axon hatte /waren zuerst geraten — beide Wege führen ans Ziel.
+app.get("/waren", async (c) => {
+  const liste = await ladeLeistungen(c.req.query("q"));
+  return c.json({ anzahl: liste.length, produkte: liste, hinweis: "Für Bestände inkl. EK/Lager: GET /produkte (vollständiger)." });
+});
+
+app.get("/warengruppen", async (c) => {
+  const { kategorien } = await import("@db/schema");
+  const rows = await getDb().select().from(kategorien);
+  return c.json({
+    anzahl: rows.length,
+    warengruppen: rows.map((k) => ({ id: k.id, name: k.name, konto: k.konto, ustSatz: k.ustSatz, sortierung: k.sortierung })),
+  });
+});
+
+// ── Rechnungen: Liste + Alias-Anlage ──────────────────────────────────────
+app.get("/rechnungen", async (c) => {
+  const db = getDb();
+  const patientId = c.req.query("patientId") ? Number(c.req.query("patientId")) : null;
+  const von = c.req.query("von");
+  const bis = c.req.query("bis");
+  const status = c.req.query("status");
+  const q = c.req.query("q")?.trim().toLowerCase();
+  const rows = await db.query.invoices.findMany({
+    orderBy: [desc(invoices.rechnungsdatum)],
+    limit: 200,
+  });
+  const liste = rows
+    .filter((r) => (patientId ? r.customerId === patientId : true))
+    .filter((r) => (von ? r.rechnungsdatum >= von : true))
+    .filter((r) => (bis ? r.rechnungsdatum <= bis : true))
+    .filter((r) => (status ? r.status === status : true))
+    .filter((r) => !q || r.nummer?.toLowerCase().includes(q) || r.kundeName.toLowerCase().includes(q))
+    .map((r) => ({
+      id: r.id,
+      nummer: r.nummer,
+      typ: r.typ,
+      status: r.status,
+      patientId: r.customerId,
+      patientName: r.kundeName,
+      datum: r.rechnungsdatum,
+      faelligAm: r.faelligkeitsdatum,
+      netto: Number(r.netto),
+      ust: Number(r.ust),
+      brutto: Number(r.brutto),
+      abschlag: r.abschlagBetrag ? Number(r.abschlagBetrag) : null,
+      bezahlt: r.bezahltAm ? { betrag: Number(r.bezahltBetrag), am: r.bezahltAm } : null,
+      behandlungszeitraum: r.behandlungszeitraum,
+    }));
+  return c.json({ anzahl: liste.length, rechnungen: liste });
+});
+// Alias für Anlage: POST /rechnungen == POST /rechnung-entwurf
+app.post("/rechnungen", async (c) => c.redirect("/api/agent/rechnung-entwurf", 307));
+
+// ── Therapieplan: Anlage-Alias + Eintrags-CRUD ────────────────────────────
+// POST /therapieplan = POST /therapieplan-entwurf (Alias)
+app.post("/therapieplan", async (c) => c.redirect("/api/agent/therapieplan-entwurf", 307));
+
+async function ladePlan(planId: number) {
+  const p = await getDb().query.therapyPlans.findFirst({
+    where: eq(therapyPlans.id, planId),
+  });
+  return p && !p.geloeschtAm ? p : null;
+}
+
+app.post("/therapieplan/:id/eintraege", async (c) => {
+  const planId = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const db = getDb();
+  const plan = await ladePlan(planId);
+  if (!plan) return c.json({ fehler: "Therapieplan nicht gefunden (oder gelöscht)." }, 404);
+
+  const eintraege = Array.isArray(body.eintraege) ? body.eintraege : body.datum ? [body] : null;
+  if (!eintraege || eintraege.length === 0) {
+    return c.json({ fehler: "eintraege fehlt: [{datum, leistungId|leistungText, menge?, zeitVon?, zeitBis?, raum?}] oder Einzelfelder direkt." }, 400);
+  }
+  const katalog = new Map((await db.select().from(products)).map((p) => [p.id, p]));
+  const eingefuegt: number[] = [];
+  for (const [i, e] of eintraege.entries()) {
+    const r = e as Record<string, unknown>;
+    const datum = String(r.datum ?? "");
+    if (!DATUM_ISO.test(datum)) return c.json({ fehler: `Eintrag ${i + 1}: datum im Format JJJJ-MM-TT nötig.` }, 400);
+    if (datum < plan.vonDatum || datum > plan.bisDatum) {
+      return c.json({ fehler: `Eintrag ${i + 1}: ${datum} außerhalb des Plan-Zeitraums (${plan.vonDatum}–${plan.bisDatum}).` }, 400);
+    }
+    const leistungId = r.leistungId ? Number(r.leistungId) : null;
+    const leistungText = r.leistungText ? String(r.leistungText).slice(0, 255) : null;
+    if (leistungId && !katalog.has(leistungId)) {
+      return c.json({ fehler: `Eintrag ${i + 1}: leistungId ${leistungId} nicht im Katalog (GET /leistungen).` }, 400);
+    }
+    if (!leistungId && !leistungText) return c.json({ fehler: `Eintrag ${i + 1}: leistungId oder leistungText nötig.` }, 400);
+    const zeitVon = r.zeitVon ? String(r.zeitVon) : null;
+    const zeitBis = r.zeitBis ? String(r.zeitBis) : null;
+    if (zeitVon && !ZEIT.test(zeitVon)) return c.json({ fehler: `Eintrag ${i + 1}: zeitVon als SS:MM.` }, 400);
+    if (zeitBis && !ZEIT.test(zeitBis)) return c.json({ fehler: `Eintrag ${i + 1}: zeitBis als SS:MM.` }, 400);
+    // Reihenfolge: ans Tagesende (max+1) — Tagessortierung bleibt beim Bestand
+    const tag = await db.query.planEntries.findMany({
+      where: and(eq(planEntries.planId, planId), eq(planEntries.datum, datum)),
+      columns: { reihenfolge: true },
+    });
+    const maxReihenfolge = tag.reduce((m, t) => Math.max(m, t.reihenfolge ?? 0), 0);
+    const [{ id }] = await db
+      .insert(planEntries)
+      .values({
+        planId,
+        datum,
+        zeitVon,
+        zeitBis,
+        leistungId,
+        leistungText: leistungText ?? (leistungId ? (katalog.get(leistungId)?.name ?? null) : null),
+        menge: String(r.menge ?? "1"),
+        raum: r.raum ? String(r.raum).slice(0, 100) : null,
+        status: "geplant",
+        reihenfolge: maxReihenfolge + 1,
+      })
+      .$returningId();
+    eingefuegt.push(id);
+  }
+  await audit("plan_eintraege_angelegt", { planId, anzahl: eingefuegt.length });
+  return c.json({ ok: true, planId, eingefuegt, hinweis: "Einträge angelegt (Status: geplant). Kalender/Sync aktualisiert sich automatisch." });
+});
+
+app.put("/therapieplan/:id/eintraege/:eintragId", async (c) => {
+  const planId = Number(c.req.param("id"));
+  const eintragId = Number(c.req.param("eintragId"));
+  const body = await bodyLesen(c);
+  const db = getDb();
+  const plan = await ladePlan(planId);
+  if (!plan) return c.json({ fehler: "Therapieplan nicht gefunden (oder gelöscht)." }, 404);
+  const e = await db.query.planEntries.findFirst({
+    where: and(eq(planEntries.id, eintragId), eq(planEntries.planId, planId)),
+  });
+  if (!e) return c.json({ fehler: "Eintrag nicht gefunden (falsche ID/Plan)." }, 404);
+  if (e.status === "stattgefunden") return c.json({ fehler: "Stattgefundene Einträge sind medizinische Dokumentation — nur Status-Historie, kein Edit." }, 409);
+
+  const setze: Record<string, unknown> = {};
+  if (body.datum !== undefined) {
+    const d = String(body.datum);
+    if (!DATUM_ISO.test(d)) return c.json({ fehler: "datum im Format JJJJ-MM-TT nötig." }, 400);
+    if (d < plan.vonDatum || d > plan.bisDatum) return c.json({ fehler: `datum außerhalb des Plan-Zeitraums (${plan.vonDatum}–${plan.bisDatum}).` }, 400);
+    setze.datum = d;
+  }
+  if (body.zeitVon !== undefined) {
+    const z = body.zeitVon === null ? null : String(body.zeitVon);
+    if (z && !ZEIT.test(z)) return c.json({ fehler: "zeitVon als SS:MM." }, 400);
+    setze.zeitVon = z;
+  }
+  if (body.zeitBis !== undefined) {
+    const z = body.zeitBis === null ? null : String(body.zeitBis);
+    if (z && !ZEIT.test(z)) return c.json({ fehler: "zeitBis als SS:MM." }, 400);
+    setze.zeitBis = z;
+  }
+  if (body.menge !== undefined) setze.menge = String(body.menge);
+  if (body.raum !== undefined) setze.raum = body.raum === null ? null : String(body.raum).slice(0, 100);
+  if (body.leistungId !== undefined) {
+    const lid = body.leistungId === null ? null : Number(body.leistungId);
+    if (lid) {
+      const p = await db.query.products.findFirst({ where: eq(products.id, lid) });
+      if (!p) return c.json({ fehler: `leistungId ${lid} nicht im Katalog.` }, 400);
+      setze.leistungId = lid;
+      setze.leistungText = p.name;
+    } else {
+      setze.leistungId = null;
+    }
+  }
+  if (body.leistungText !== undefined) setze.leistungText = body.leistungText === null ? null : String(body.leistungText).slice(0, 255);
+  if (Object.keys(setze).length === 0) return c.json({ fehler: "Keine Felder zum Ändern (datum, zeitVon, zeitBis, menge, raum, leistungId, leistungText)." }, 400);
+  await db.update(planEntries).set(setze).where(eq(planEntries.id, eintragId));
+  await audit("plan_eintrag_geaendert", { planId, eintragId, felder: Object.keys(setze) });
+  return c.json({ ok: true, eintragId, geaendert: Object.keys(setze) });
+});
+
+app.delete("/therapieplan/:id/eintraege/:eintragId", async (c) => {
+  const planId = Number(c.req.param("id"));
+  const eintragId = Number(c.req.param("eintragId"));
+  const db = getDb();
+  const e = await db.query.planEntries.findFirst({
+    where: and(eq(planEntries.id, eintragId), eq(planEntries.planId, planId)),
+  });
+  if (!e) return c.json({ fehler: "Eintrag nicht gefunden (falsche ID/Plan)." }, 404);
+  if (e.status === "stattgefunden") return c.json({ fehler: "Stattgefundene Einträge sind medizinische Dokumentation — Löschen nicht erlaubt." }, 409);
+  await db.delete(planEntries).where(eq(planEntries.id, eintragId));
+  await audit("plan_eintrag_geloescht", { planId, eintragId, datum: e.datum, leistung: e.leistungText ?? e.leistungId });
+  return c.json({ ok: true, eintragId, geloescht: true });
+});
+
 export default app;
