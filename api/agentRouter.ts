@@ -362,7 +362,7 @@ app.get("/leistungskatalog", async (c) => {
   });
 });
 
-app.get("/rechnung/:id", async (c) => {
+const rechnungDetailHandler = async (c: Context) => {
   const id = Number(c.req.param("id"));
   const r = await getDb().query.invoices.findFirst({
     where: eq(invoices.id, id),
@@ -373,6 +373,7 @@ app.get("/rechnung/:id", async (c) => {
   return c.json({
     id: r.id, nummer: r.nummer, status: r.status,
     kunde: r.kundeName, kundenId: r.customerId,
+    behandlungszeitraum: r.behandlungszeitraum,
     rechnungsdatum: r.rechnungsdatum, faelligkeitsdatum: r.faelligkeitsdatum,
     netto: Number(r.netto), ust: Number(r.ust), brutto: Number(r.brutto),
     bezahltBetrag: Number(r.bezahltBetrag),
@@ -381,7 +382,10 @@ app.get("/rechnung/:id", async (c) => {
       menge: Number(it.menge), einheit: it.einheit, einzelpreis: Number(it.einzelpreis), ustSatz: it.ustSatz,
     })),
   });
-});
+};
+// Doppel-Registrierung (kein Redirect — siehe Fix 1.23.2)
+app.get("/rechnung/:id", rechnungDetailHandler);
+app.get("/rechnungen/:id", rechnungDetailHandler);
 
 /** Body tolerant lesen: JSON (application/json) ODER Formular (urlencoded). */
 async function bodyLesen(c: { req: { json: () => Promise<Record<string, unknown>>; parseBody: () => Promise<Record<string, unknown>> } }): Promise<Record<string, unknown>> {
@@ -2318,7 +2322,14 @@ app.post("/therapieplan/:id/eintraege", async (c) => {
   const plan = await ladePlan(planId);
   if (!plan) return c.json({ fehler: "Therapieplan nicht gefunden (oder gelöscht)." }, 404);
 
-  const eintraege = Array.isArray(body.eintraege) ? body.eintraege : body.datum ? [body] : null;
+  // Tolerant: {eintraege:[…]}, Einzel-Felder ODER rohes Array (Feldbericht Axon)
+  const eintraege = Array.isArray(body)
+    ? body
+    : Array.isArray(body.eintraege)
+      ? body.eintraege
+      : body.datum
+        ? [body]
+        : null;
   if (!eintraege || eintraege.length === 0) {
     return c.json({ fehler: "eintraege fehlt: [{datum, leistungId|leistungText, menge?, zeitVon?, zeitBis?, raum?}] oder Einzelfelder direkt." }, 400);
   }
@@ -2438,7 +2449,7 @@ app.delete("/therapieplan/:id/eintraege/:eintragId", async (c) => {
 
 const PRODUKT_FELDER = ["name", "beschreibung", "einheit", "artikelnummer", "barcode", "importNamen"] as const;
 
-app.post("/produkte", async (c) => {
+const produktAnlegenHandler = async (c: Context) => {
   const body = await bodyLesen(c);
   const db = getDb();
   const name = String(body.name ?? "").trim().slice(0, 255);
@@ -2483,7 +2494,10 @@ app.post("/produkte", async (c) => {
     .$returningId();
   await audit("produkt_angelegt", { id, name, preisNetto });
   return c.json({ ok: true, id, name });
-});
+};
+// Doppel-Registrierung (kein Redirect — siehe Fix 1.23.2)
+app.post("/produkte", produktAnlegenHandler);
+app.post("/leistungen", produktAnlegenHandler);
 
 app.put("/produkt/:id", async (c) => {
   const id = Number(c.req.param("id"));
@@ -2555,5 +2569,127 @@ app.delete("/produkt/:id", async (c) => {
   await audit("produkt_geloescht", { id, name: p.name });
   return c.json({ ok: true, id, geloescht: true });
 });
+
+// ── Rechnungsentwurf aus Therapieplan (1.24.0, Bus #167) ──────────────────
+// Positionen = Plan-Einträge, gruppiert nach Leistung (Name+Preis aus dem
+// Katalog), Menge = Anzahl Einträge × menge. Status: Entwurf — ein Mensch
+// prüft und finalisiert (GoBD).
+app.post("/rechnung-aus-plan", async (c) => {
+  const body = await bodyLesen(c);
+  const planId = Number(body.therapieplanId ?? body.planId);
+  if (!planId) return c.json({ fehler: "therapieplanId fehlt." }, 400);
+  const db = getDb();
+  const plan = await db.query.therapyPlans.findFirst({
+    where: eq(therapyPlans.id, planId),
+    with: { patient: true },
+  });
+  if (!plan || plan.geloeschtAm) return c.json({ fehler: "Therapieplan nicht gefunden (oder gelöscht)." }, 404);
+
+  const eintraege = await db.query.planEntries.findMany({
+    where: and(eq(planEntries.planId, planId), eq(planEntries.status, "stattgefunden")),
+  });
+  const nutzbar = eintraege.length > 0
+    ? eintraege
+    : await db.query.planEntries.findMany({ where: eq(planEntries.planId, planId) });
+  if (nutzbar.length === 0) return c.json({ fehler: "Der Plan hat keine Einträge." }, 400);
+
+  const katalog = new Map((await db.select().from(products)).map((p) => [p.id, p]));
+  // Gruppieren: je Leistung (Katalog oder Freitext) → eine Position mit Gesamt-Menge
+  const gruppen = new Map<string, { bezeichnung: string; preis: number; ustSatz: number; einheit: string; anzahl: number; mengeSum: number }>();
+  for (const e of nutzbar) {
+    const p = e.leistungId ? katalog.get(e.leistungId) : null;
+    const name = p?.name ?? e.leistungText ?? "Leistung";
+    const key = `${p?.id ?? "frei"}:${name}`;
+    const g = gruppen.get(key) ?? {
+      bezeichnung: name,
+      preis: p ? Number(p.preisNetto) : 0,
+      ustSatz: p?.ustSatz ?? 0,
+      einheit: p?.einheit ?? "Stück",
+      anzahl: 0,
+      mengeSum: 0,
+    };
+    g.anzahl += 1;
+    g.mengeSum += Number(e.menge ?? 1);
+    gruppen.set(key, g);
+  }
+  const positionen = [...gruppen.values()].map((g, i) => ({
+    position: i + 1,
+    bezeichnung: g.bezeichnung,
+    beschreibung: `Therapieplan ${plan.titel ?? planId} · ${plan.vonDatum}–${plan.bisDatum}`,
+    menge: String(g.mengeSum),
+    einheit: g.einheit,
+    einzelpreis: g.preis.toFixed(2),
+    ustSatz: g.ustSatz,
+  }));
+
+  const patient = plan.patient;
+  const settings = await db.query.companySettings.findFirst({ where: eq(companySettings.id, 1) });
+  const zielTage = patient.zahlungszielTage ?? settings?.standardZahlungsziel ?? 14;
+  const heuteD = new Date();
+  const faellig = new Date(heuteD.getTime() + zielTage * 86400000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const standardBank = await db.query.bankAccounts.findFirst({ where: (b, { eq: e }) => e(b.istStandard, true) });
+  const { computeTotals, centToDecimal } = await import("./queries/invoicing");
+  const totals = computeTotals(positionen);
+
+  const [{ id }] = await db
+    .insert(invoices)
+    .values({
+      customerId: patient.id,
+      rechnungsdatum: fmt(heuteD),
+      faelligkeitsdatum: fmt(faellig),
+      bankAccountId: standardBank?.id ?? null,
+      kundeName: patient.name,
+      kundeZusatz: patient.zusatz,
+      kundeStrasse: patient.strasse,
+      kundePlz: patient.plz,
+      kundeOrt: patient.ort,
+      kundeLand: patient.land,
+      pdfNotiz: body.pdfNotiz ? String(body.pdfNotiz) : null,
+      behandlungszeitraum: body.behandlungszeitraum
+        ? String(body.behandlungszeitraum).slice(0, 200)
+        : `${plan.vonDatum}–${plan.bisDatum}`,
+      bemerkung: `Aus Therapieplan #${planId} per Agent-API (Kimi Claw) — bitte prüfen.`,
+      netto: centToDecimal(totals.nettoCent),
+      ust: centToDecimal(totals.ustCent),
+      brutto: centToDecimal(totals.bruttoCent),
+    })
+    .$returningId();
+  await db.insert(invoiceItems).values(
+    positionen.map((p) => ({
+      invoiceId: id,
+      position: p.position,
+      bezeichnung: p.bezeichnung,
+      beschreibung: p.beschreibung,
+      menge: p.menge,
+      einheit: p.einheit,
+      einzelpreis: p.einzelpreis,
+      ustSatz: p.ustSatz,
+    })),
+  );
+  await audit("rechnung_aus_plan", { id, planId, positionen: positionen.length, brutto: centToDecimal(totals.bruttoCent) });
+  return c.json({
+    ok: true,
+    rechnung: { id, status: "entwurf", brutto: centToDecimal(totals.bruttoCent) },
+    positionen: positionen.map((p) => ({ bezeichnung: p.bezeichnung, menge: Number(p.menge), einzelpreis: Number(p.einzelpreis) })),
+    hinweis: "Entwurf angelegt (Grundlage: Plan-Einträge, gruppiert nach Leistung). Ein Mensch prüft und finalisiert — GoBD.",
+  });
+});
+
+// Unbekannte Pfade: JSON statt leerem Body (Bus #167 — Agenten raten sonst
+// das Schema). Immer zuletzt registrieren.
+app.notFound((c) =>
+  c.json(
+    {
+      fehler: `Endpunkt nicht gefunden: ${c.req.method} ${c.req.path}`,
+      hinweis: "Kanonischer Katalog: docs/agent-api.md im Repo (main). Instanz-Version: GET /api/agent/status.",
+    },
+    404,
+  ),
+);
+
+app.onError((err, c) =>
+  c.json({ fehler: err instanceof Error ? err.message : "Interner Fehler." }, 500),
+);
 
 export default app;

@@ -1,5 +1,21 @@
 # Changelog — PraxiOS
 
+## [1.24.0] — 2026-10-14 — Agent-API: Rechnung aus Plan + Aliase + JSON-Fehler (Bus #167)
+
+### Neu (Axons Nachtrag — Patientenabrechnung war geblockt)
+- **`POST /rechnung-aus-plan`** `{therapieplanId}`: Rechnungsentwurf aus einem
+  Therapieplan — Positionen gruppiert nach Leistung (Preis/USt aus dem
+  Katalog), Menge = Σ der Einträge; Grundlage: stattgefundene Einträge,
+  Fallback alle. Status Entwurf — ein Mensch prüft und finalisiert (GoBD)
+- **Aliase per Doppel-Registrierung** (kein Redirect mehr, siehe 1.23.2):
+  `POST /leistungen` (≡ /produkte), `GET /rechnungen/:id` (≡ /rechnung/:id)
+- **`POST /therapieplan/:id/eintraege` akzeptiert jetzt auch rohe Arrays**
+  ([{datum,leistungId,menge},…]) neben dem {eintraege:[…]}-Wrapper
+- **JSON-Fehler überall**: 404 auf unbekannten Pfaden liefert
+  `{fehler, hinweis: Guide}` statt leerem Body; 500 ebenfalls JSON
+
+---
+
 ## [1.23.2] — 2026-10-14 — Fix: Agent-Aliase ohne Redirect (leere 401)
 
 ### Fix (Axons Feldbericht: POST /rechnungen + POST /therapieplan → 401 leer)
