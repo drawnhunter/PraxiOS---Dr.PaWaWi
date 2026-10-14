@@ -5,6 +5,7 @@
 //   vollautomatik = zusätzlich Beleg-Versand per E-Mail
 // Jede Schreib-Aktion wird in agent_log auditiert (sichtbar in Einstellungen).
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { createHash, randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gte, isNull, like, lte } from "drizzle-orm";
 import { getDb } from "./queries/connection";
@@ -571,7 +572,8 @@ app.post("/kunde", async (c) => {
   return c.json({ ok: true, id, name });
 });
 
-app.post("/rechnung-entwurf", async (c) => {
+// Zwei Pfade, ein Handler: kanonisch + Alias (kein Redirect!)
+const rechnungEntwurfHandler = async (c: Context) => {
   const body = await bodyLesen(c);
   const db = getDb();
 
@@ -644,7 +646,11 @@ app.post("/rechnung-entwurf", async (c) => {
   );
   await audit("rechnung_entwurf", { id, kunde: kunde.name, positionen: positionen.length, brutto: centToDecimal(totals.bruttoCent) });
   return c.json({ ok: true, id, kunde: kunde.name, brutto: centToDecimal(totals.bruttoCent), hinweis: "Entwurf angelegt — Freigabe erfolgt durch einen Menschen (oder Vollautomatik in Einstellungen)." });
-});
+};
+// Doppel-Registrierung: kanonischer Pfad + Alias (kein Redirect — 307 ließ
+// bei manchen Clients den Authorization-Header fallen, Feldbericht Axon).
+app.post("/rechnung-entwurf", rechnungEntwurfHandler);
+app.post("/rechnungen", rechnungEntwurfHandler);
 
 app.post("/rechnung/:id/versenden", async (c) => {
   const id = Number(c.req.param("id"));
@@ -1053,7 +1059,8 @@ app.get("/therapieplan/:id", async (c) => {
 const DATUM_ISO = /^\d{4}-\d{2}-\d{2}$/;
 const ZEIT = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-app.post("/therapieplan-entwurf", async (c) => {
+// Zwei Pfade, ein Handler: kanonisch + Alias (kein Redirect!)
+const therapieplanEntwurfHandler = async (c: Context) => {
   const body = await bodyLesen(c);
   const db = getDb();
 
@@ -1143,7 +1150,11 @@ app.post("/therapieplan-entwurf", async (c) => {
     eintraege: sauber.length,
     hinweis: "Plan als „geplant“ angelegt — die Praxis prüft und aktiviert ihn (Status bleibt bewusst beim Menschen).",
   });
-});
+};
+// Doppel-Registrierung: kanonischer Pfad + Alias (kein Redirect — 307 ließ
+// bei manchen Clients den Authorization-Header fallen, Feldbericht Axon).
+app.post("/therapieplan-entwurf", therapieplanEntwurfHandler);
+app.post("/therapieplan", therapieplanEntwurfHandler);
 
 // ── Termine (Kalender = Plan-Einträge mit Datum/Zeit) ──────────────────────
 app.get("/termine", async (c) => {
@@ -2283,12 +2294,15 @@ app.get("/rechnungen", async (c) => {
     }));
   return c.json({ anzahl: liste.length, rechnungen: liste });
 });
-// Alias für Anlage: POST /rechnungen == POST /rechnung-entwurf
-app.post("/rechnungen", async (c) => c.redirect("/api/agent/rechnung-entwurf", 307));
+// Alias für Anlage: POST /rechnungen == POST /rechnung-entwurf (siehe
+// Doppel-Registrierung am Handler — Redirects (307) lassen bei manchen
+// Clients den Authorization-Header fallen → leere 401 (Feldbericht Axon).
+
 
 // ── Therapieplan: Anlage-Alias + Eintrags-CRUD ────────────────────────────
-// POST /therapieplan = POST /therapieplan-entwurf (Alias)
-app.post("/therapieplan", async (c) => c.redirect("/api/agent/therapieplan-entwurf", 307));
+// POST /therapieplan = POST /therapieplan-entwurf (Alias per
+// Doppel-Registrierung am Handler — kein Redirect, siehe Kommentar unten).
+
 
 async function ladePlan(planId: number) {
   const p = await getDb().query.therapyPlans.findFirst({

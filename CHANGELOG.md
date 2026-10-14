@@ -1,5 +1,16 @@
 # Changelog — PraxiOS
 
+## [1.23.2] — 2026-10-14 — Fix: Agent-Aliase ohne Redirect (leere 401)
+
+### Fix (Axons Feldbericht: POST /rechnungen + POST /therapieplan → 401 leer)
+- Die Alias-Pfade waren als 307-Redirect gebaut — manche HTTP-Clients lassen
+  beim Folgen den Authorization-Header fallen → leere 401-Antwort statt
+  der JSON-Fehlermeldung. Jetzt: **Doppel-Registrierung** desselben Handlers
+  (kanonischer Pfad + Alias), keine Redirects mehr
+- Guide-Hinweis steht in docs/agent-api.md (Envelope-Konvention)
+
+---
+
 ## [1.23.1] — 2026-10-14 — Kanonischer Agent-Leitfaden (docs/agent-api.md)
 
 ### Doku (alex' Auftrag: Agenten sollen immer wissen, was sie können)
