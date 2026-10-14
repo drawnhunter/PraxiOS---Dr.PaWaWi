@@ -2418,4 +2418,128 @@ app.delete("/therapieplan/:id/eintraege/:eintragId", async (c) => {
   return c.json({ ok: true, eintragId, geloescht: true });
 });
 
+// ── Produkte/Leistungen schreiben (1.23.0, Bus #165-Nachtrag) ─────────────
+// Stammdaten per Agent: anlegen, ändern, entfernen. GoBD: Wer schon an einer
+// Rechnung/einem Plan hängt, wird nicht hart gelöscht — sondern deaktiviert.
+
+const PRODUKT_FELDER = ["name", "beschreibung", "einheit", "artikelnummer", "barcode", "importNamen"] as const;
+
+app.post("/produkte", async (c) => {
+  const body = await bodyLesen(c);
+  const db = getDb();
+  const name = String(body.name ?? "").trim().slice(0, 255);
+  if (!name) return c.json({ fehler: "name fehlt." }, 400);
+  const preisNetto = Number(body.preisNetto ?? body.preis ?? NaN);
+  if (!Number.isFinite(preisNetto) || preisNetto < 0) {
+    return c.json({ fehler: "preisNetto fehlt oder ungültig (>= 0, Zahl)." }, 400);
+  }
+  const ustSatz = body.ustSatz !== undefined ? Number(body.ustSatz) : 19;
+  if (![0, 7, 19].includes(ustSatz)) return c.json({ fehler: "ustSatz muss 0, 7 oder 19 sein." }, 400);
+  // Dubletten-Schutz: gleicher Name (case-insensitiv)
+  const vorhanden = await db.query.products.findFirst({
+    where: (p, { eq: e }) => e(p.name, name),
+  });
+  const treffer = vorhanden && vorhanden.name.toLowerCase() === name.toLowerCase() ? vorhanden : null;
+  if (treffer) {
+    return c.json({
+      ok: false,
+      fehler: "Produkt mit diesem Namen existiert bereits.",
+      vorhanden: { id: treffer.id, aktiv: treffer.aktiv },
+      hinweis: treffer.aktiv ? "PUT /produkt/:id zum Ändern nutzen." : "Das Produkt ist deaktiviert — PUT /produkt/:id {aktiv: true} reaktiviert es.",
+    }, 409);
+  }
+  const [{ id }] = await db
+    .insert(products)
+    .values({
+      name,
+      beschreibung: body.beschreibung ? String(body.beschreibung) : null,
+      einheit: body.einheit ? String(body.einheit).slice(0, 30) : "Stück",
+      preisNetto: preisNetto.toFixed(2),
+      ekPreisNetto: body.ekPreisNetto !== undefined && body.ekPreisNetto !== null ? Number(body.ekPreisNetto).toFixed(2) : null,
+      ustSatz,
+      artikelnummer: body.artikelnummer ? String(body.artikelnummer).slice(0, 100) : null,
+      barcode: body.barcode ? String(body.barcode).slice(0, 100) : null,
+      importNamen: body.importNamen ? String(body.importNamen) : null,
+      kategorie: body.kategorie === "auslage" ? "auslage" : "leistung",
+      lagerAktiv: body.lagerAktiv === true,
+      mindestbestand: body.mindestbestand !== undefined && body.mindestbestand !== null ? String(Number(body.mindestbestand)) : null,
+      goaeZiffer: body.goaeZiffer ? String(body.goaeZiffer).slice(0, 20) : null,
+      goaeArt: body.goaeArt === "analog" || body.goaeArt === "§2" ? body.goaeArt : body.goaeArt === "direkt" ? "direkt" : null,
+    })
+    .$returningId();
+  await audit("produkt_angelegt", { id, name, preisNetto });
+  return c.json({ ok: true, id, name });
+});
+
+app.put("/produkt/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  const db = getDb();
+  const p = await db.query.products.findFirst({ where: eq(products.id, id) });
+  if (!p) return c.json({ fehler: "Produkt nicht gefunden." }, 404);
+  const setze: Record<string, unknown> = {};
+  for (const f of PRODUKT_FELDER) {
+    if (body[f] !== undefined) setze[f] = body[f] === null ? null : String(body[f]).slice(0, 500);
+  }
+  if (body.preisNetto !== undefined) {
+    const v = Number(body.preisNetto);
+    if (!Number.isFinite(v) || v < 0) return c.json({ fehler: "preisNetto ungültig." }, 400);
+    setze.preisNetto = v.toFixed(2);
+  }
+  if (body.ekPreisNetto !== undefined) {
+    setze.ekPreisNetto = body.ekPreisNetto === null ? null : Number(body.ekPreisNetto).toFixed(2);
+  }
+  if (body.ustSatz !== undefined) {
+    if (![0, 7, 19].includes(Number(body.ustSatz))) return c.json({ fehler: "ustSatz muss 0, 7 oder 19 sein." }, 400);
+    setze.ustSatz = Number(body.ustSatz);
+  }
+  if (body.aktiv !== undefined) setze.aktiv = Boolean(body.aktiv);
+  if (body.lagerAktiv !== undefined) setze.lagerAktiv = Boolean(body.lagerAktiv);
+  if (body.mindestbestand !== undefined) {
+    setze.mindestbestand = body.mindestbestand === null ? null : String(Number(body.mindestbestand));
+  }
+  if (body.kategorie !== undefined) {
+    if (!["leistung", "auslage"].includes(String(body.kategorie))) return c.json({ fehler: "kategorie muss leistung|auslage sein." }, 400);
+    setze.kategorie = String(body.kategorie);
+  }
+  if (body.goaeZiffer !== undefined) setze.goaeZiffer = body.goaeZiffer === null ? null : String(body.goaeZiffer).slice(0, 20);
+  if (body.goaeArt !== undefined) {
+    const g = body.goaeArt;
+    setze.goaeArt = g === null ? null : ["direkt", "analog", "§2"].includes(String(g)) ? String(g) : p.goaeArt;
+  }
+  if (Object.keys(setze).length === 0) {
+    return c.json({ fehler: `Keine Felder zum Ändern (${[...PRODUKT_FELDER, "preisNetto", "ekPreisNetto", "ustSatz", "aktiv", "lagerAktiv", "mindestbestand", "kategorie", "goaeZiffer", "goaeArt"].join(", ")}).` }, 400);
+  }
+  await db.update(products).set(setze).where(eq(products.id, id));
+  await audit("produkt_geaendert", { id, felder: Object.keys(setze) });
+  return c.json({ ok: true, id, geaendert: Object.keys(setze) });
+});
+
+app.delete("/produkt/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const db = getDb();
+  const p = await db.query.products.findFirst({ where: eq(products.id, id) });
+  if (!p) return c.json({ fehler: "Produkt nicht gefunden." }, 404);
+  // GoBD/Referenzen: Produkte, die an Plänen oder Lagerbewegungen hängen,
+  // werden nicht hart gelöscht — sondern deaktiviert. (Rechnungspositionen
+  // sind Text-Snapshots ohne FK — die bleiben bei Umbenennung/Löschung korrekt.)
+  const { lagerBewegungen } = await import("@db/schema");
+  const [aufPlan] = await db.select({ id: planEntries.id }).from(planEntries).where(eq(planEntries.leistungId, id)).limit(1);
+  const [aufBewegung] = await db.select({ id: lagerBewegungen.id }).from(lagerBewegungen).where(eq(lagerBewegungen.productId, id)).limit(1);
+  if (aufPlan || aufBewegung) {
+    await db.update(products).set({ aktiv: false }).where(eq(products.id, id));
+    await audit("produkt_deaktiviert", { id, name: p.name, grund: "Referenzen vorhanden (Beleg/Plan/Lager)" });
+    return c.json({
+      ok: true,
+      id,
+      deaktiviert: true,
+      geloescht: false,
+      hinweis: "Produkt hängt an Therapieplänen oder Lagerbewegungen — wurde DEAKTIVIERT statt gelöscht (GoBD). Aus Katalog-Listen verschwindet es.",
+    });
+  }
+  await db.delete(products).where(eq(products.id, id));
+  await audit("produkt_geloescht", { id, name: p.name });
+  return c.json({ ok: true, id, geloescht: true });
+});
+
 export default app;

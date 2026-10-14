@@ -1,5 +1,20 @@
 # Changelog — PraxiOS
 
+## [1.23.0] — 2026-10-14 — Agent-API: Produkte/Leistungen schreiben
+
+### Neu (alex' Auftrag: Stammdaten per Agent pflegen — kein Lagerbestand nötig)
+- **`POST /produkte`** — Produkt/Leistung anlegen (name, preisNetto, ustSatz
+  0/7/19, einheit, artikelnummer, barcode, ekPreisNetto, importNamen,
+  kategorie leistung|auslage, goaeZiffer/goaeArt, lagerAktiv, mindestbestand);
+  Dubletten-Schutz per Name (409 mit Reaktivierungs-Hinweis)
+- **`PUT /produkt/:id`** — jedes Feld gezielt änderbar
+- **`DELETE /produkt/:id`** — GoBD-sicher: hängt das Produkt an Therapieplan-
+  Einträgen oder Lagerbewegungen, wird es **deaktiviert statt gelöscht**
+  (bleibt in Dokumenten lesbar, verschwindet aus Katalog-Listen); nur
+  unreferenzierte Produkte werden hart gelöscht
+
+---
+
 ## [1.22.0] — 2026-10-14 — Agent-API: Abrechnungs-Workflow komplett (Bus #165)
 
 ### Neu (Axons Auftrag: Vetter-Abrechnung + Waren-Abgleich mit Kühnel)
