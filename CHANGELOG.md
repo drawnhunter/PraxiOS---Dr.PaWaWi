@@ -1,5 +1,17 @@
 # Changelog — PraxiOS
 
+## [1.24.1] — 2026-10-14 — Grundlage-Flag + Entwurf-Löschen (Bus #167 Nachtrag)
+
+### Nachtrag (Axons Test am selben Tag)
+- **`POST /rechnung-aus-plan` mit `grundlage`**: „stattgefunden" (Standard,
+  bisheriges Verhalten) oder „alle" — letzteres erzeugt Vorschau-Entwürfe
+  über die ganze Woche inkl. geplanter Tage; Antwort enthält das Flag
+- **`DELETE /rechnung/:id` + `DELETE /rechnungen/:id`**: Rechnungsentwurf
+  löschen (inkl. Positionen, audit). Nur Entwürfe — finalisierte Rechnungen
+  sind GoBD-unantastbar (409 mit Hinweis auf die Storno-Route)
+
+---
+
 ## [1.24.0] — 2026-10-14 — Agent-API: Rechnung aus Plan + Aliase + JSON-Fehler (Bus #167)
 
 ### Neu (Axons Nachtrag — Patientenabrechnung war geblockt)

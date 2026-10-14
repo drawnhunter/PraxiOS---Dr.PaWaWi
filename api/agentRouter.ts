@@ -2585,12 +2585,15 @@ app.post("/rechnung-aus-plan", async (c) => {
   });
   if (!plan || plan.geloeschtAm) return c.json({ fehler: "Therapieplan nicht gefunden (oder gelöscht)." }, 404);
 
+  // Grundlage wählbar (Bus #167 Nachtrag): "stattgefunden" (Standard) oder
+  // "alle" — für Vorschau-Entwürfe über die ganze Woche inkl. geplanter Tage
+  const grundlage = body.grundlage === "alle" ? "alle" : "stattgefunden";
   const eintraege = await db.query.planEntries.findMany({
     where: and(eq(planEntries.planId, planId), eq(planEntries.status, "stattgefunden")),
   });
-  const nutzbar = eintraege.length > 0
-    ? eintraege
-    : await db.query.planEntries.findMany({ where: eq(planEntries.planId, planId) });
+  const nutzbar = grundlage === "alle" || eintraege.length === 0
+    ? await db.query.planEntries.findMany({ where: eq(planEntries.planId, planId) })
+    : eintraege;
   if (nutzbar.length === 0) return c.json({ fehler: "Der Plan hat keine Einträge." }, 400);
 
   const katalog = new Map((await db.select().from(products)).map((p) => [p.id, p]));
@@ -2672,9 +2675,33 @@ app.post("/rechnung-aus-plan", async (c) => {
     ok: true,
     rechnung: { id, status: "entwurf", brutto: centToDecimal(totals.bruttoCent) },
     positionen: positionen.map((p) => ({ bezeichnung: p.bezeichnung, menge: Number(p.menge), einzelpreis: Number(p.einzelpreis) })),
-    hinweis: "Entwurf angelegt (Grundlage: Plan-Einträge, gruppiert nach Leistung). Ein Mensch prüft und finalisiert — GoBD.",
+    grundlage,
+    hinweis: `Entwurf angelegt (Grundlage: ${grundlage === "alle" ? "alle Einträge inkl. geplanter Tage" : "stattgefundene Einträge"}). Ein Mensch prüft und finalisiert — GoBD.`,
   });
 });
+
+// ── Rechnungsentwurf löschen (1.24.1, Bus #167 Nachtrag) ──────────────────
+// NUR Entwürfe — finalisierte Rechnungen sind GoBD-unantastbar (dort gilt
+// Storno per Gutschrift, siehe POST /rechnung/:id/stornieren).
+async function rechnungEntwurfLoeschen(c: Context, id: number) {
+  const db = getDb();
+  const r = await db.query.invoices.findFirst({
+    where: eq(invoices.id, id),
+    with: { items: true },
+  });
+  if (!r) return c.json({ fehler: "Rechnung nicht gefunden." }, 404);
+  if (r.status !== "entwurf") {
+    return c.json({
+      fehler: `Nur Entwürfe sind löschbar (Status: ${r.status}). Finalisierte Rechnungen sind GoBD-unantastbar — Storno per POST /rechnung/:id/stornieren.`,
+    }, 409);
+  }
+  await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, id));
+  await db.delete(invoices).where(eq(invoices.id, id));
+  await audit("rechnung_entwurf_geloescht", { id, nummer: r.nummer, positionen: r.items.length });
+  return c.json({ ok: true, id, geloescht: true, positionen: r.items.length });
+}
+app.delete("/rechnung/:id", async (c) => rechnungEntwurfLoeschen(c, Number(c.req.param("id"))));
+app.delete("/rechnungen/:id", async (c) => rechnungEntwurfLoeschen(c, Number(c.req.param("id"))));
 
 // Unbekannte Pfade: JSON statt leerem Body (Bus #167 — Agenten raten sonst
 // das Schema). Immer zuletzt registrieren.
