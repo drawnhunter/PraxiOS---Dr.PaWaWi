@@ -843,6 +843,13 @@ app.post("/patient", async (c) => {
 const DOK_TYPEN: Record<string, string> = {
   pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg",
   png: "image/png", webp: "image/webp", gif: "image/gif", heic: "image/heic",
+  // 1.24.2 (Bus #178): Office-Formate (HKP/Drive-Migration) — OCR greift
+  // hier nicht (nur pdf/bild), Datei wird trotzdem sauber abgelegt.
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  doc: "application/msword",
+  xls: "application/vnd.ms-excel",
+  csv: "text/csv",
 };
 const DOK_KATEGORIEN = ["befund", "arztbrief", "rezept", "einverstaendnis", "anamnesebogen", "sonstiges"] as const;
 // Agenten-Begriffe → Katalog-Enum (labor/extern/therapieplan sind Praxis-Sprech)
@@ -2499,7 +2506,7 @@ const produktAnlegenHandler = async (c: Context) => {
 app.post("/produkte", produktAnlegenHandler);
 app.post("/leistungen", produktAnlegenHandler);
 
-app.put("/produkt/:id", async (c) => {
+const produktAendernHandler = async (c: Context) => {
   const id = Number(c.req.param("id"));
   const body = await bodyLesen(c);
   const db = getDb();
@@ -2541,9 +2548,14 @@ app.put("/produkt/:id", async (c) => {
   await db.update(products).set(setze).where(eq(products.id, id));
   await audit("produkt_geaendert", { id, felder: Object.keys(setze) });
   return c.json({ ok: true, id, geaendert: Object.keys(setze) });
-});
+};
+// Doppel-Registrierung (kein Redirect — Fix 1.23.2): PUT + PATCH, beide Pfade
+app.put("/produkt/:id", produktAendernHandler);
+app.patch("/produkt/:id", produktAendernHandler);
+app.put("/leistungen/:id", produktAendernHandler);
+app.patch("/leistungen/:id", produktAendernHandler);
 
-app.delete("/produkt/:id", async (c) => {
+const produktLoeschenHandler = async (c: Context) => {
   const id = Number(c.req.param("id"));
   const db = getDb();
   const p = await db.query.products.findFirst({ where: eq(products.id, id) });
@@ -2568,7 +2580,9 @@ app.delete("/produkt/:id", async (c) => {
   await db.delete(products).where(eq(products.id, id));
   await audit("produkt_geloescht", { id, name: p.name });
   return c.json({ ok: true, id, geloescht: true });
-});
+};
+app.delete("/produkt/:id", produktLoeschenHandler);
+app.delete("/leistungen/:id", produktLoeschenHandler);
 
 // ── Rechnungsentwurf aus Therapieplan (1.24.0, Bus #167) ──────────────────
 // Positionen = Plan-Einträge, gruppiert nach Leistung (Name+Preis aus dem

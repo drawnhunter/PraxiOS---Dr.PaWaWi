@@ -31,6 +31,12 @@ const ERLAUBTE_DATEITYPEN: Record<string, string> = {
   webp: "image/webp",
   gif: "image/gif",
   heic: "image/heic",
+  // 1.24.2 (Bus #178): Office-Formate (Kostenpläne/HKP)
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  doc: "application/msword",
+  xls: "application/vnd.ms-excel",
+  csv: "text/csv",
 };
 
 app.post("/api/dokumente", async (c) => {

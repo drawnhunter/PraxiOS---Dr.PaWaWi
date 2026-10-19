@@ -1,5 +1,19 @@
 # Changelog — PraxiOS
 
+## [1.24.2] — 2026-10-19 — Leistungen PATCH/DELETE-Aliase + Office-Upload (Bus #171/#178)
+
+### Fixes/Erweiterungen (Bus)
+- **Katalog-Pflege komplett** (Bus #171): `PATCH`/`PUT` jetzt auf **beiden**
+  Pfaden (`/produkt/:id` UND `/leistungen/:id`), `DELETE` ebenso beidseitig —
+  Axons Umlaut-Dubletten lassen sich damit per API bereinigen (Rename per
+  PATCH, Duplikat per DELETE — GoBD: referenzierte werden deaktiviert)
+- **Office-Formate im Upload** (Bus #178): docx/xlsx/doc/xls/csv jetzt in
+  der Akte-Ablage (UI) UND im Agent-Batch-Upload — HKP-Word-Ausgabe und
+  Drive-Migration laufen nicht mehr auf die Fehlerliste (OCR greift dort
+  bewusst nicht, Dateien landen sauber)
+
+---
+
 ## [1.24.1] — 2026-10-14 — Grundlage-Flag + Entwurf-Löschen (Bus #167 Nachtrag)
 
 ### Nachtrag (Axons Test am selben Tag)

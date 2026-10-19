@@ -45,7 +45,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ERLAUBTE_ENDUNGEN = ["pdf", "png", "jpg", "jpeg", "webp", "gif", "heic"];
+// 1.24.2 (Bus #178): auch Office-Formate (Kostenpläne/HKP als docx/xlsx)
+const ERLAUBTE_ENDUNGEN = ["pdf", "png", "jpg", "jpeg", "webp", "gif", "heic", "docx", "xlsx", "doc", "xls", "csv"];
 
 function groesseFmt(bytes: number | null): string {
   if (bytes == null) return "–";
