@@ -148,6 +148,64 @@ export const rezepte = mysqlTable(
 );
 export type Rezept = typeof rezepte.$inferSelect;
 
+// ── Kostenpläne / Heil- und Kostenpläne (HKP, 1.25.0) ─────────────────────
+// Kein GoBD-Beleg (kein Nummernkreis) — Status: entwurf ↔ finalisiert.
+// Inhalt: Diagnosen (ICD) + pathophysiologische Begründung + Positionen in
+// Gruppen (je mit optionaler GOÄ-Einordnung). Ausgabe PDF + DOCX.
+export const kostenplaene = mysqlTable("kostenplaene", {
+  id: serial("id").primaryKey(),
+  patientId: bigint("patient_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  titel: varchar("titel", { length: 255 }).notNull().default("Heil- und Kostenplan"),
+  zeitraumVon: date("zeitraum_von", { mode: "string" }),
+  zeitraumBis: date("zeitraum_bis", { mode: "string" }),
+  /** JSON: [{code, text, kurzbegruendung?}] — ICD-10-Diagnosen */
+  diagnosenJson: text("diagnosen_json"),
+  /** Pathophysiologische Begründung (Freitext) */
+  begruendung: text("begruendung"),
+  /** KV-/Klärungs-Textbaustein (Freitext, unten auf dem Dokument) */
+  klartextNote: text("klartext_note"),
+  nummer: varchar("nummer", { length: 30 }), // bei Finalisierung: HKP-<id>-<JJJJ>
+  status: mysqlEnum("status", ["entwurf", "finalisiert"]).notNull().default("entwurf"),
+  finalizedAt: timestamp("finalized_at"),
+  documentId: bigint("document_id", { mode: "number", unsigned: true }).references(
+    () => documents.id,
+    { onDelete: "set null" },
+  ),
+  createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type Kostenplan = typeof kostenplaene.$inferSelect;
+
+export const kostenplanPositionen = mysqlTable("kostenplan_positionen", {
+  id: serial("id").primaryKey(),
+  planId: bigint("plan_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => kostenplaene.id, { onDelete: "cascade" }),
+  position: int("position").notNull(),
+  /** Gruppe der Kostenaufstellung (z. B. „Therapie KW 41", „Infusionen") */
+  gruppe: varchar("gruppe", { length: 120 }),
+  leistungId: bigint("leistung_id", { mode: "number", unsigned: true }).references(
+    () => products.id,
+    { onDelete: "set null" },
+  ),
+  bezeichnung: varchar("bezeichnung", { length: 500 }).notNull(),
+  beschreibung: text("beschreibung"),
+  menge: decimal("menge", { precision: 10, scale: 3 }).notNull().default("1"),
+  einheit: varchar("einheit", { length: 30 }).notNull().default("Stück"),
+  einzelpreis: decimal("einzelpreis", { precision: 12, scale: 2 }).notNull(),
+  ustSatz: int("ust_satz").notNull().default(0),
+  /** GOÄ-Einordnung je Position (optional, z. B. „analog GOÄ 755") */
+  goaeText: varchar("goae_text", { length: 120 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type KostenplanPosition = typeof kostenplanPositionen.$inferSelect;
+
 // ── Behandlungsprotokolle (Block-Baukasten + Vorlagen) ─────────────────────
 // Protokolle sind 48 h nach Anlage editierbar und werden danach automatisch
 // gesperrt (medizinische Dokumentation); Nachträge bleiben append-only möglich.

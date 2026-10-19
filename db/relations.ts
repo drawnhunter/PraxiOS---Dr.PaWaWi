@@ -249,6 +249,20 @@ export const protokollVorlagenRelations = relations(protokollVorlagen, ({ one })
 // ── PraxiOS: Patienten-Portal ───────────────────────────────────────────────
 import { patientDatenAntraege, patientPortalLinks, patientPortalSessions, terminAnfragen } from "./schema";
 import { onlineTermine, onlineTerminGaeste } from "./schema";
+import { kostenplaene, kostenplanPositionen } from "./schema";
+
+// Kostenpläne / HKP (1.25.0)
+export const kostenplaeneRelations = relations(kostenplaene, ({ one, many }) => ({
+  patient: one(customers, { fields: [kostenplaene.patientId], references: [customers.id] }),
+  positionen: many(kostenplanPositionen),
+  dokument: one(documents, { fields: [kostenplaene.documentId], references: [documents.id] }),
+  ersteller: one(users, { fields: [kostenplaene.createdBy], references: [users.id] }),
+}));
+
+export const kostenplanPositionenRelations = relations(kostenplanPositionen, ({ one }) => ({
+  plan: one(kostenplaene, { fields: [kostenplanPositionen.planId], references: [kostenplaene.id] }),
+  leistung: one(products, { fields: [kostenplanPositionen.leistungId], references: [products.id] }),
+}));
 
 export const patientPortalLinksRelations = relations(patientPortalLinks, ({ one }) => ({
   patient: one(customers, {

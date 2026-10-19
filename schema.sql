@@ -987,6 +987,49 @@ CREATE TABLE `rezepte` (
   CONSTRAINT `rezepte_document_fk` FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE SET NULL,
   CONSTRAINT `rezepte_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `kostenplaene` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint unsigned NOT NULL,
+  `titel` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Heil- und Kostenplan',
+  `zeitraum_von` date DEFAULT NULL,
+  `zeitraum_bis` date DEFAULT NULL,
+  `diagnosen_json` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `begruendung` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `klartext_note` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `nummer` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('entwurf','finalisiert') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'entwurf',
+  `finalized_at` timestamp NULL DEFAULT NULL,
+  `document_id` bigint unsigned DEFAULT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `kp_patient_idx` (`patient_id`),
+  CONSTRAINT `kp_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `kp_dokument_fk` FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `kp_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `kostenplan_positionen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `plan_id` bigint unsigned NOT NULL,
+  `position` int NOT NULL,
+  `gruppe` varchar(120) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `leistung_id` bigint unsigned DEFAULT NULL,
+  `bezeichnung` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `beschreibung` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `menge` decimal(10,3) NOT NULL DEFAULT '1',
+  `einheit` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Stück',
+  `einzelpreis` decimal(12,2) NOT NULL,
+  `ust_satz` int NOT NULL DEFAULT '0',
+  `goae_text` varchar(120) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `kpp_plan_idx` (`plan_id`),
+  CONSTRAINT `kpp_plan_fk` FOREIGN KEY (`plan_id`) REFERENCES `kostenplaene` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `kpp_leistung_fk` FOREIGN KEY (`leistung_id`) REFERENCES `products` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE `protokoll_vorlagen` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `titel` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,

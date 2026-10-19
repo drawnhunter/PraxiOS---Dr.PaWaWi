@@ -205,6 +205,52 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
   },
+  // Kostenpläne / HKP (1.25.0)
+  {
+    tabelle: "kostenplaene",
+    ddl: `CREATE TABLE IF NOT EXISTS kostenplaene (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      patient_id BIGINT UNSIGNED NOT NULL,
+      titel VARCHAR(255) NOT NULL DEFAULT 'Heil- und Kostenplan',
+      zeitraum_von DATE NULL,
+      zeitraum_bis DATE NULL,
+      diagnosen_json TEXT NULL,
+      begruendung TEXT NULL,
+      klartext_note TEXT NULL,
+      nummer VARCHAR(30) NULL,
+      status ENUM('entwurf','finalisiert') NOT NULL DEFAULT 'entwurf',
+      finalized_at TIMESTAMP NULL,
+      document_id BIGINT UNSIGNED NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX kp_patient_idx (patient_id),
+      CONSTRAINT kp_patient_fk FOREIGN KEY (patient_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT kp_dokument_fk FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL,
+      CONSTRAINT kp_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    tabelle: "kostenplan_positionen",
+    ddl: `CREATE TABLE IF NOT EXISTS kostenplan_positionen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      plan_id BIGINT UNSIGNED NOT NULL,
+      position INT NOT NULL,
+      gruppe VARCHAR(120) NULL,
+      leistung_id BIGINT UNSIGNED NULL,
+      bezeichnung VARCHAR(500) NOT NULL,
+      beschreibung TEXT NULL,
+      menge DECIMAL(10,3) NOT NULL DEFAULT '1',
+      einheit VARCHAR(30) NOT NULL DEFAULT 'Stück',
+      einzelpreis DECIMAL(12,2) NOT NULL,
+      ust_satz INT NOT NULL DEFAULT 0,
+      goae_text VARCHAR(120) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX kpp_plan_idx (plan_id),
+      CONSTRAINT kpp_plan_fk FOREIGN KEY (plan_id) REFERENCES kostenplaene(id) ON DELETE CASCADE,
+      CONSTRAINT kpp_leistung_fk FOREIGN KEY (leistung_id) REFERENCES products(id) ON DELETE SET NULL
+    )`,
+  },
   // Mail-Pro (1.20.0): Textbausteine + Auto-Reply-Log
   {
     tabelle: "mail_bausteine",

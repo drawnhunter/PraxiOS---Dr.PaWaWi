@@ -1,5 +1,30 @@
 # Changelog — PraxiOS
 
+## [1.25.0] — 2026-10-19 — Kostenpläne (HKP) als eigener Bereich (Bus #178)
+
+### Neu (alex' Auftrag: HKP direkt in der App)
+- **Eigener Menüpunkt „Kostenpläne"** (Recht `abrechnung`): Liste + Editor
+  (Positionen in Gruppen, Leistungskatalog + Freitext, ICD-Diagnosen mit
+  Kurzbegründung, pathophysiologische Begründung, KV-Note)
+- **Eigenes visuelles Format** (nicht die Rechnung): Bernstein-Akzent,
+  Diagnose-Sektion, Begründung, gruppierte Kostenaufstellung mit
+  Zwischensummen, Summen netto/USt/brutto, Unterschriftenfelder
+  (Heilberufler + Patient), Entwurfs-Wasserzeichen
+- **Ausgabe PDF + DOCX** (docx-Paket als neue Dependency); finalisieren →
+  HKP-Nummer + PDF landet automatisch als Dokument in der Akte;
+  **Vorlage duplizierbar**, Entwürfe editierbar/löschbar, finalisierte
+  unveränderbar
+- **Agent-Schiene (Bus #178 Ergänzung)**: `GET /kostenplaene`,
+  `GET /kostenplan/:id`, `POST /kostenplan`, `PUT /kostenplan/:id` (nur
+  Entwurf), `POST /kostenplan/:id/finalisieren` + `/duplizieren`,
+  `DELETE /kostenplan/:id` (nur Entwurf), `GET /kostenplan/:id/pdf|docx` —
+  via tRPC-Caller (keine duplizierte Geschäftslogik), alles auditiert
+
+### Migration (automatisch beim Start)
+- Neue Tabellen: `kostenplaene`, `kostenplan_positionen`
+
+---
+
 ## [1.24.2] — 2026-10-19 — Leistungen PATCH/DELETE-Aliase + Office-Upload (Bus #171/#178)
 
 ### Fixes/Erweiterungen (Bus)

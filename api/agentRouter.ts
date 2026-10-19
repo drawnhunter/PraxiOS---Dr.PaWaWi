@@ -2717,6 +2717,173 @@ async function rechnungEntwurfLoeschen(c: Context, id: number) {
 app.delete("/rechnung/:id", async (c) => rechnungEntwurfLoeschen(c, Number(c.req.param("id"))));
 app.delete("/rechnungen/:id", async (c) => rechnungEntwurfLoeschen(c, Number(c.req.param("id"))));
 
+// ── Kostenpläne / HKP (1.25.0, Bus #178) — Agent-Schiene ──────────────────
+// CRUD + PDF/DOCX-Erzeugung + Ablage in der Akte. Logik via tRPC-Caller —
+// keine duplizierte Geschäftsregeln.
+app.get("/kostenplaene", async (c) => {
+  const patientId = c.req.query("patientId") ? Number(c.req.query("patientId")) : null;
+  const caller = await rechnungCaller();
+  const liste = await caller.kostenplaene.liste(patientId ? { patientId } : undefined);
+  return c.json({
+    anzahl: liste.length,
+    kostenplaene: liste.map((p) => ({
+      id: p.id, titel: p.titel, nummer: p.nummer, status: p.status,
+      patientId: p.patientId, patientName: p.patient?.name ?? null,
+      zeitraumVon: p.zeitraumVon, zeitraumBis: p.zeitraumBis,
+      erstelltAm: p.createdAt, finalisiertAm: p.finalizedAt, dokumentId: p.documentId,
+    })),
+  });
+});
+
+app.get("/kostenplan/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    const p = await caller.kostenplaene.byId({ id });
+    return c.json({
+      id: p.id, titel: p.titel, nummer: p.nummer, status: p.status,
+      patient: { id: p.patientId, name: p.patient?.name },
+      zeitraum: [p.zeitraumVon, p.zeitraumBis].filter(Boolean).join("–") || null,
+      diagnosen: p.diagnosenJson ? JSON.parse(p.diagnosenJson) : [],
+      begruendung: p.begruendung, klartextNote: p.klartextNote,
+      positionen: p.positionen.map((x) => ({
+        id: x.id, position: x.position, gruppe: x.gruppe, leistungId: x.leistungId,
+        bezeichnung: x.bezeichnung, beschreibung: x.beschreibung,
+        menge: Number(x.menge), einheit: x.einheit, einzelpreis: Number(x.einzelpreis),
+        ustSatz: x.ustSatz, goaeText: x.goaeText,
+      })),
+      dokumentId: p.documentId,
+    });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 404);
+  }
+});
+
+app.post("/kostenplan", async (c) => {
+  const body = await bodyLesen(c);
+  try {
+    // Patient per ID oder fuzzy-Name
+    let patientId = body.patientId ? Number(body.patientId) : null;
+    if (!patientId && body.patient) {
+      const alle = await getDb().select().from(customers);
+      const t = besterTreffer(alle, String(body.patient), (k) => k.name)?.treffer;
+      patientId = t?.id ?? null;
+    }
+    if (!patientId) return c.json({ fehler: "patientId oder patient (Name) fehlt." }, 400);
+    const positionen = Array.isArray(body.positionen) ? body.positionen : [];
+    if (positionen.length === 0) return c.json({ fehler: "positionen fehlt: [{bezeichnung, einzelpreis, menge?, einheit?, ustSatz?, gruppe?, goaeText?}]" }, 400);
+    const caller = await rechnungCaller();
+    const r = await caller.kostenplaene.erstellen({
+      patientId,
+      titel: body.titel ? String(body.titel).slice(0, 255) : "Heil- und Kostenplan",
+      zeitraumVon: body.zeitraumVon ? String(body.zeitraumVon) : null,
+      zeitraumBis: body.zeitraumBis ? String(body.zeitraumBis) : null,
+      diagnosen: Array.isArray(body.diagnosen) ? body.diagnosen : undefined,
+      begruendung: body.begruendung ? String(body.begruendung) : undefined,
+      klartextNote: body.klartextNote ? String(body.klartextNote) : undefined,
+      positionen: positionen.map((p: Record<string, unknown>) => ({
+        gruppe: p.gruppe ? String(p.gruppe) : undefined,
+        leistungId: p.leistungId ? Number(p.leistungId) : null,
+        bezeichnung: String(p.bezeichnung ?? ""),
+        beschreibung: p.beschreibung ? String(p.beschreibung) : undefined,
+        menge: String(p.menge ?? "1"),
+        einheit: p.einheit ? String(p.einheit) : "Stück",
+        einzelpreis: String(p.einzelpreis ?? "0"),
+        ustSatz: p.ustSatz !== undefined ? Number(p.ustSatz) : 0,
+        goaeText: p.goaeText ? String(p.goaeText) : undefined,
+      })),
+    });
+    await audit("kostenplan_erstellt", { id: r.id, patientId, positionen: positionen.length });
+    return c.json({ ok: true, id: r.id, hinweis: "Entwurf angelegt — finalisieren per POST /kostenplan/:id/finalisieren (PDF liegt dann in der Akte)." });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+app.put("/kostenplan/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  try {
+    const caller = await rechnungCaller();
+    await caller.kostenplaene.aktualisieren({
+      id,
+      ...(body.titel !== undefined ? { titel: String(body.titel) } : {}),
+      ...(body.zeitraumVon !== undefined ? { zeitraumVon: body.zeitraumVon ? String(body.zeitraumVon) : null } : {}),
+      ...(body.zeitraumBis !== undefined ? { zeitraumBis: body.zeitraumBis ? String(body.zeitraumBis) : null } : {}),
+      ...(body.diagnosen !== undefined
+        ? { diagnosen: Array.isArray(body.diagnosen) ? body.diagnosen : undefined }
+        : {}),
+      ...(body.begruendung !== undefined ? { begruendung: String(body.begruendung) } : {}),
+      ...(body.klartextNote !== undefined ? { klartextNote: String(body.klartextNote) } : {}),
+      ...(Array.isArray(body.positionen) ? { positionen: body.positionen } : {}),
+    });
+    await audit("kostenplan_geaendert", { id });
+    return c.json({ ok: true, id });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+app.post("/kostenplan/:id/finalisieren", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.kostenplaene.finalisieren({ id });
+    await audit("kostenplan_finalisiert", { id, nummer: r.nummer });
+    return c.json({ ...r, hinweis: "Finalisiert — PDF liegt in der Akte (dokumentId)." });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+app.post("/kostenplan/:id/duplizieren", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.kostenplaene.duplizieren({ id });
+    await audit("kostenplan_dupliziert", { von: id, neu: r.id });
+    return c.json({ ok: true, id: r.id, hinweis: "Duplikat als Entwurf angelegt — bearbeiten per PUT /kostenplan/:id." });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+app.delete("/kostenplan/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    await caller.kostenplaene.loeschen({ id });
+    await audit("kostenplan_geloescht", { id });
+    return c.json({ ok: true, id, geloescht: true });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+app.get("/kostenplan/:id/pdf", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.kostenplaene.pdf({ id });
+    await audit("kostenplan_pdf", { id });
+    return c.json({ ok: true, ...r });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 404);
+  }
+});
+
+app.get("/kostenplan/:id/docx", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.kostenplaene.docx({ id });
+    await audit("kostenplan_docx", { id });
+    return c.json({ ok: true, ...r, mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 404);
+  }
+});
+
 // Unbekannte Pfade: JSON statt leerem Body (Bus #167 — Agenten raten sonst
 // das Schema). Immer zuletzt registrieren.
 app.notFound((c) =>

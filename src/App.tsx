@@ -4,6 +4,7 @@ import TherapyImport from "@/pages/TherapyImport";
 import Dashboard from "@/pages/Dashboard";
 import Kalender from "@/pages/Kalender";
 import OnlineTermine from "@/pages/OnlineTermine";
+import Kostenplaene from "@/pages/Kostenplaene";
 import OnlineGast from "@/pages/OnlineGast";
 import Patients from "@/pages/Patients";
 import PatientDetail from "@/pages/PatientDetail";
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/plaene/:id" element={<PlanDetail />} />
         <Route path="/anamnese" element={<Anamnese />} />
         <Route path="/rezepte" element={<Rezepte />} />
+        <Route path="/kostenplaene" element={<Kostenplaene />} />
         <Route path="/protokolle" element={<Protokolle />} />
         <Route path="/protokolle/vorlagen/neu" element={<VorlageDetail />} />
         <Route path="/protokolle/vorlagen/:id" element={<VorlageDetail />} />
