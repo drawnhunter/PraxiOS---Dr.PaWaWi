@@ -150,12 +150,33 @@ export const kostenplanRouter = createRouter({
   liste: rechtQuery("abrechnung")
     .input(z.object({ patientId: z.number().int().optional() }).optional())
     .query(async ({ input }) => {
-      return getDb().query.kostenplaene.findMany({
+      const db = getDb();
+      const plaene = await db.query.kostenplaene.findMany({
         where: input?.patientId ? eq(kostenplaene.patientId, input.patientId) : undefined,
         orderBy: [desc(kostenplaene.createdAt)],
         with: { patient: { columns: { id: true, name: true } } },
         limit: 100,
       });
+      // Register-Anreicherung (1.26.0): Positionsanzahl + Brutto-Summe je Plan
+      const ids = plaene.map((p) => p.id);
+      const positionen = ids.length
+        ? await db.query.kostenplanPositionen.findMany({
+            where: (t, { inArray }) => inArray(t.planId, ids),
+          })
+        : [];
+      const agg = new Map<number, { anzahl: number; brutto: number }>();
+      for (const pos of positionen) {
+        const a = agg.get(pos.planId) ?? { anzahl: 0, brutto: 0 };
+        const netto = Number(pos.menge) * Number(pos.einzelpreis);
+        a.anzahl += 1;
+        a.brutto += netto * (1 + pos.ustSatz / 100);
+        agg.set(pos.planId, a);
+      }
+      return plaene.map((p) => ({
+        ...p,
+        positionenAnzahl: agg.get(p.id)?.anzahl ?? 0,
+        summeBrutto: (agg.get(p.id)?.brutto ?? 0).toFixed(2),
+      }));
     }),
 
   byId: rechtQuery("abrechnung")

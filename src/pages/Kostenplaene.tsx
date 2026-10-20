@@ -1,6 +1,7 @@
-// ── PraxiOS: Kostenpläne / HKP — eigener Bereich (1.25.0) ──────────────────
-// Liste + Editor (Positionen in Gruppen, Katalog + Freitext, ICD-Diagnosen,
-// Begründung, KV-Note). PDF/DOCX-Ausgabe, finalisieren, duplizieren, löschen.
+// ── PraxiOS: Kostenpläne / HKP — Register (1.26.0) ─────────────────────────
+// Tabelle + Suche + Statusfilter; Zeile anklicken → Detail-Paneel mit allen
+// Sektionen + Aktionen (analog Rechnungen-Register). Erstellen/Bearbeiten
+// bleibt im Dialog.
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { datum } from "@/lib/format";
@@ -10,6 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +43,7 @@ import {
   Lock,
   Pencil,
   Plus,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -70,9 +79,16 @@ const leerForm: PlanForm = {
   positionen: [{ ...leerePosition }],
 };
 
+const geld = (v: number | string) =>
+  new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v));
+
 export default function Kostenplaene() {
   const utils = trpc.useUtils();
   const liste = trpc.kostenplaene.liste.useQuery();
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("alle");
+  const [gewaehlt, setGewaehlt] = useState<number | null>(null);
+  const detail = trpc.kostenplaene.byId.useQuery({ id: gewaehlt! }, { enabled: gewaehlt !== null });
   const [dialog, setDialog] = useState<"neu" | number | null>(null);
   const [form, setForm] = useState<PlanForm>(leerForm);
   const [suche, setSuche] = useState("");
@@ -90,7 +106,10 @@ export default function Kostenplaene() {
     { enabled: icdSucheText.trim().length >= 2 },
   );
 
-  const neuLaden = () => utils.kostenplaene.liste.invalidate();
+  const neuLaden = () => {
+    utils.kostenplaene.liste.invalidate();
+    if (gewaehlt) utils.kostenplaene.byId.invalidate({ id: gewaehlt });
+  };
   const erstellen = trpc.kostenplaene.erstellen.useMutation({
     onSuccess: () => { setDialog(null); setForm(leerForm); setFehler(null); neuLaden(); },
     onError: (e) => setFehler(e.message),
@@ -101,7 +120,20 @@ export default function Kostenplaene() {
   });
   const finalisieren = trpc.kostenplaene.finalisieren.useMutation({ onSuccess: neuLaden });
   const duplizieren = trpc.kostenplaene.duplizieren.useMutation({ onSuccess: neuLaden });
-  const loeschen = trpc.kostenplaene.loeschen.useMutation({ onSuccess: () => { setLoescheId(null); neuLaden(); } });
+  const loeschen = trpc.kostenplaene.loeschen.useMutation({
+    onSuccess: () => { setLoescheId(null); setGewaehlt(null); neuLaden(); },
+  });
+
+  const gefiltert = (liste.data ?? []).filter((p) => {
+    if (statusFilter !== "alle" && p.status !== statusFilter) return false;
+    if (!q.trim()) return true;
+    const t = q.trim().toLowerCase();
+    return (
+      p.titel.toLowerCase().includes(t) ||
+      (p.nummer ?? "").toLowerCase().includes(t) ||
+      (p.patient?.name ?? "").toLowerCase().includes(t)
+    );
+  });
 
   const setPos = (i: number, feld: keyof PosZeile, wert: string | number | null) =>
     setForm({ ...form, positionen: form.positionen.map((p, j) => (j === i ? { ...p, [feld]: wert } : p)) });
@@ -192,83 +224,211 @@ export default function Kostenplaene() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
             <FileText className="h-5 w-5 text-amber-700" /> Kostenpläne (HKP)
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Heil- und Kostenpläne erstellen — mit Diagnosen, Begründung und gruppierter
-            Kostenaufstellung. Ausgabe als PDF oder Word; finalisierte Pläne landen in der Akte.
+            Heil- und Kostenpläne — Diagnosen, Begründung, gruppierte Kostenaufstellung.
+            Ausgabe PDF/Word; finalisierte Pläne liegen in der Akte.
           </p>
         </div>
         <Button onClick={() => { setForm(leerForm); setFehler(null); setDialog("neu"); }}>
-          <Plus className="mr-1 h-4 w-4" /> Kostenplan erstellen
+          <Plus className="mr-1.5 h-4 w-4" /> Kostenplan erstellen
         </Button>
       </div>
 
-      {(liste.data ?? []).length === 0 && !liste.isLoading && (
-        <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-400">
-          Noch keine Kostenpläne. Der erste fängt alles an.
+      {/* Register-Leiste: Suche + Filter */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative w-64">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Nummer / Titel / Patient suchen …"
+            className="pl-8"
+          />
         </div>
-      )}
-
-      <div className="space-y-2">
-        {(liste.data ?? []).map((p) => (
-          <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{p.titel}</span>
-                <Badge variant="outline" className={p.status === "finalisiert" ? "border-amber-300 text-amber-800" : ""}>
-                  {p.status === "finalisiert" ? `final ${p.nummer}` : "Entwurf"}
-                </Badge>
-              </div>
-              <div className="mt-0.5 text-xs text-neutral-400">
-                {p.patient?.name ?? "—"} · erstellt {new Date(p.createdAt).toLocaleDateString("de-DE")}
-                {p.zeitraumVon && ` · ${datum(p.zeitraumVon)}${p.zeitraumBis ? `–${datum(p.zeitraumBis)}` : ""}`}
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => herunterladen(p.id, "pdf")}>
-                <FileDown className="mr-1 h-4 w-4" /> PDF
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => herunterladen(p.id, "docx")}>
-                <FileText className="mr-1 h-4 w-4" /> Word
-              </Button>
-              {p.status === "entwurf" ? (
-                <>
-                  <Button variant="ghost" size="sm" onClick={() => ladenZumBearbeiten(p.id)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost" size="sm" className="text-amber-800"
-                    onClick={() => window.confirm("Kostenplan finalisieren? Er wird unveränderbar, bekommt eine HKP-Nummer und liegt als PDF in der Akte.") && finalisieren.mutate({ id: p.id })}
-                  >
-                    <Lock className="mr-1 h-4 w-4" /> Finalisieren
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-red-600" onClick={() => setLoescheId(p.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </>
-              ) : (
-                <Button variant="ghost" size="sm" onClick={() => duplizieren.mutate({ id: p.id })} title="Als Vorlage duplizieren">
-                  <Copy className="mr-1 h-4 w-4" /> Duplizieren
-                </Button>
-              )}
-            </div>
-          </div>
-        ))}
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="alle">Alle Status</SelectItem>
+            <SelectItem value="entwurf">Entwurf</SelectItem>
+            <SelectItem value="finalisiert">Finalisiert</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* ── Editor-Dialog ── */}
+      <div className="grid gap-4 lg:grid-cols-[1fr_minmax(0,1.1fr)]">
+        {/* ── Tabelle ── */}
+        <div className="rounded-xl border border-neutral-200 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-100 text-left text-xs text-neutral-400">
+                <th className="px-3 py-2.5 font-medium">Nummer</th>
+                <th className="px-3 py-2.5 font-medium">Titel</th>
+                <th className="px-3 py-2.5 font-medium">Patient</th>
+                <th className="px-3 py-2.5 font-medium">Summe</th>
+                <th className="px-3 py-2.5 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gefiltert.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-neutral-400">
+                    {(liste.data ?? []).length === 0
+                      ? "Noch keine Kostenpläne. Der erste fängt alles an."
+                      : "Kein Treffer für Suche/Filter."}
+                  </td>
+                </tr>
+              )}
+              {gefiltert.map((p) => (
+                <tr
+                  key={p.id}
+                  onClick={() => setGewaehlt(p.id)}
+                  className={`cursor-pointer border-b border-neutral-50 transition-colors hover:bg-amber-50/60 ${
+                    gewaehlt === p.id ? "bg-amber-50" : ""
+                  }`}
+                >
+                  <td className="px-3 py-2.5 font-mono text-xs text-neutral-500">
+                    {p.nummer ?? `#${p.id}`}
+                  </td>
+                  <td className="px-3 py-2.5 font-medium">{p.titel}</td>
+                  <td className="px-3 py-2.5 text-neutral-600">{p.patient?.name ?? "—"}</td>
+                  <td className="px-3 py-2.5 tabular-nums text-neutral-700">
+                    {"summeBrutto" in p ? `${geld(String(p.summeBrutto))} €` : "—"}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Badge variant="outline" className={p.status === "finalisiert" ? "border-amber-300 text-amber-800" : ""}>
+                      {p.status === "finalisiert" ? "final" : "Entwurf"}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── Detail-Paneel ── */}
+        <div className="rounded-xl border border-neutral-200 bg-white p-5">
+          {gewaehlt === null ? (
+            <p className="py-10 text-center text-sm text-neutral-400">
+              Zeile anklicken für Vorschau & Aktionen.
+            </p>
+          ) : detail.isLoading ? (
+            <p className="text-sm text-neutral-500">Lade …</p>
+          ) : detail.isError || !detail.data ? (
+            <p className="text-sm text-red-600">{detail.error?.message ?? "Fehler"}</p>
+          ) : (
+            (() => {
+              const p = detail.data;
+              const diagnosen = p.diagnosenJson ? JSON.parse(p.diagnosenJson) : [];
+              return (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h2 className="text-base font-semibold">{p.titel}</h2>
+                      <Badge variant="outline" className={p.status === "finalisiert" ? "border-amber-300 text-amber-800" : ""}>
+                        {p.status === "finalisiert" ? `final ${p.nummer}` : "Entwurf"}
+                      </Badge>
+                    </div>
+                    <div className="mt-1 text-xs text-neutral-400">
+                      {p.patient?.name} · {p.nummer ?? `Entwurf #${p.id}`} · erstellt {new Date(p.createdAt).toLocaleDateString("de-DE")}
+                      {(p.zeitraumVon || p.zeitraumBis) && ` · Zeitraum ${datum(p.zeitraumVon)}–${datum(p.zeitraumBis)}`}
+                    </div>
+                  </div>
+
+                  {diagnosen.length > 0 && (
+                    <div>
+                      <h3 className="mb-1 text-xs font-medium text-neutral-500">Diagnosen (ICD-10)</h3>
+                      <div className="space-y-1">
+                        {diagnosen.map((d: DiagZeile) => (
+                          <div key={d.code} className="text-sm">
+                            <span className="font-mono font-semibold">{d.code}</span> — {d.text}
+                            {d.kurzbegruendung && <div className="text-xs italic text-neutral-400">{d.kurzbegruendung}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {p.begruendung && (
+                    <div>
+                      <h3 className="mb-1 text-xs font-medium text-neutral-500">Begründung</h3>
+                      <p className="whitespace-pre-line text-sm text-neutral-700">{p.begruendung}</p>
+                    </div>
+                  )}
+
+                  <div>
+                    <h3 className="mb-1 text-xs font-medium text-neutral-500">
+                      Positionen ({p.positionen.length})
+                    </h3>
+                    <div className="divide-y divide-neutral-100 rounded-md border border-neutral-100">
+                      {p.positionen.map((x) => (
+                        <div key={x.id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm">
+                          <div className="min-w-0">
+                            <span className="font-medium">{x.bezeichnung}</span>
+                            {x.gruppe && <span className="ml-2 text-xs text-neutral-400">{x.gruppe}</span>}
+                            {x.goaeText && <span className="ml-2 text-xs text-neutral-400">{x.goaeText}</span>}
+                          </div>
+                          <span className="shrink-0 tabular-nums text-neutral-600">
+                            {new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(Number(x.menge))} × {geld(x.einzelpreis)} €
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {p.klartextNote && (
+                    <p className="rounded-md bg-neutral-50 px-3 py-2 text-xs text-neutral-500">{p.klartextNote}</p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-1.5 border-t border-neutral-100 pt-3">
+                    <Button variant="outline" size="sm" onClick={() => herunterladen(p.id, "pdf")}>
+                      <FileDown className="mr-1 h-4 w-4" /> PDF
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => herunterladen(p.id, "docx")}>
+                      <FileText className="mr-1 h-4 w-4" /> Word
+                    </Button>
+                    {p.status === "entwurf" ? (
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => ladenZumBearbeiten(p.id)}>
+                          <Pencil className="mr-1 h-4 w-4" /> Bearbeiten
+                        </Button>
+                        <Button
+                          size="sm" className="bg-amber-700 hover:bg-amber-800"
+                          onClick={() => window.confirm("Kostenplan finalisieren? Er wird unveränderbar, bekommt eine HKP-Nummer und liegt als PDF in der Akte.") && finalisieren.mutate({ id: p.id })}
+                        >
+                          <Lock className="mr-1 h-4 w-4" /> Finalisieren
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-red-600" onClick={() => setLoescheId(p.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => duplizieren.mutate({ id: p.id })}>
+                        <Copy className="mr-1 h-4 w-4" /> Als Vorlage duplizieren
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()
+          )}
+        </div>
+      </div>
+
+      {/* ── Editor-Dialog (unverändert aus 1.25.0) ── */}
       <Dialog open={dialog !== null} onOpenChange={(o) => !o && setDialog(null)}>
         <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{dialog === "neu" ? "Kostenplan erstellen" : "Kostenplan bearbeiten (Entwurf)"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Patient */}
             <div>
               <Label>Patient *</Label>
               {form.patientId ? (
@@ -311,7 +471,6 @@ export default function Kostenplaene() {
               </div>
             </div>
 
-            {/* Diagnosen */}
             <div className="rounded-md border border-neutral-200 p-3">
               <h4 className="text-sm font-medium">Diagnosen (ICD-10) mit Kurzbegründung</h4>
               {form.diagnosen.map((d, i) => (
@@ -347,7 +506,6 @@ export default function Kostenplaene() {
               )}
             </div>
 
-            {/* Begründung + Note */}
             <div>
               <Label>Pathophysiologische Begründung</Label>
               <Textarea rows={4} placeholder="Freitext — warum dieser Plan für diesen Patienten …" value={form.begruendung} onChange={(e) => setForm({ ...form, begruendung: e.target.value })} />
@@ -357,7 +515,6 @@ export default function Kostenplaene() {
               <Textarea rows={2} value={form.klartextNote} onChange={(e) => setForm({ ...form, klartextNote: e.target.value })} />
             </div>
 
-            {/* Positionen */}
             <div className="rounded-md border border-neutral-200 p-3">
               <h4 className="mb-2 text-sm font-medium">Kostenaufstellung (in Gruppen)</h4>
               <datalist id="kp-vorschlaege">
@@ -430,7 +587,6 @@ export default function Kostenplaene() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Löschen bestätigen ── */}
       <AlertDialog open={loescheId !== null} onOpenChange={(o) => !o && setLoescheId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

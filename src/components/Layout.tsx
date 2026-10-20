@@ -50,7 +50,6 @@ const OBEN: NavEintrag[] = [
   { to: "/", label: "Übersicht", icon: LayoutDashboard, end: true },
   { to: "/kalender", label: "Kalender", icon: Calendar, recht: "kalender" },
   { to: "/online-termine", label: "Online-Termine", icon: Video, recht: "kalender" },
-  { to: "/kostenplaene", label: "Kostenpläne", icon: FileText, recht: "abrechnung" },
 ];
 
 /** Pfad → Modul-ID (null = immer sichtbar). Spiegelt api/lib/module MODUL_DEFS. */
@@ -85,6 +84,7 @@ const GRUPPEN: NavGruppe[] = [
     eintraege: [
       { to: "/import", label: "Import", icon: FileUp, recht: "abrechnung" },
       { to: "/rechnungen", label: "Rechnungen", icon: FileText, recht: "abrechnung" },
+      { to: "/kostenplaene", label: "Kostenpläne", icon: ClipboardList, recht: "abrechnung" },
       { to: "/gutschriften", label: "Gutschriften", icon: Receipt, recht: "abrechnung" },
       { to: "/e-rechnungen", label: "Eingangsbelege", icon: FileDown, recht: "abrechnung" },
       { to: "/mail", label: "Postfach", icon: MailOpen, recht: "abrechnung" },

@@ -1,5 +1,19 @@
 # Changelog — PraxiOS
 
+## [1.26.0] — 2026-10-20 — Kostenpläne als Register + Menü-Einordnung (Bus #179)
+
+### Änderungen (alex' Auftrag)
+- **Menü**: „Kostenpläne" ist jetzt unter **Rechnungen** in der Abrechnungs-
+  Gruppe einsortiert (statt eigener Top-Level-Eintrag)
+- **Seite als Register**: Tabelle (Nummer, Titel, Patient, Summe, Status) +
+  Suchleiste (Nummer/Titel/Patient) + Statusfilter; Zeile anklicken →
+  Detail-Paneel mit allen Sektionen (Diagnosen, Begründung, Positionen mit
+  Gruppen/GOÄ, KV-Note) + Aktionen (PDF/Word, Finalisieren, Bearbeiten,
+  Duplizieren, Löschen)
+- Liste-Endpunkt angereichert: `positionenAnzahl` + `summeBrutto` je Plan
+
+---
+
 ## [1.25.0] — 2026-10-19 — Kostenpläne (HKP) als eigener Bereich (Bus #178)
 
 ### Neu (alex' Auftrag: HKP direkt in der App)
