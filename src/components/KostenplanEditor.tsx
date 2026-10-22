@@ -45,7 +45,7 @@ const leerePosition: PosZeile = { gruppe: "", leistungId: null, bezeichnung: "",
 const leerForm = (art: PlanForm["art"]): PlanForm => ({
   art,
   patientId: null, patientName: "",
-  titel: art === "hkp" ? "Heil- und Kostenplan" : "Kostenplan",
+  titel: art === "hkp" ? "Heil- und Kostenplan" : "Kostenvoranschlag",
   zeitraumVon: "", zeitraumBis: "", diagnosen: [], begruendung: "", klartextNote: "",
   positionen: [{ ...leerePosition }],
 });
@@ -163,7 +163,7 @@ export function KostenplanEditorDialog({
     if (positionen.length === 0) return setFehler("Mindestens eine Position mit Bezeichnung.");
     const payload = {
       patientId: form.patientId,
-      titel: form.titel.trim() || (form.art === "hkp" ? "Heil- und Kostenplan" : "Kostenplan"),
+      titel: form.titel.trim() || (form.art === "hkp" ? "Heil- und Kostenplan" : "Kostenvoranschlag"),
       zeitraumVon: form.zeitraumVon || null,
       zeitraumBis: form.zeitraumBis || null,
       diagnosen: form.art === "hkp"
@@ -181,14 +181,14 @@ export function KostenplanEditorDialog({
     <Dialog open={offen !== null} onOpenChange={(o) => !o && onSchliessen()}>
       <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{offen === "neu" ? "Kostenplan erstellen" : "Kostenplan bearbeiten (Entwurf)"}</DialogTitle>
+          <DialogTitle>{offen === "neu" ? "Kostenvoranschlag erstellen" : "Kostenvoranschlag bearbeiten (Entwurf)"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           {/* Typ-Wahl (Bus #179): zwei Buttons zu Beginn */}
           <div className="flex gap-1 rounded-md bg-neutral-100 p-0.5 text-sm">
             {(
               [
-                ["kostenplan", "Kostenplan"],
+                ["kostenplan", "Kostenvoranschlag"],
                 ["hkp", "Heil- und Kostenplan (HKP)"],
               ] as const
             ).map(([a, label]) => (
@@ -196,7 +196,7 @@ export function KostenplanEditorDialog({
                 key={a}
                 type="button"
                 disabled={typeof offen === "number"}
-                onClick={() => setForm({ ...form, art: a, titel: a === "hkp" ? "Heil- und Kostenplan" : "Kostenplan" })}
+                onClick={() => setForm({ ...form, art: a, titel: a === "hkp" ? "Heil- und Kostenplan" : "Kostenvoranschlag" })}
                 className={`flex-1 rounded px-2 py-1.5 transition-colors ${
                   form.art === a ? "bg-white font-medium shadow-sm" : "text-neutral-500"
                 } ${typeof offen === "number" ? "opacity-60" : ""}`}

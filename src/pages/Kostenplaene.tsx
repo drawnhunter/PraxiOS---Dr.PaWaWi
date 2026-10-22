@@ -1,4 +1,4 @@
-// ── PraxiOS: Kostenpläne — Register (1.27.0, Bus #179) ─────────────────────
+// ── PraxiOS: Kostenvoranschläge — Register (1.27.0, Bus #179) ─────────────────────
 // 1:1 wie Rechnungen: Tabelle voller Breite; Klick auf NUMMER → Detail-Seite
 // (/kostenplaene/:id); Klick auf die Zeile → Side-Menü mit Aktionen rechts.
 import { useState } from "react";
@@ -23,6 +23,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { KostenplanEditorDialog } from "@/components/KostenplanEditor";
+import { KostenplanVorschauButton } from "@/components/KostenplanVorschauButton";
 import {
   Copy,
   FileDown,
@@ -79,15 +80,15 @@ export default function Kostenplaene() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <FileText className="h-5 w-5 text-amber-700" /> Kostenpläne
+            <FileText className="h-5 w-5 text-amber-700" /> Kostenvoranschläge
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Kostenpläne und Heil- und Kostenpläne (HKP) erstellen und verwalten.
+            Kostenvoranschläge und Heil- und Kostenvoranschläge erstellen und verwalten.
             Nummer anklicken öffnet die Akte — Zeile anklicken öffnet die Aktionen.
           </p>
         </div>
         <Button onClick={() => setDialog("neu")}>
-          <Plus className="mr-1.5 h-4 w-4" /> Kostenplan erstellen
+          <Plus className="mr-1.5 h-4 w-4" /> Kostenvoranschlag erstellen
         </Button>
       </div>
 
@@ -133,7 +134,7 @@ export default function Kostenplaene() {
               <tr>
                 <td colSpan={7} className="px-3 py-10 text-center text-sm text-neutral-400">
                   {(liste.data ?? []).length === 0
-                    ? "Noch keine Kostenpläne. Der erste fängt alles an."
+                    ? "Noch keine Kostenvoranschläge. Der erste fängt alles an."
                     : "Kein Treffer für Suche/Filter."}
                 </td>
               </tr>
@@ -192,11 +193,11 @@ export default function Kostenplaene() {
                 onClick={() => { setSeitenmenueId(null); navigate(`/kostenplaene/${gewaehlterPlan.id}`); }}>
                 <FileText className="mr-1 h-4 w-4" /> Öffnen (Detail)
               </Button>
+              <div className="w-full">
+                <KostenplanVorschauButton id={gewaehlterPlan.id} titel={gewaehlterPlan.titel} />
+              </div>
               <Button className="w-full" variant="outline" onClick={() => herunterladen(gewaehlterPlan.id, "pdf")}>
-                <FileDown className="mr-1 h-4 w-4" /> Vorschau (PDF)
-              </Button>
-              <Button className="w-full" variant="outline" onClick={() => herunterladen(gewaehlterPlan.id, "docx")}>
-                <FileText className="mr-1 h-4 w-4" /> Word (DOCX)
+                <FileDown className="mr-1 h-4 w-4" /> PDF herunterladen
               </Button>
               {gewaehlterPlan.status === "entwurf" ? (
                 <>

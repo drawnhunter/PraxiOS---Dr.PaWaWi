@@ -1,5 +1,18 @@
 # Changelog — PraxiOS
 
+## [1.28.1] — 2026-10-22 — Kostenvoranschlag-Begriff + echte Vorschau
+
+### Änderungen (alex' Feedback vor dem Rollout)
+- **Begriff umbenannt**: überall jetzt „Kostenvoranschlag" (statt nur
+  „Kostenplan") — Menü, Seite, Buttons, Editor, Standardtitel
+- **Vorschau wie bei Rechnungen**: Side-Menü „Vorschau" öffnet jetzt das PDF
+  **im Dialog** (pdf.js-Canvas, Handy-tauglich) statt einen Download —
+  Herunterladen ist im Dialog dabei (nur PDF; Word bleibt auf der
+  Detail-Seite)
+- Side-Menü: Öffnen (Detail) · Vorschau · PDF herunterladen · Status-Aktionen
+
+---
+
 ## [1.28.0] — 2026-10-22 — QES-Signatur für Rezepte (eIDAS, Sproof) + Versand an Apotheke
 
 ### Neu (alex' Auftrag: digitale Rezepte direkt an die Apotheke)

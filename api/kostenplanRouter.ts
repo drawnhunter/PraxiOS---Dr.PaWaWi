@@ -41,7 +41,7 @@ const position = z.object({
 
 const planInput = z.object({
   patientId: z.number().int(),
-  titel: z.string().trim().max(255).default("Heil- und Kostenplan"),
+  titel: z.string().trim().max(255).default("Kostenvoranschlag"),
   zeitraumVon: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   zeitraumBis: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   diagnosen: z.array(diagnose).max(12).optional(),

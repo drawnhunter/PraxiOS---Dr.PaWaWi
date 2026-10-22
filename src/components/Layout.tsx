@@ -84,7 +84,7 @@ const GRUPPEN: NavGruppe[] = [
     eintraege: [
       { to: "/import", label: "Import", icon: FileUp, recht: "abrechnung" },
       { to: "/rechnungen", label: "Rechnungen", icon: FileText, recht: "abrechnung" },
-      { to: "/kostenplaene", label: "Kostenpläne", icon: ClipboardList, recht: "abrechnung" },
+      { to: "/kostenplaene", label: "Kostenvoranschläge", icon: ClipboardList, recht: "abrechnung" },
       { to: "/gutschriften", label: "Gutschriften", icon: Receipt, recht: "abrechnung" },
       { to: "/e-rechnungen", label: "Eingangsbelege", icon: FileDown, recht: "abrechnung" },
       { to: "/mail", label: "Postfach", icon: MailOpen, recht: "abrechnung" },
