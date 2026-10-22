@@ -17,6 +17,10 @@ const DUNKEL = "#1c1917";
 const GRAU = "#57534e";
 const LINIE = "#e7e0d5";
 
+// Feste Rechts-Fußnote (Bus #179, alex' Text): gilt für Kostenplan UND HKP.
+export const HKP_FUSSNOTE =
+  "Dieser Kostenplan wurde auf Wunsch des Patienten erstellt. Die aufgeführten Leistungen werden, soweit sie das Maß der medizinisch notwendigen Versorgung überschreiten, als privatärztliche Wunsch- und Verlangensleistung nach § 1 Abs. 2 GOÄ erbracht (vgl. § 630c Abs. 3 BGB). Eine Kostenübernahme durch die gesetzliche Krankenkasse ist nicht beantragt bzw. liegt nicht vor; eine vollständige oder teilweise Kostenübernahme durch gesetzliche oder private Krankenversicherungen kann nicht garantiert werden.";
+
 export interface KostenplanPositionIn {
   gruppe?: string | null;
   bezeichnung: string;
@@ -230,13 +234,19 @@ export async function renderKostenplanPdf(input: KostenplanPdfInput): Promise<Bu
   doc.font("Bold").fontSize(10.5).fillColor(DUNKEL).text(`${geld(summeNetto + summeUst)} €`, colX.betrag - 18, y, { width: 80, align: "right", lineBreak: false });
   y += 26;
 
-  // ── KV-/Hinweis-Textbaustein ──────────────────────────────────────────────
+  // ── KV-/Hinweis-Textbaustein (optional, eigen) ────────────────────────────
   if (input.klartextNote?.trim()) {
     doc.save().rect(M, y, W, 1).fill(LINIE).restore();
     y += 6;
     doc.font("Regular").fontSize(7.6).fillColor(GRAU).text(input.klartextNote.trim(), M, y, { width: W, lineGap: 2 });
     y = doc.y + 8;
   }
+
+  // ── Feste Rechts-Fußnote (1.27.0, Bus #179): beide Typen, immer ──────────
+  doc.save().rect(M, y, W, 1).fill(LINIE).restore();
+  y += 6;
+  doc.font("Regular").fontSize(7.2).fillColor(GRAU).text(HKP_FUSSNOTE, M, y, { width: W, lineGap: 1.8 });
+  y = doc.y + 6;
 
   // ── Unterschriften (Praxis + Patient) ─────────────────────────────────────
   const sigY = Math.max(y + 10, 700);

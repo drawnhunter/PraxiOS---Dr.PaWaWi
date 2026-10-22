@@ -93,5 +93,22 @@ export async function extrahiereAnhangText(
     }
   }
 
-  return { ok: false, methode: "—", fehler: `Typ nicht unterstützt (${mime}) — PDF oder JPG/PNG.` };
+  // 1.27.0 (Bus #184): DOCX per mammoth (Arztbriefe/Atteste liegen oft als
+  // Word vor — ohne das bleibt jede Aktenvorbereitung an DOCX hängen)
+  const istDocx =
+    mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    mime === "application/msword";
+  if (istDocx) {
+    try {
+      const mammoth = await import("mammoth");
+      const erg = await mammoth.extractRawText({ buffer: puffer });
+      const text = (erg.value ?? "").slice(0, TEXT_MAX).trim();
+      if (!text) return { ok: false, methode: "mammoth", fehler: "Kein Text im Dokument gefunden." };
+      return { ok: true, methode: "mammoth", text };
+    } catch (e) {
+      return { ok: false, methode: "mammoth", fehler: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  return { ok: false, methode: "—", fehler: `Typ nicht unterstützt (${mime}) — PDF, JPG/PNG oder DOCX.` };
 }

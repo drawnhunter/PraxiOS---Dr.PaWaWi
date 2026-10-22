@@ -2884,6 +2884,25 @@ app.get("/kostenplan/:id/docx", async (c) => {
   }
 });
 
+// ── Dokument-Raw-Download (1.27.0, Bus #184) ──────────────────────────────
+// Analog ReWaWi /beleg/:id/datei — die Datei selbst (base64), nicht nur Text.
+app.get("/dokument/:id/datei", async (c) => {
+  const id = Number(c.req.param("id"));
+  const { documents } = await import("@db/schema");
+  const d = await getDb().query.documents.findFirst({ where: eq(documents.id, id) });
+  if (!d) return c.json({ fehler: "Dokument nicht gefunden." }, 404);
+  const { env } = await import("./lib/env");
+  const { readFile } = await import("node:fs/promises");
+  const pathM = await import("node:path");
+  try {
+    const buf = await readFile(pathM.join(env.uploadDir, d.dateipfad));
+    await audit("dokument_datei", { id, dateiname: d.dateiname });
+    return c.json({ ok: true, id, dateiname: d.dateiname, mime: d.mimeType ?? "application/pdf", groesse: buf.length, base64: buf.toString("base64") });
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 500);
+  }
+});
+
 // Unbekannte Pfade: JSON statt leerem Body (Bus #167 — Agenten raten sonst
 // das Schema). Immer zuletzt registrieren.
 app.notFound((c) =>

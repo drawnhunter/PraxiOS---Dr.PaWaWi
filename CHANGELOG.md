@@ -1,5 +1,38 @@
 # Changelog — PraxiOS
 
+## [1.27.0] — 2026-10-22 — Register 1:1 Rechnungen + Typ-Wahl + GOÄ-Fußnote + Raw-Download + Doku-Pflicht (Bus #179/#182/#184)
+
+### Kostenpläne (alex' Nachspezifikation)
+- **Register 1:1 wie Rechnungen**: Tabelle voller Breite; **Klick auf die
+  Nummer öffnet die Detail-Seite** (`/kostenplaene/:id` — alle Sektionen,
+  Summen, Fußnote, Aktionen); **Klick auf die Zeile öffnet rechts ein
+  Side-Menü** mit Aktionen (Öffnen, Vorschau PDF, Word, Bearbeiten,
+  Finalisieren, Duplizieren, Löschen je Status)
+- **Editor mit Typ-Wahl** zu Beginn: „Kostenplan" | „Heil- und Kostenplan
+  (HKP)" — HKP zeigt ICD-Diagnosen + pathophysiologische Begründung oben,
+  schlichter Kostenplan ohne; Titel-Standard je Typ
+- **Labels überall „Kostenplan"** (nicht mehr automatisch „Heil- und
+  Kostenplan")
+- **Feste GOÄ/BGB-Fußnote** (alex' Text) am Ende — PDF UND DOCX, beide Typen
+- Editor in eigene Komponente ausgelagert (`KostenplanEditor.tsx`)
+
+### Agent-API (Bus #184)
+- **`GET /dokument/:id/datei`** — Raw-Download (dateiname, mime, groesse,
+  base64), auditiert
+- **DOCX-Text-Extraktion** (mammoth, neue Dependency): `GET /dokument/:id/text`
+  und die Anhang-Extraktion nehmen jetzt DOCX — Arztbriefe/Atteste sind
+  nicht mehr an PDF gebunden (GdB-Vorbereitung Böing)
+
+### Doku-Pflicht (Bus #182)
+- `docs/agent-api.md` auf v1.27.0 aufgewertet: kompletter Katalog inkl.
+  Body-Schemata, Nutzungs-Wege, Aliase; **Regel: bei jedem Release
+  mitpflegen + Versionshinweis im Bus**
+
+### Migration
+- Keine (nur neue Dependency `mammoth` — Dockerfile installiert beim Build)
+
+---
+
 ## [1.26.0] — 2026-10-20 — Kostenpläne als Register + Menü-Einordnung (Bus #179)
 
 ### Änderungen (alex' Auftrag)

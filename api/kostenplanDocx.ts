@@ -13,6 +13,7 @@ import {
   WidthType,
 } from "docx";
 import type { KostenplanPdfInput } from "./kostenplanPdf";
+import { HKP_FUSSNOTE } from "./kostenplanPdf";
 
 const AKZENT = "92610F";
 const GRAU = "57534E";
@@ -155,6 +156,10 @@ export async function renderKostenplanDocx(input: KostenplanPdfInput): Promise<B
     kinder.push(p("", { abstandUnten: 120 }));
     kinder.push(p(input.klartextNote.trim(), { groesse: 15, farbe: GRAU }));
   }
+
+  // Feste Rechts-Fußnote (1.27.0, Bus #179): beide Typen, immer
+  kinder.push(p("", { abstandUnten: 100 }));
+  kinder.push(p(HKP_FUSSNOTE, { groesse: 14, farbe: GRAU }));
 
   // Unterschriften
   kinder.push(p("", { abstandUnten: 400 }));

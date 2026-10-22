@@ -1,7 +1,12 @@
 # Dr.PaWaWi Agent-API — Leitfaden (kanonisch)
 
 **Für externe Agenten (Kimi Claw u. a.).** Diese Datei ist die Referenz —
-gelesen werden muss sie **vor** dem ersten Auftrag. Stand: v1.23.0.
+gelesen werden muss sie **vor** dem ersten Auftrag. Stand: **v1.27.0**.
+
+**Pflicht-Regel (alex' Auftrag #182):** Diese Datei wird **bei jedem Release
+mitgepflegt** — jede neue/geänderte Route landet hier UND als Versionshinweis
+im Bus. Bei Abweichung Doku ↔ Verhalten gilt das Verhalten — und das ist ein
+Bug zum Melden.
 
 ---
 
@@ -83,7 +88,8 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 | PUT | `/kunde/:id` | Stammdaten ändern |
 | POST | `/patient/:id/dokumente` | **Batch-Upload** (≤25 Dateien; `{dateien:[{dateiname,base64,kategorie?,dokumentdatum?,notiz?}], ocr?}` → je Datei `{id, extraktionsStatus}`) |
 | GET | `/patient/:id/dokumente` | Dokumente der Akte (mit Extraktions-Status) |
-| GET | `/dokument/:id/text` | Text eines Dokuments (OCR on-demand, dauerhaft abgelegt) |
+| GET | `/dokument/:id/text` | Text eines Dokuments — **jetzt auch DOCX** (mammoth, 1.27.0) — OCR on-demand, dauerhaft abgelegt |
+| GET | `/dokument/:id/datei` | **Raw-Download** (1.27.0): `{ok, dateiname, mime, groesse, base64}` |
 
 ### Therapiepläne
 | Methode | Pfad | Zweck |
@@ -91,7 +97,7 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 | GET | `/therapieplaene` | Liste (`?patientId=`, `?status=`) |
 | GET | `/therapieplan/:id` | Plan + Einträge lesen |
 | POST | `/therapieplan` (= `/therapieplan-entwurf`) | Plan anlegen `{patientId, titel, vonDatum, bisDatum, eintraege[]}` |
-| POST | `/therapieplan/:id/eintraege` | Einträge füllen (Array oder Einzel-Felder) |
+| POST | `/therapieplan/:id/eintraege` | Einträge füllen — `{eintraege:[…]}`, Einzel-Felder **oder rohes Array** `[{…}]` (1.24.0) |
 | PUT | `/therapieplan/:id/eintraege/:eintragId` | Eintrag ändern (stattgefundene Einträge sind gesperrt) |
 | DELETE | `/therapieplan/:id/eintraege/:eintragId` | Eintrag löschen (ebenfalls nur geplante) |
 
@@ -102,15 +108,15 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 | GET | `/produkte` | Sortiment + EK/VK + Lagerbestand + Mindestbestand (`?q=`) |
 | GET | `/waren` | Alias (schlank) |
 | GET | `/warengruppen` | Kategorien |
-| POST | `/produkte` | Produkt anlegen (Dubletten-Schutz per Name → 409) |
-| PUT | `/produkt/:id` | Produkt ändern |
-| DELETE | `/produkt/:id` | GoBD-sicher: deaktiviert statt gelöscht, wenn referenziert |
+| POST | `/produkte` (≡ `/leistungen`) | Produkt anlegen (Dubletten-Schutz per Name → 409) |
+| PUT/PATCH | `/produkt/:id` (≡ `/leistungen/:id`) | Produkt ändern (beide Methoden, beide Pfade) |
+| DELETE | `/produkt/:id` (≡ `/leistungen/:id`) | GoBD-sicher: deaktiviert statt gelöscht, wenn referenziert |
 
 ### Rechnungen / Vorkasse / Gutschriften
 | Methode | Pfad | Zweck |
 |---|---|---|
 | GET | `/rechnungen` | Liste (`?patientId=&q=&von=&bis=&status=`) |
-| GET | `/rechnung/:id` | Detail inkl. Positionen |
+| GET | `/rechnung/:id` (≡ `/rechnungen/:id`) | Detail inkl. Positionen |
 | GET | `/rechnung/:id/pdf` | GoBD-PDF (base64), Proforma-Layout inklusive |
 | GET | `/offene-rechnungen` | Offen/überfällig |
 | GET | `/kunden-ohne-rechnung` | Kunden ohne Rechnung seit X |
@@ -121,6 +127,8 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 | POST | `/rechnung/:id/in-rechnung-umwandeln` | Proforma → Schlussrechnung |
 | POST | `/rechnung/:id/gutschrift` | `{betrag?, grund}` — weglassen = Vollstorno (GoBD); kleiner = Teilgutschrift-Entwurf |
 | POST | `/rechnung/:id/stornieren` | Vollstorno (Legacy-Alias) |
+| POST | `/rechnung-aus-plan` | **Entwurf aus Therapieplan** (1.24.0): `{therapieplanId, grundlage?}` — grundlage `stattgefunden` (Standard) / `alle` (Vorschau ganze Woche) |
+| DELETE | `/rechnung/:id` (≡ `/rechnungen/:id`) | **Entwurf löschen** (1.24.1, nur Status entwurf; sonst 409 → Storno) |
 | POST | `/rechnung/:id/versenden` | Versand (Vollautomatik-Gate / Freigabeliste) |
 | GET | `/entwuerfe` / DELETE `/entwurf/:id` | Entwürfe lesen/löschen |
 | GET/POST | `/mahnungen`, `/mahnung` | Mahnwesen lesen/versenden |
@@ -135,6 +143,18 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 | POST | `/bankbuchung/:id/loesen` | Zuordnung auflösen |
 | GET | `/kontostand` | Salden je Konto (bankAccountId explizit) |
 | GET | `/import-status` | Import-Status |
+
+### Kostenpläne / HKP (1.25.0+)
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/kostenplaene` | Liste (`?patientId=`) |
+| GET | `/kostenplan/:id` | Detail (Diagnosen, Begründung, Positionen) |
+| POST | `/kostenplan` | Anlegen `{patientId\|patient, titel?, zeitraumVon/Bis?, diagnosen[]?, begruendung?, klartextNote?, positionen[{bezeichnung, einzelpreis, menge?, einheit?, ustSatz?, gruppe?, goaeText?, leistungId?}]}` |
+| PUT | `/kostenplan/:id` | Ändern (nur Entwurf) |
+| POST | `/kostenplan/:id/finalisieren` | Finalisieren → HKP-Nummer + PDF in Akte |
+| POST | `/kostenplan/:id/duplizieren` | Als Vorlage kopieren (neuer Entwurf) |
+| DELETE | `/kostenplan/:id` | Löschen (nur Entwurf) |
+| GET | `/kostenplan/:id/pdf` · `/docx` | Ausgabe (base64) |
 
 ### Rezepte & Dokumente (Formulare)
 | Methode | Pfad | Zweck |
@@ -175,7 +195,7 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 |---|---|---|
 | 401 | Token fehlt/ungültig/deaktiviert | Token prüfen; **nie** weiterreichen, melden |
 | 400 | Validierung (Feld fehlt/Format) | `fehler`-Text lesen, Eingabe korrigieren |
-| 404 | Objekt nicht gefunden | ID prüfen; bei Endpunkt: Doku prüfen (Aliase beachten!) |
+| 404 | Objekt nicht gefunden ODER Endpunkt fehlt (1.24.0: **JSON statt leerem Body** — `{fehler, hinweis: Guide}`) | ID prüfen; bei Endpunkt: Doku prüfen (Aliase beachten!) |
 | 409 | Konflikt/Zustand (Duplikat, GoBD-Regel, Doppel-Verrechnung) | Text lesen — enthält die Lösung; nicht wiederholen |
 | 429 | Rate-Limit | Backoff + Retry mit Idempotenz-Key |
 
