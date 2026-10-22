@@ -2903,6 +2903,52 @@ app.get("/dokument/:id/datei", async (c) => {
   }
 });
 
+// ── QES-Signatur für Rezepte (1.28.0, Sproof/eIDAS) ───────────────────────
+app.post("/rezept/:id/qes-signieren", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.rezepte.qesSignieren({
+      id,
+      apothekeEmail: body.apothekeEmail ? String(body.apothekeEmail) : undefined,
+      notiz: body.notiz ? String(body.notiz) : undefined,
+    });
+    await audit("qes_signatur_angefordert", { id, signId: r.signId });
+    return c.json(r);
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
+app.get("/rezept/:id/qes-status", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    return c.json(await caller.rezepte.qesStatus({ id }));
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 404);
+  }
+});
+
+app.post("/rezept/:id/qes-fertigstellen", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await bodyLesen(c);
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.rezepte.qesFertigstellen({
+      id,
+      anApothekeSenden: body.anApothekeSenden === true,
+      betreff: body.betreff ? String(body.betreff) : undefined,
+      text: body.text ? String(body.text) : undefined,
+    });
+    await audit("qes_fertiggestellt", { id, versandt: r.versand?.ok === true });
+    return c.json(r);
+  } catch (e) {
+    return c.json({ fehler: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+
 // Unbekannte Pfade: JSON statt leerem Body (Bus #167 — Agenten raten sonst
 // das Schema). Immer zuletzt registrieren.
 app.notFound((c) =>

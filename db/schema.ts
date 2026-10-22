@@ -47,6 +47,9 @@ export const companySettings = mysqlTable("company_settings", {
   // Patient/Gast = Teilnehmer. Kein „Wer leitet die Sitzung?"-Prompt mehr.
   jitsiAppId: varchar("jitsi_app_id", { length: 60 }),
   jitsiAppSecret: varchar("jitsi_app_secret", { length: 255 }),
+  // QES-Signatur (1.28.0, Sproof Sign): API-Token verschlüsselt + Signierer
+  qesTokenEnc: varchar("qes_token_enc", { length: 500 }),
+  qesSignerEmail: varchar("qes_signer_email", { length: 320 }),
   // Mail-Pro (1.20.0): Typo-Autokorrektur + Undo-Send-Fenster (Sekunden)
   typoKorrektur: boolean("typo_korrektur").notNull().default(true),
   undoSendeSekunden: int("undo_sende_sekunden").notNull().default(0),
@@ -147,6 +150,33 @@ export const rezepte = mysqlTable(
   (t) => [index("rezepte_patient_idx").on(t.patientId)],
 );
 export type Rezept = typeof rezepte.$inferSelect;
+
+// ── QES-Signierungen (1.28.0): qualifizierte elektronische Signatur (eIDAS,
+// Sproof) — Rezepte digital signieren + an die Apotheke senden ─────────────
+export const qesSignierungen = mysqlTable("qes_signierungen", {
+  id: serial("id").primaryKey(),
+  rezeptId: bigint("rezept_id", { mode: "number", unsigned: true })
+    .notNull()
+    .references(() => rezepte.id, { onDelete: "cascade" }),
+  /** Sproof memberId (dient zum Status-Abruf + Download) */
+  memberId: varchar("member_id", { length: 100 }).notNull(),
+  status: mysqlEnum("status", ["ausstehend", "signiert", "abgelehnt", "versandt"])
+    .notNull()
+    .default("ausstehend"),
+  apothekeEmail: varchar("apotheke_email", { length: 320 }),
+  signiertesDokumentId: bigint("signiertes_dokument_id", { mode: "number", unsigned: true }).references(
+    () => documents.id,
+    { onDelete: "set null" },
+  ),
+  signingUrl: varchar("signing_url", { length: 500 }),
+  createdBy: bigint("created_by", { mode: "number", unsigned: true }).references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  fertigAm: timestamp("fertig_am"),
+});
+export type QesSignierung = typeof qesSignierungen.$inferSelect;
 
 // ── Kostenpläne / Heil- und Kostenpläne (HKP, 1.25.0) ─────────────────────
 // Kein GoBD-Beleg (kein Nummernkreis) — Status: entwurf ↔ finalisiert.

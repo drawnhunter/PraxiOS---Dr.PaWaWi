@@ -47,6 +47,8 @@ interface FirmenForm {
   jitsiAppId: string;
   jitsiAppSecret: string;
   rechnungsPrefix: string;
+  qesToken: string;
+  qesSignerEmail: string;
   standardZahlungsziel: number;
   fussText: string;
   datevBeraternummer: string;
@@ -138,6 +140,8 @@ export default function SettingsPage() {
       jitsiAppId: s.jitsiAppId ?? "",
       jitsiAppSecret: s.jitsiAppSecret ?? "",
       rechnungsPrefix: s.rechnungsPrefix ?? "R",
+      qesToken: "",
+      qesSignerEmail: s.qesSignerEmail ?? "",
       standardZahlungsziel: s.standardZahlungsziel,
       fussText: s.fussText ?? "",
       datevBeraternummer: s.datevBeraternummer ?? "",
@@ -318,6 +322,29 @@ export default function SettingsPage() {
             />
           </div>
           <div>
+            <Label>QES-Token (Sproof Sign — verschlüsselt abgelegt)</Label>
+            <Input
+              type="password"
+              autoComplete="off"
+              placeholder="leer lassen = bestehenden behalten"
+              value={firma.qesToken}
+              onChange={(e) => setFirma({ ...firma, qesToken: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>QES-Signierer-E-Mail (das Sproof-Konto des Unterzeichners)</Label>
+            <Input
+              placeholder="z. B. arzt@praxis.de — muss bei Sproof verifiziert sein"
+              value={firma.qesSignerEmail}
+              onChange={(e) => setFirma({ ...firma, qesSignerEmail: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-neutral-400">
+              Für digitale Rezepte an Apotheken: qualifizierte elektronische Signatur (QES, eIDAS)
+              = rechtlich gleichwertig mit der eigenhändigen Unterschrift. Sproof-Konto nötig,
+              der Unterzeichner identifiziert sich einmalig bei Sproof (Video-Ident).
+            </p>
+          </div>
+          <div>
             <Label>Rechnungsnummern-Präfix</Label>
             <Input
               placeholder="z. B. R oder TV"
@@ -437,6 +464,8 @@ export default function SettingsPage() {
                 jitsiAppId: firma.jitsiAppId || null,
                 jitsiAppSecret: firma.jitsiAppSecret || null,
                 rechnungsPrefix: firma.rechnungsPrefix || "R",
+                qesSignerEmail: firma.qesSignerEmail || null,
+                ...(firma.qesToken ? { qesToken: firma.qesToken } : {}),
                 fussText: firma.fussText || null,
                 kreditorStartnummer: firma.kreditorStartnummer,
                 aufwandskontoDefault: firma.aufwandskontoDefault || null,

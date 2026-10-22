@@ -38,7 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileDown, Plus, Trash2 } from "lucide-react";
+import { FileDown, PenLine, Plus, Trash2 } from "lucide-react";
 
 interface MedZeile {
   name: string;
@@ -59,6 +59,26 @@ export function RezepteSection({ patientId }: { patientId: number }) {
   const [dialog, setDialog] = useState<"rezept" | "attest" | null>(null);
   const [loescheId, setLoescheId] = useState<number | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
+  // QES (1.28.0): Signatur-Flow je Rezept
+  const [qesRezeptId, setQesRezeptId] = useState<number | null>(null);
+  const [qesEmail, setQesEmail] = useState("");
+  const [qesNotiz, setQesNotiz] = useState("");
+  const [qesSigningUrl, setQesSigningUrl] = useState<string | null>(null);
+  const [qesFertig, setQesFertig] = useState(false);
+
+  const qesSignieren = trpc.rezepte.qesSignieren.useMutation({
+    onSuccess: (r) => setQesSigningUrl(r.signingUrl),
+    onError: (e) => setFehler(e.message),
+  });
+  const [qesStatusLaeuft, setQesStatusLaeuft] = useState(false);
+  const qesFertigstellen = trpc.rezepte.qesFertigstellen.useMutation({
+    onSuccess: () => {
+      setQesRezeptId(null);
+      utils.rezepte.liste.invalidate({ patientId });
+      utils.customers.get.invalidate({ id: patientId });
+    },
+    onError: (e) => setFehler(e.message),
+  });
 
   // Katalog-Vorschläge für Verordnungen (eigene Produktliste, z. B. Infusionen)
   const produkte = trpc.products.list.useQuery(undefined, { enabled: dialog === "rezept" });
@@ -245,6 +265,11 @@ export function RezepteSection({ patientId }: { patientId: number }) {
                     <DropdownMenuItem onClick={() => pdf(r.id, "a4")}>
                       A4 — klassisches Blatt
                     </DropdownMenuItem>
+                    {r.typ === "rezept" && (
+                      <DropdownMenuItem onClick={() => { setQesRezeptId(r.id); setQesEmail(""); setQesNotiz(""); setQesSigningUrl(null); setQesFertig(false); }}>
+                        <PenLine className="mr-1.5 h-4 w-4" /> QES signieren + an Apotheke senden
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button
@@ -625,6 +650,100 @@ export function RezepteSection({ patientId }: { patientId: number }) {
             <Button onClick={attestAbsenden} disabled={erstellen.isPending}>
               {erstellen.isPending ? "Erstelle …" : "PDF erstellen"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── QES signieren + senden (1.28.0) ── */}
+      <Dialog open={qesRezeptId !== null} onOpenChange={(o) => !o && setQesRezeptId(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>QES signieren + an Apotheke senden</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-neutral-500">
+              Qualifizierte elektronische Signatur (eIDAS, Sproof) — rechtlich gleichwertig
+              mit der eigenhändigen Unterschrift. Das signierte Rezept kann direkt an die
+              Apotheke gehen.
+            </p>
+            {!qesSigningUrl ? (
+              <>
+                <div>
+                  <Label>Apotheken-E-Mail (optional, für den Versand nach der Signatur)</Label>
+                  <Input type="email" placeholder="apotheke@beispiel.de" value={qesEmail} onChange={(e) => setQesEmail(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Notiz an den Unterzeichner (optional)</Label>
+                  <Input value={qesNotiz} onChange={(e) => setQesNotiz(e.target.value)} />
+                </div>
+                {fehler && <p className="text-sm text-red-600">{fehler}</p>}
+              </>
+            ) : (
+              <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Signatur-Auftrag läuft. Der Unterzeichner öffnet den Link und signiert
+                (erste Nutzung: einmalige Ident-Prüfung bei Sproof).
+                {qesFertig ? (
+                  <span className="mt-1 block font-medium text-green-800">Signiert — bereit zum Abschluss.</span>
+                ) : null}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex-wrap gap-2">
+            {!qesSigningUrl ? (
+              <>
+                <Button variant="outline" onClick={() => setQesRezeptId(null)}>Abbrechen</Button>
+                <Button
+                  disabled={qesSignieren.isPending}
+                  onClick={() => qesRezeptId && qesSignieren.mutate({
+                    id: qesRezeptId,
+                    apothekeEmail: qesEmail.trim() || undefined,
+                    notiz: qesNotiz.trim() || undefined,
+                  })}
+                >
+                  {qesSignieren.isPending ? "Sende an Sproof …" : "Signatur anfordern"}
+                </Button>
+              </>
+            ) : (
+              <>
+                {qesSigningUrl && (
+                  <Button variant="outline" onClick={() => window.open(qesSigningUrl, "_blank", "noopener")}>
+                    Signatur-Link öffnen
+                  </Button>
+                )}
+                {!qesFertig ? (
+                  <Button
+                    variant="outline"
+                    disabled={qesStatusLaeuft || !qesRezeptId}
+                    onClick={async () => {
+                      if (!qesRezeptId) return;
+                      setQesStatusLaeuft(true);
+                      try {
+                        const r = await utils.rezepte.qesStatus.fetch({ id: qesRezeptId });
+                        if (r.vorhanden && r.fertig) setQesFertig(true);
+                        else setFehler("Noch nicht signiert — Status: " + (r.vorhanden ? r.state : "kein Auftrag"));
+                      } catch (e) {
+                        setFehler(e instanceof Error ? e.message : String(e));
+                      } finally {
+                        setQesStatusLaeuft(false);
+                      }
+                    }}
+                  >
+                    {qesStatusLaeuft ? "Prüfe …" : "Status prüfen"}
+                  </Button>
+                ) : (
+                  <Button
+                    disabled={qesFertigstellen.isPending || !qesRezeptId}
+                    onClick={() => qesRezeptId && qesFertigstellen.mutate({
+                      id: qesRezeptId,
+                      anApothekeSenden: Boolean(qesEmail.trim()),
+                    })}
+                  >
+                    {qesFertigstellen.isPending ? "Hole signiertes PDF …" : qesEmail.trim() ? "Abschließen + an Apotheke senden" : "Abschließen (in Akte legen)"}
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={() => setQesRezeptId(null)}>Schließen</Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

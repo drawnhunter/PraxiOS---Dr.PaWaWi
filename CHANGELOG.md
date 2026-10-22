@@ -1,5 +1,28 @@
 # Changelog — PraxiOS
 
+## [1.28.0] — 2026-10-22 — QES-Signatur für Rezepte (eIDAS, Sproof) + Versand an Apotheke
+
+### Neu (alex' Auftrag: digitale Rezepte direkt an die Apotheke)
+- **QES-Signatur** (qualifizierte elektronische Signatur = eigenhändiger
+  Unterschrift gleichgestellt, AMVV-konform): Akte → Rezepte → „QES signieren
+  + an Apotheke senden" — Rezept-PDF geht an Sproof, der Unterzeichner
+  signiert qualifiziert (einmalige Video-Ident bei Sproof nötig)
+- **Vollfluss**: Auftrag → Signatur-Link → Status prüfen → signiertes PDF
+  landet als eigenes Dokument in der Akte (Notiz „QES-signiert (eIDAS)") →
+  optional direkt per Mail an die Apotheke (Anhang, SMTP, mail_log)
+- Neue Tabelle `qes_signierungen` (Auftrag je Rezept nachvollziehbar:
+  ausstehend/signiert/abgelehnt/versandt); Doppel-Auftrag blockiert
+- **Agent-Schiene**: `POST /rezept/:id/qes-signieren`,
+  `GET /rezept/:id/qes-status`, `POST /rezept/:id/qes-fertigstellen`
+- **Einstellungen → Praxis**: Sproof-Token (verschlüsselt abgelegt) +
+  Signierer-E-Mail (das Sproof-Konto des Unterzeichners)
+
+### Migration (automatisch beim Start)
+- `company_settings`: `qes_token_enc`, `qes_signer_email`
+- Neue Tabelle: `qes_signierungen`
+
+---
+
 ## [1.27.0] — 2026-10-22 — Register 1:1 Rechnungen + Typ-Wahl + GOÄ-Fußnote + Raw-Download + Doku-Pflicht (Bus #179/#182/#184)
 
 ### Kostenpläne (alex' Nachspezifikation)

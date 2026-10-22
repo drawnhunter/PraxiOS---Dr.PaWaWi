@@ -11,7 +11,7 @@ import { TRPCError } from "@trpc/server";
 import { desc, eq, isNull } from "drizzle-orm";
 import { createRouter, rechtQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { companySettings, customers, documents, loeschprotokoll, rezepte } from "@db/schema";
+import { companySettings, customers, documents, loeschprotokoll, qesSignierungen, rezepte } from "@db/schema";
 import { env } from "./lib/env";
 import { renderRezeptPdf } from "./rezeptPdf";
 import { renderAuPdf } from "./auPdf";
@@ -413,6 +413,177 @@ export const rezeptRouter = createRouter({
             format: "a4",
           });
       return { dateiname: r.dokument.dateiname, base64: pdfBuf.toString("base64") };
+    }),
+
+  // ── QES-Signatur (1.28.0, Sproof Sign) — digitale Rezepte an Apotheken ──
+  // Rezept-PDF → Sproof (QES = eigenhändiger Unterschrift gleichgestellt) →
+  // signiertes PDF in der Akte → Versand an die Apotheken-Mail.
+  qesSignieren: rechtQuery("dokumente")
+    .input(z.object({
+      id: z.number().int(),
+      apothekeEmail: z.string().trim().email().max(320).optional(),
+      notiz: z.string().trim().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const r = await db.query.rezepte.findFirst({
+        where: eq(rezepte.id, input.id),
+        with: { dokument: true, patient: { columns: { id: true, name: true } } },
+      });
+      if (!r?.dokument) throw new TRPCError({ code: "NOT_FOUND", message: "Rezept/PDF nicht gefunden." });
+      if (r.typ !== "rezept" && r.typ !== "praxisbedarf") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "QES-Signatur gibt es für Rezepte/Praxisbedarf — Atteste bleiben manuell." });
+      }
+      // Laufender Auftrag? Nicht doppelt anlegen.
+      const laufend = await db.query.qesSignierungen.findFirst({
+        where: (t, { and: a, eq: e, inArray: iA }) =>
+          a(e(t.rezeptId, input.id), iA(t.status, ["ausstehend"])),
+      });
+      if (laufend) {
+        throw new TRPCError({ code: "CONFLICT", message: "Es läuft bereits ein QES-Auftrag für dieses Rezept — erst Status prüfen." });
+      }
+
+      const { readFile } = await import("node:fs/promises");
+      const pdf = await readFile(path.join(env.uploadDir, r.dokument.dateipfad));
+      const praxis = await db.query.companySettings.findFirst({ where: eq(companySettings.id, 1) });
+      const { qesSignaturAuftrag } = await import("./lib/qes");
+      const auftrag = await qesSignaturAuftrag({
+        pdfBase64: pdf.toString("base64"),
+        dateiname: r.dokument.dateiname,
+        arztName: praxis?.name ?? "Praxis",
+        betreff: `Zur qualifizierten Signatur: ${r.dokument.dateiname}`,
+        nachricht: input.notiz,
+      });
+      const [{ id: signId }] = await db
+        .insert(qesSignierungen)
+        .values({
+          rezeptId: input.id,
+          memberId: auftrag.memberId,
+          status: "ausstehend",
+          apothekeEmail: input.apothekeEmail ?? null,
+          signingUrl: auftrag.signingUrl,
+          createdBy: ctx.user.id,
+        })
+        .$returningId();
+      await schreibeTimeline({
+        patientId: r.patient?.id ?? 0,
+        typ: "dokument",
+        titel: "QES-Signatur angefordert (Sproof)",
+        beschreibung: r.dokument.dateiname,
+        createdBy: ctx.user.id,
+      });
+      return { ok: true, signId, memberId: auftrag.memberId, signingUrl: auftrag.signingUrl };
+    }),
+
+  qesStatus: rechtQuery("dokumente")
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const laufend = await db.query.qesSignierungen.findFirst({
+        where: eq(qesSignierungen.rezeptId, input.id),
+        orderBy: [desc(qesSignierungen.createdAt)],
+      });
+      if (!laufend) return { vorhanden: false as const };
+      const { qesStatus } = await import("./lib/qes");
+      const status = await qesStatus(laufend.memberId);
+      if (status.fertig && laufend.status === "ausstehend") {
+        await db.update(qesSignierungen).set({ status: "signiert" }).where(eq(qesSignierungen.id, laufend.id));
+        laufend.status = "signiert";
+      }
+      return {
+        vorhanden: true as const,
+        status: laufend.status,
+        state: status.state,
+        fertig: status.fertig,
+        signingUrl: laufend.signingUrl,
+        apothekeEmail: laufend.apothekeEmail,
+        signiertesDokumentId: laufend.signiertesDokumentId,
+      };
+    }),
+
+  /** Signiertes Dokument holen → in der Akte ablegen + optional an Apotheke senden. */
+  qesFertigstellen: rechtQuery("dokumente")
+    .input(z.object({
+      id: z.number().int(),
+      anApothekeSenden: z.boolean().default(false),
+      betreff: z.string().trim().max(200).optional(),
+      text: z.string().trim().max(2000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const sig = await db.query.qesSignierungen.findFirst({
+        where: eq(qesSignierungen.rezeptId, input.id),
+        orderBy: [desc(qesSignierungen.createdAt)],
+      });
+      if (!sig) throw new TRPCError({ code: "NOT_FOUND", message: "Kein QES-Auftrag für dieses Rezept." });
+      if (sig.status === "versandt") throw new TRPCError({ code: "BAD_REQUEST", message: "Bereits versandt." });
+      const r = await db.query.rezepte.findFirst({
+        where: eq(rezepte.id, input.id),
+        with: { dokument: true, patient: true },
+      });
+      if (!r?.dokument) throw new TRPCError({ code: "NOT_FOUND", message: "Rezept nicht gefunden." });
+
+      const { qesDokument } = await import("./lib/qes");
+      const signiertBase64 = await qesDokument(sig.memberId);
+      const buf = Buffer.from(signiertBase64, "base64");
+
+      // Als eigenes Dokument in der Akte ablegen (QES-Version)
+      const cryptoM = await import("node:crypto");
+      const fsP = await import("node:fs/promises");
+      const dateiname = r.dokument.dateiname.replace(/\.pdf$/i, " (QES-signiert).pdf");
+      const internerName = `${Date.now()}-${cryptoM.randomBytes(6).toString("hex")}.pdf`;
+      const ordner = String(r.patient?.id ?? "_praxis");
+      const relativerPfad = `${ordner}/${internerName}`;
+      await fsP.mkdir(path.join(env.uploadDir, ordner), { recursive: true });
+      await fsP.writeFile(path.join(env.uploadDir, relativerPfad), buf);
+      const [{ id: dokumentId }] = await db
+        .insert(documents)
+        .values({
+          patientId: r.patient?.id ?? null,
+          kategorie: r.dokument.kategorie,
+          dateiname,
+          dateipfad: relativerPfad,
+          mimeType: "application/pdf",
+          groesse: buf.length,
+          notiz: "Qualifiziert elektronisch signiert (QES, eIDAS, Sproof Sign)",
+          uploadedBy: ctx.user.id,
+        })
+        .$returningId();
+
+      // Optional: direkt an die Apotheke senden
+      let versand: { ok: boolean; fehler?: string } | null = null;
+      if (input.anApothekeSenden) {
+        if (!sig.apothekeEmail) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Keine Apotheken-E-Mail hinterlegt (beim Signieren angeben)." });
+        }
+        const { versendeMail } = await import("./lib/mailVersand");
+        const praxis = await db.query.companySettings.findFirst({ where: eq(companySettings.id, 1) });
+        versand = await versendeMail({
+          empfaenger: [sig.apothekeEmail],
+          betreff: input.betreff ?? `Rezept (QES-signiert): ${r.dokument.dateiname}`,
+          text: input.text ??
+            `Sehr geehrte Damen und Herren,\n\nanbei ein Rezept für unsere Patientin/unseren Patienten (${r.patient?.name ?? "siehe Dokument"}), qualifiziert elektronisch signiert (eIDAS QES).\n\nDie Signatur lässt sich im PDF-Reader prüfen (Signaturfeld) oder unter https://validate.sproof.com.\n\nMit freundlichen Grüßen\n${praxis?.name ?? "Praxis"}`,
+          anhaenge: [{ dateiname, base64: signiertBase64, mime: "application/pdf" }],
+          mitSignatur: true,
+        });
+      }
+
+      await db
+        .update(qesSignierungen)
+        .set({
+          status: versand?.ok ? "versandt" : "signiert",
+          signiertesDokumentId: dokumentId,
+          fertigAm: new Date(),
+        })
+        .where(eq(qesSignierungen.id, sig.id));
+      await schreibeTimeline({
+        patientId: r.patient?.id ?? 0,
+        typ: "dokument",
+        titel: versand?.ok ? "QES-Rezept signiert + an Apotheke gesendet" : "QES-Rezept signiert + in Akte abgelegt",
+        beschreibung: dateiname,
+        createdBy: ctx.user.id,
+      });
+      return { ok: true, dokumentId, dateiname, versand };
     }),
 
   loeschen: rechtQuery("dokumente")

@@ -142,6 +142,9 @@ const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   { tabelle: "mail_mails", spalte: "markiert", ddl: "ALTER TABLE mail_mails ADD COLUMN markiert TINYINT(1) NOT NULL DEFAULT 0 AFTER gelesen" },
   // Rechnungs-Präfix konfigurierbar (1.20.2) — war „RK" hart codiert
   { tabelle: "company_settings", spalte: "rechnungs_prefix", ddl: "ALTER TABLE company_settings ADD COLUMN rechnungs_prefix VARCHAR(20) NOT NULL DEFAULT 'R' AFTER undo_sende_sekunden" },
+  // QES-Signatur (1.28.0, Sproof)
+  { tabelle: "company_settings", spalte: "qes_token_enc", ddl: "ALTER TABLE company_settings ADD COLUMN qes_token_enc VARCHAR(500) NULL AFTER rechnungs_prefix" },
+  { tabelle: "company_settings", spalte: "qes_signer_email", ddl: "ALTER TABLE company_settings ADD COLUMN qes_signer_email VARCHAR(320) NULL AFTER qes_token_enc" },
   // Behandlungszeitraum am Beleg (1.21.0, Agent #110)
   { tabelle: "invoices", spalte: "behandlungszeitraum", ddl: "ALTER TABLE invoices ADD COLUMN behandlungszeitraum VARCHAR(200) NULL AFTER typ" },
   // Backup-Erinnerung (1.7.0) — AFTER-Klausel muss NACH patienten_nr_prefix stehen!
@@ -203,6 +206,26 @@ const NEUE_TABELLEN: { tabelle: string; ddl: string }[] = [
       sheets TEXT NOT NULL,
       ergebnis TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  // QES-Signierungen (1.28.0)
+  {
+    tabelle: "qes_signierungen",
+    ddl: `CREATE TABLE IF NOT EXISTS qes_signierungen (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      rezept_id BIGINT UNSIGNED NOT NULL,
+      member_id VARCHAR(100) NOT NULL,
+      status ENUM('ausstehend','signiert','abgelehnt','versandt') NOT NULL DEFAULT 'ausstehend',
+      apotheke_email VARCHAR(320) NULL,
+      signiertes_dokument_id BIGINT UNSIGNED NULL,
+      signing_url VARCHAR(500) NULL,
+      created_by BIGINT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      fertig_am TIMESTAMP NULL,
+      INDEX qes_rezept_idx (rezept_id),
+      CONSTRAINT qes_rezept_fk FOREIGN KEY (rezept_id) REFERENCES rezepte(id) ON DELETE CASCADE,
+      CONSTRAINT qes_dokument_fk FOREIGN KEY (signiertes_dokument_id) REFERENCES documents(id) ON DELETE SET NULL,
+      CONSTRAINT qes_user_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
   },
   // Kostenpläne / HKP (1.25.0)

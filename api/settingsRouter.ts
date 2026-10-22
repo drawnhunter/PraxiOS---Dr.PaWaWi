@@ -32,6 +32,9 @@ const settingsInput = z.object({
   jitsiAppId: z.string().max(60).nullable().optional(),
   jitsiAppSecret: z.string().max(255).nullable().optional(),
   rechnungsPrefix: z.string().max(20).optional(),
+  // QES (Sproof, 1.28.0): Token kommt verschlüsselt an (wie SMTP-Passwort)
+  qesToken: z.string().max(255).optional(),
+  qesSignerEmail: z.string().max(320).nullable().optional(),
   standardZahlungsziel: z.number().int().min(0).max(120),
   fussText: z.string().nullable().optional(),
   datevBeraternummer: z.string().nullable().optional(),
@@ -77,11 +80,12 @@ export const settingsRouter = createRouter({
     if (!row) return null;
     // age_secret verlässt den Server nie (geheimer Schlüssel für den Austausch);
     // das Unterschriftsbild ist zu groß für den Routine-GET (nur Flag + eigenes Query)
-    const { ageSecret: _geheim, smtpPasswortEnc: _smtp, signaturBild: _sig, ...oeffentlich } = row;
+    const { ageSecret: _geheim, smtpPasswortEnc: _smtp, signaturBild: _sig, qesTokenEnc: _qes, ...oeffentlich } = row;
     return {
       ...oeffentlich,
       ageSecretVorhanden: !!row.ageSecret,
       smtpPasswortGesetzt: !!row.smtpPasswortEnc,
+      qesTokenGesetzt: !!row.qesTokenEnc,
       signaturVorhanden: !!row.signaturBild,
     };
   }),
@@ -127,11 +131,12 @@ export const settingsRouter = createRouter({
 
   // PraxiOS: Einstellungen ändern = Verwaltung (admin/Leitung)
   update: adminQuery.input(settingsInput).mutation(async ({ input }) => {
-    const { smtpPasswort, ...rest } = input;
-    // SMTP-Passwort wird nur ersetzt, wenn ein neues eingegeben wurde —
+    const { smtpPasswort, qesToken, ...rest } = input;
+    // SMTP-Passwort + QES-Token werden nur ersetzt, wenn neu eingegeben —
     // und ausschließlich verschlüsselt abgelegt (AES-256-GCM, Key = APP_SECRET)
     const werte: Record<string, unknown> = { ...rest };
     if (smtpPasswort) werte.smtpPasswortEnc = verschluesseln(smtpPasswort);
+    if (qesToken) werte.qesTokenEnc = verschluesseln(qesToken);
     await getDb()
       .insert(companySettings)
       .values({ id: 1, ...werte } as never)

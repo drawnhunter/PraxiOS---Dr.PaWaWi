@@ -47,6 +47,8 @@ CREATE TABLE `company_settings` (
   `typo_korrektur` tinyint(1) NOT NULL DEFAULT '1',
   `undo_sende_sekunden` int NOT NULL DEFAULT '0',
   `rechnungs_prefix` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'R',
+  `qes_token_enc` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `qes_signer_email` varchar(320) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `standard_zahlungsziel` int NOT NULL DEFAULT '14',
   `fuss_text` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1028,6 +1030,24 @@ CREATE TABLE `kostenplan_positionen` (
   KEY `kpp_plan_idx` (`plan_id`),
   CONSTRAINT `kpp_plan_fk` FOREIGN KEY (`plan_id`) REFERENCES `kostenplaene` (`id`) ON DELETE CASCADE,
   CONSTRAINT `kpp_leistung_fk` FOREIGN KEY (`leistung_id`) REFERENCES `products` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `qes_signierungen` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `rezept_id` bigint unsigned NOT NULL,
+  `member_id` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('ausstehend','signiert','abgelehnt','versandt') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'ausstehend',
+  `apotheke_email` varchar(320) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `signiertes_dokument_id` bigint unsigned DEFAULT NULL,
+  `signing_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_by` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `fertig_am` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `qes_rezept_idx` (`rezept_id`),
+  CONSTRAINT `qes_rezept_fk` FOREIGN KEY (`rezept_id`) REFERENCES `rezepte` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `qes_dokument_fk` FOREIGN KEY (`signiertes_dokument_id`) REFERENCES `documents` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `qes_user_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `protokoll_vorlagen` (
