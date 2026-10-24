@@ -18,6 +18,7 @@ import { naechstePatientenNr } from "./lib/patientenNr";
 import { APP_VERSION } from "./lib/version";
 import { computeTotals, centToDecimal } from "./queries/invoicing";
 import { besterTreffer } from "@contracts/fuzzy";
+import { repariereText } from "./lib/textFix";
 
 const app = new Hono<{ Variables: { agentToken: { freigabeEmpfaenger?: string | null } } }>();
 
@@ -1531,7 +1532,8 @@ app.get("/rechnung/:id/pdf", async (c) => {
   const id = Number(c.req.param("id"));
   const r = await getDb().query.invoices.findFirst({ where: eq(invoices.id, id) });
   if (!r) return c.json({ fehler: "Rechnung nicht gefunden." }, 404);
-  if (r.status === "entwurf") return c.json({ fehler: "Entwürfe haben noch kein GoBD-PDF (erst finalisieren)." }, 409);
+  // 1.28.2 (Bus #189): Auch Entwürfe komplett (Bankblock + Fußtext +
+  // ENTWURF-Wasserzeichen) — Agent prüft vor Finalisierung, Mensch sendet.
   const { ladeRechnungsBeleg, ladeDesign } = await import("./pdfBelege");
   const { renderBelegPdf } = await import("./pdf");
   const { beleg, dateiname } = await ladeRechnungsBeleg(id);
@@ -2350,7 +2352,7 @@ app.post("/therapieplan/:id/eintraege", async (c) => {
       return c.json({ fehler: `Eintrag ${i + 1}: ${datum} außerhalb des Plan-Zeitraums (${plan.vonDatum}–${plan.bisDatum}).` }, 400);
     }
     const leistungId = r.leistungId ? Number(r.leistungId) : null;
-    const leistungText = r.leistungText ? String(r.leistungText).slice(0, 255) : null;
+    const leistungText = r.leistungText ? repariereText(String(r.leistungText).slice(0, 255)) : null;
     if (leistungId && !katalog.has(leistungId)) {
       return c.json({ fehler: `Eintrag ${i + 1}: leistungId ${leistungId} nicht im Katalog (GET /leistungen).` }, 400);
     }
@@ -2429,7 +2431,7 @@ app.put("/therapieplan/:id/eintraege/:eintragId", async (c) => {
       setze.leistungId = null;
     }
   }
-  if (body.leistungText !== undefined) setze.leistungText = body.leistungText === null ? null : String(body.leistungText).slice(0, 255);
+  if (body.leistungText !== undefined) setze.leistungText = body.leistungText === null ? null : repariereText(String(body.leistungText).slice(0, 255));
   if (Object.keys(setze).length === 0) return c.json({ fehler: "Keine Felder zum Ändern (datum, zeitVon, zeitBis, menge, raum, leistungId, leistungText)." }, 400);
   await db.update(planEntries).set(setze).where(eq(planEntries.id, eintragId));
   await audit("plan_eintrag_geaendert", { planId, eintragId, felder: Object.keys(setze) });
@@ -2459,7 +2461,7 @@ const PRODUKT_FELDER = ["name", "beschreibung", "einheit", "artikelnummer", "bar
 const produktAnlegenHandler = async (c: Context) => {
   const body = await bodyLesen(c);
   const db = getDb();
-  const name = String(body.name ?? "").trim().slice(0, 255);
+  const name = repariereText(String(body.name ?? "").trim().slice(0, 255)) ?? "";
   if (!name) return c.json({ fehler: "name fehlt." }, 400);
   const preisNetto = Number(body.preisNetto ?? body.preis ?? NaN);
   if (!Number.isFinite(preisNetto) || preisNetto < 0) {
@@ -2611,14 +2613,15 @@ app.post("/rechnung-aus-plan", async (c) => {
   if (nutzbar.length === 0) return c.json({ fehler: "Der Plan hat keine Einträge." }, 400);
 
   const katalog = new Map((await db.select().from(products)).map((p) => [p.id, p]));
+  const { repariereText } = await import("./lib/textFix");
   // Gruppieren: je Leistung (Katalog oder Freitext) → eine Position mit Gesamt-Menge
   const gruppen = new Map<string, { bezeichnung: string; preis: number; ustSatz: number; einheit: string; anzahl: number; mengeSum: number }>();
   for (const e of nutzbar) {
     const p = e.leistungId ? katalog.get(e.leistungId) : null;
     const name = p?.name ?? e.leistungText ?? "Leistung";
-    const key = `${p?.id ?? "frei"}:${name}`;
+    const key = `${p?.id ?? "frei"}:${repariereText(name)}`;
     const g = gruppen.get(key) ?? {
-      bezeichnung: name,
+      bezeichnung: repariereText(name) ?? name,
       preis: p ? Number(p.preisNetto) : 0,
       ustSatz: p?.ustSatz ?? 0,
       einheit: p?.einheit ?? "Stück",
@@ -2949,7 +2952,51 @@ app.post("/rezept/:id/qes-fertigstellen", async (c) => {
   }
 });
 
-// Unbekannte Pfade: JSON statt leerem Body (Bus #167 — Agenten raten sonst
+// ── Settings-API (1.28.2, Bus #189): Firma lesen + gezielt ändern ─────────
+// Keine Secrets (kein SMTP-Passwort, kein QES-Token, kein age-Secret).
+const EINSTELLUNGEN_FELDER = [
+  "name", "strasse", "plz", "ort", "land", "handelsregister", "steuernummer",
+  "ustIdNr", "email", "telefon", "webseite", "standardZahlungsziel", "fussText",
+  "arztNr", "betriebsstaettenNr", "fachrichtung", "rechnungsPrefix",
+  "oeffentlicheUrl", "jitsiBaseUrl", "jitsiAppId", "waehrung", "monatsBudget",
+] as const;
+
+async function ladeEinstellungen() {
+  const s = await getDb().query.companySettings.findFirst({ where: eq(companySettings.id, 1) });
+  if (!s) return null;
+  const out: Record<string, unknown> = {};
+  for (const f of EINSTELLUNGEN_FELDER) out[f] = s[f];
+  return out;
+}
+
+app.get("/einstellungen", async (c) => {
+  const out = await ladeEinstellungen();
+  if (!out) return c.json({ fehler: "Noch keine Praxisdaten hinterlegt." }, 404);
+  return c.json(out);
+});
+app.get("/firma", async (c) => {
+  const out = await ladeEinstellungen();
+  if (!out) return c.json({ fehler: "Noch keine Praxisdaten hinterlegt." }, 404);
+  return c.json(out);
+});
+
+async function einstellungenSetzen(c: Context) {
+  const body = await bodyLesen(c);
+  const setze: Record<string, unknown> = {};
+  for (const f of EINSTELLUNGEN_FELDER) {
+    if (body[f] !== undefined) setze[f] = body[f] === null ? null : String(body[f]);
+  }
+  if (Object.keys(setze).length === 0) {
+    return c.json({ fehler: `Keine bekannten Felder zum Ändern (erlaubt: ${EINSTELLUNGEN_FELDER.join(", ")}).` }, 400);
+  }
+  await getDb().update(companySettings).set(setze).where(eq(companySettings.id, 1));
+  await audit("einstellungen_geaendert", { felder: Object.keys(setze) });
+  return c.json({ ok: true, geaendert: Object.keys(setze) });
+}
+app.put("/einstellungen", einstellungenSetzen);
+app.put("/firma", einstellungenSetzen);
+
+// Unbekannte Pfade: JSON statt leerem Body (Bus #167 — Agenten raten sonst — Agenten raten sonst
 // das Schema). Immer zuletzt registrieren.
 app.notFound((c) =>
   c.json(

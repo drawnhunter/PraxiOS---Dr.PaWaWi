@@ -1,5 +1,28 @@
 # Changelog — PraxiOS
 
+## [1.28.2] — 2026-10-24 — Settings-API + Entwurfs-PDF + UTF-8-Reparatur (Bus #189)
+
+### Neu (alex' Baustellen vom 24.10.)
+- **Settings-API**: `GET /einstellungen` (≡ `/firma`) mit allen Praxis-Feldern
+  (keine Secrets), `PUT /einstellungen` (≡ `/firma`) mit Whitelist — Fußtext,
+  Bankdaten, LANR/BSNR, Fachrichtung, Präfix, öffentliche URL, Jitsi etc.
+  Axon kann IBAN-/Fußtext-Fehler jetzt per API bereinigen
+- **Entwurfs-PDF komplett**: `GET /rechnung/:id/pdf` rendert jetzt auch
+  Entwürfe — volles Layout (Bankblock, Fußtext, ENTWURF-Wasserzeichen,
+  Nummer-Platzhalter). GoBD-Konzept: Mensch sendet, Agent prüft vorher
+- **Mojibake-Reparatur (Doppel-UTF-8)**: Sanitizing in allen Schreibpfaden
+  (Plan-Einträge, Produkte, Rechnungspositionen, rechnung-aus-plan) +
+  einmalige Datenkorrektur beim Start (plan_entries.leistung_text,
+  products.name, invoices.bemerkung, therapyPlans.titel) — idempotent,
+  gezählte Zeilen geloggt. Marker-basiert: deutsche Texte bleiben sicher
+- Rename-API aus #171 (PATCH/DELETE /leistungen/:id) existiert seit 1.24.2 —
+  Axons Umlaut-Dubletten sind damit per API bereinigbar
+
+### Migration (automatisch beim Start)
+- `repariereMojibakeDatenbank()` (Zeilen zählen, nur echte Doppelkodierungen)
+
+---
+
 ## [1.28.1] — 2026-10-22 — Kostenvoranschlag-Begriff + echte Vorschau
 
 ### Änderungen (alex' Feedback vor dem Rollout)

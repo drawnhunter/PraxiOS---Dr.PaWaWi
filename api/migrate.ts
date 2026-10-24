@@ -4,6 +4,36 @@
 // betrifft Bestandsdatenbanken aus aelteren Versionen.
 import { sql } from "drizzle-orm";
 import { getDb } from "./queries/connection";
+import { repariereText } from "./lib/textFix";
+
+/** Einmalige Datenreparatur (1.28.2, Bus #189): Doppel-UTF-8 in Plan-Texten,
+ * Produktnamen und Rechnungs-Bemerkungen. Läuft idempotent bei jedem Start —
+ * geänderte Zeilen werden gezählt und geloggt. */
+async function repariereMojibakeDatenbank(): Promise<void> {
+  const db = getDb();
+  const { planEntries, products, invoices, therapyPlans } = await import("@db/schema");
+  const { eq } = await import("drizzle-orm");
+  let gesamt = 0;
+  const tabellen = [
+    { tabelle: planEntries, spalte: "leistung_text", idFeld: "id" as const, getId: (r: { id: number }) => r.id },
+    { tabelle: products, spalte: "name", idFeld: "id" as const, getId: (r: { id: number }) => r.id },
+    { tabelle: invoices, spalte: "bemerkung", idFeld: "id" as const, getId: (r: { id: number }) => r.id },
+    { tabelle: therapyPlans, spalte: "titel", idFeld: "id" as const, getId: (r: { id: number }) => r.id },
+  ];
+  for (const t of tabellen) {
+    const rows = await db.select().from(t.tabelle);
+    for (const r of rows as Record<string, unknown>[]) {
+      const alt = r[t.spalte] as string | null;
+      if (!alt) continue;
+      const neu = repariereText(alt);
+      if (neu !== alt) {
+        await db.update(t.tabelle).set({ [t.spalte]: neu }).where(eq(t.tabelle.id, t.getId(r as never)));
+        gesamt++;
+      }
+    }
+  }
+  if (gesamt > 0) console.log(`[migrate] Mojibake-Reparatur: ${gesamt} Zeilen korrigiert (Doppel-UTF-8)`);
+}
 
 const NEUE_SPALTEN: { tabelle: string; spalte: string; ddl: string }[] = [
   // Eigenes Login (Stufe 3)
@@ -1133,5 +1163,12 @@ export async function migriereFehlendeSpalten(): Promise<void> {
     } catch (e) {
       console.error(`[migrate] FEHLER bei Update ${u.name}:`, e instanceof Error ? e.message : e);
     }
+  }
+
+  // Datenreparatur (1.28.2): Doppel-UTF-8 in Plan-Texten/Katalog/Bemerkungen
+  try {
+    await repariereMojibakeDatenbank();
+  } catch (e) {
+    console.error("[migrate] FEHLER bei Mojibake-Reparatur:", e instanceof Error ? e.message : e);
   }
 }
