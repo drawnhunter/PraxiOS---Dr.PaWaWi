@@ -1,7 +1,7 @@
 # Dr.PaWaWi Agent-API — Leitfaden (kanonisch)
 
 **Für externe Agenten (Kimi Claw u. a.).** Diese Datei ist die Referenz —
-gelesen werden muss sie **vor** dem ersten Auftrag. Stand: **v1.27.0**.
+gelesen werden muss sie **vor** dem ersten Auftrag. Stand: **v1.29.0**.
 
 **Pflicht-Regel (alex' Auftrag #182):** Diese Datei wird **bei jedem Release
 mitgepflegt** — jede neue/geänderte Route landet hier UND als Versionshinweis
@@ -17,9 +17,9 @@ GET /api/agent/status
 Authorization: Bearer ax_…
 ```
 
-Antwort: `{ ok: true, produkt: "pawawi", version: "1.23.0", autonomie: "vorschlag" }`.
+Antwort: `{ ok: true, produkt: "pawawi", version: "1.29.0", autonomie: "vorschlag" }`.
 **Immer zuerst aufrufen** — die Versionsangabe sagt dir, welche Endpunkte
-verfügbar sind (diese Doku = v1.23.0). Gibt die Instanz eine ältere Version,
+verfügbar sind (diese Doku = v1.29.0). Gibt die Instanz eine ältere Version,
 gelten nicht alle Endpunkte dieser Liste.
 
 ## 2. Authentifizierung
@@ -66,7 +66,7 @@ E-Mail-Adressen kommen domänen-maskiert. **Klartext nur dort, wo es der
 Auftrag braucht** (z. B. PDF-Erzeugung für den konkreten Patienten). Bank-
 Gegenstellen: bekannte Partner als Synonym, unbekannte maskiert.
 
-## 6. Endpunkt-Katalog (v1.23.0)
+## 6. Endpunkt-Katalog (v1.29.0)
 
 Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 
@@ -96,6 +96,8 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 |---|---|---|
 | GET | `/therapieplaene` | Liste (`?patientId=`, `?status=`) |
 | GET | `/therapieplan/:id` | Plan + Einträge lesen |
+| GET | `/therapieplan/:id/pdf` | **Patienten-PDF** (1.29.0): Tageskarten mit farbigen Status-Badges; `{ok, dateiname, base64, mime}` |
+| GET | `/therapieplan/:id/xlsx` | **Excel-Rohdaten** (1.29.0): Blatt „Plan“ (Metadaten) + „Einträge“ (alle Einträge, echte Excel-Datumswerte); `{ok, dateiname, base64, mime}` |
 | POST | `/therapieplan` (= `/therapieplan-entwurf`) | Plan anlegen `{patientId, titel, vonDatum, bisDatum, eintraege[]}` |
 | POST | `/therapieplan/:id/eintraege` | Einträge füllen — `{eintraege:[…]}`, Einzel-Felder **oder rohes Array** `[{…}]` (1.24.0) |
 | PUT | `/therapieplan/:id/eintraege/:eintragId` | Eintrag ändern (stattgefundene Einträge sind gesperrt) |
@@ -117,7 +119,7 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 |---|---|---|
 | GET | `/rechnungen` | Liste (`?patientId=&q=&von=&bis=&status=`) |
 | GET | `/rechnung/:id` (≡ `/rechnungen/:id`) | Detail inkl. Positionen |
-| GET | `/rechnung/:id/pdf` | GoBD-PDF (base64), Proforma-Layout inklusive |
+| GET | `/rechnung/:id/pdf` | GoBD-PDF (base64); seit 1.28.2 auch Entwürfe mit komplettem Layout + ENTWURF-Wasserzeichen |
 | GET | `/offene-rechnungen` | Offen/überfällig |
 | GET | `/kunden-ohne-rechnung` | Kunden ohne Rechnung seit X |
 | POST | `/rechnung-entwurf` (= `/rechnungen`) | Entwurf `{kundenId\|kunde, items[], typ?, behandlungszeitraum?, pdfNotiz?}` |
@@ -161,6 +163,9 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 |---|---|---|
 | GET | `/rezepte` | Rezepte + hochgeladene Rezept-Dateien (quelle: rezept/dokument-upload) |
 | POST | `/rezept` | Privatrezept erzeugen `{patientId\|patient, positionen[{name,staerke?,menge?,dosierung?,pzn?}], notiz?}` → A5-PDF mit Signatur |
+| POST | `/rezept/:id/qes-signieren` | **QES-Auftrag an Sproof** (1.28.0) `{apothekeEmail?, notiz?}` → Signatur-Link/Sign-ID; Sproof-Zugang nötig |
+| GET | `/rezept/:id/qes-status` | Signaturstatus beim Anbieter + lokalen Ablauf lesen |
+| POST | `/rezept/:id/qes-fertigstellen` | Signiertes PDF in der Akte ablegen; optional `{anApothekeSenden:true, betreff?, text?}` per Mail versenden (Versand-Gate beachten) |
 
 ### Mail
 | Methode | Pfad | Zweck |
@@ -184,6 +189,16 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 | POST | `/aufgaben/:id/erledigt` | Erledigen |
 | GET | `/termine` | Praxis-Kalender (`?von=&bis=&patientId=`) |
 
+### Praxis-Einstellungen (1.28.2)
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/einstellungen` (≡ `/firma`) | Öffentliche Praxis-/Rechnungsdaten lesen; **keine Secrets** |
+| PUT | `/einstellungen` (≡ `/firma`) | Gewhitelistete Felder ändern, z. B. `{fussText, oeffentlicheUrl, rechnungsPrefix}` → `{ok, geaendert:[…]}` |
+
+SMTP-Passwörter, Sproof-Token und andere Zugangsdaten werden weder gelesen noch
+über diese Route verändert. Unbekannte Felder werden ignoriert; mindestens ein
+bekanntes Feld ist Pflicht.
+
 ### Webhooks
 | Methode | Pfad | Zweck |
 |---|---|---|
@@ -197,6 +212,7 @@ Basis-Pfad: `/api/agent`. Alle Listen sind gekürzt auf 100–200 Einträge.
 | 400 | Validierung (Feld fehlt/Format) | `fehler`-Text lesen, Eingabe korrigieren |
 | 404 | Objekt nicht gefunden ODER Endpunkt fehlt (1.24.0: **JSON statt leerem Body** — `{fehler, hinweis: Guide}`) | ID prüfen; bei Endpunkt: Doku prüfen (Aliase beachten!) |
 | 409 | Konflikt/Zustand (Duplikat, GoBD-Regel, Doppel-Verrechnung) | Text lesen — enthält die Lösung; nicht wiederholen |
+| 412 | Fachliche Vorbedingung fehlt (z. B. keine Praxisdaten für den Plan-Export) | `fehler` lesen, Voraussetzung ergänzen, danach erneut versuchen |
 | 429 | Rate-Limit | Backoff + Retry mit Idempotenz-Key |
 
 ## 8. Wenn etwas fehlt — der Meldeweg (verbindlich)

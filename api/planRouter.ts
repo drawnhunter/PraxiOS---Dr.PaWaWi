@@ -6,7 +6,7 @@ import {
   rechtQuery,
 } from "./middleware";
 import { getDb } from "./queries/connection";
-import { customers, planEntries, products, therapyPlans, users } from "@db/schema";
+import { companySettings, customers, planEntries, products, therapyPlans, users } from "@db/schema";
 import { schreibeTimeline } from "./lib/timeline";
 import { datumZuKw, heuteIso } from "./lib/kalender";
 import { eintraegeSortieren, erstelleEntwurfAusEintraegen } from "./abrechnung";
@@ -847,7 +847,78 @@ export const planRouter = createRouter({
         csv,
       };
     }),
+
+  // ── Export: PDF (Tageskarten) + XLSX (Rohdaten) für Patienten (1.29.0) ───
+  pdf: rechtQuery("plaene")
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ input }) => {
+      const daten = await ladeExportDaten(input.id);
+      const { renderTherapieplanPdf } = await import("./therapieplanExport");
+      const buf = await renderTherapieplanPdf(daten);
+      return { dateiname: `${daten.titel.replace(/[\/\\]/g, "-")}.pdf`, base64: buf.toString("base64") };
+    }),
+
+  xlsx: rechtQuery("plaene")
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ input }) => {
+      const daten = await ladeExportDaten(input.id);
+      const { renderTherapieplanXlsx } = await import("./therapieplanExport");
+      const buf = await renderTherapieplanXlsx(daten);
+      return { dateiname: `${daten.titel.replace(/[\/\\]/g, "-")}.xlsx`, base64: buf.toString("base64") };
+    }),
 });
 
 // Type-Helper fuer das Frontend (Status eines Plans)
 export type { PlanStatus };
+
+/** Gemeinsamer Daten-Lader für PDF/XLSX-Export (Tageskarten + Rohdaten). */
+async function ladeExportDaten(planId: number) {
+  const db = getDb();
+  const plan = await db.query.therapyPlans.findFirst({
+    where: eq(therapyPlans.id, planId),
+    with: {
+      patient: true,
+      entries: {
+        with: { leistung: true, therapeut: { columns: { id: true, name: true } } },
+        orderBy: [asc(planEntries.datum), asc(planEntries.zeitVon)],
+      },
+    },
+  });
+  if (!plan) throw new TRPCError({ code: "NOT_FOUND", message: "Therapieplan nicht gefunden." });
+  const praxis = await db.query.companySettings.findFirst({ where: eq(companySettings.id, 1) });
+  if (!praxis) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Bitte zuerst die Praxisdaten hinterlegen (Einstellungen)." });
+
+  return {
+    titel: plan.titel ?? `Therapieplan KW ${datumZuKw(plan.vonDatum).kw}`,
+    status: plan.status,
+    vonDatum: plan.vonDatum,
+    bisDatum: plan.bisDatum,
+    patient: {
+      name: plan.patient.name,
+      geburtsdatum: plan.patient.geburtsdatum
+        ? plan.patient.geburtsdatum.split("-").reverse().join(".")
+        : null,
+      patientenNr: plan.patient.patientenNr,
+    },
+    praxis: {
+      name: praxis.name,
+      strasse: praxis.strasse,
+      plz: praxis.plz,
+      ort: praxis.ort,
+      telefon: praxis.telefon,
+      email: praxis.email,
+    },
+    eintraege: eintraegeSortieren(plan.entries).map((e) => ({
+      datum: e.datum,
+      zeitVon: e.zeitVon,
+      zeitBis: e.zeitBis,
+      leistung: e.leistung?.name ?? e.leistungText ?? "Leistung",
+      menge: e.menge,
+      einheit: e.leistung?.einheit ?? "Stück",
+      raum: e.raum,
+      therapeut: e.therapeut?.name ?? null,
+      status: e.status,
+      bemerkung: e.bemerkung,
+    })),
+  } satisfies import("./therapieplanExport").ExportPlanInput;
+}

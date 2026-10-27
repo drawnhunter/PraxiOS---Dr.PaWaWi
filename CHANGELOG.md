@@ -1,11 +1,23 @@
 # Changelog — PraxiOS
 
+## [1.29.0] — 2026-10-27 — Therapieplan-Export: PDF für Patienten + Excel
+
+### Neu (Pläne für die analoge Akte und direkt für Patienten)
+- **PDF für Patienten** (`plaene.pdf` in der Detailseite + `GET /therapieplan/:id/pdf` für Agenten): A4 mit Praxis-Kopf, Patient, Zeitraum, Plansumme und **Tageskarten** (Zeit, Leistung, Menge, Raum, Therapeut, farbige Status-Badges) plus Unterschriftslinie
+- **Excel** (`plaene.xlsx` + `GET /therapieplan/:id/xlsx`): Blatt „Plan“ mit Metadaten + Blatt „Einträge“ mit den Rohdaten aller Anwendungen — echte Excel-Datumswerte, Filter, eingefrorene Kopfzeile und korrekter XLSX-MIME-Typ
+- Gilt für Pläne in Bearbeitung und finalisierte Pläne; geplant / erledigt / abgesagt / ausgefallen werden dargestellt
+- **Druckrobustheit**: dynamische Zeilenhöhen für lange Texte, wiederholte Tages-/Spaltenköpfe nach Seitenumbruch und reservierter Platz für den Unterschriftsblock
+- **Agent-Leitfaden** auf v1.29.0 aktualisiert: neue Export-Routen sowie QES- und Settings-Routen aus 1.28.x vollständig dokumentiert
+- Neue Dependency `exceljs` (wird beim Docker-Build installiert)
+
+---
+
 ## [1.28.2] — 2026-10-24 — Settings-API + Entwurfs-PDF + UTF-8-Reparatur (Bus #189)
 
 ### Neu (alex' Baustellen vom 24.10.)
-- **Settings-API**: `GET /einstellungen` (≡ `/firma`) mit allen Praxis-Feldern
-  (keine Secrets), `PUT /einstellungen` (≡ `/firma`) mit Whitelist — Fußtext,
-  Bankdaten, LANR/BSNR, Fachrichtung, Präfix, öffentliche URL, Jitsi etc.
+- **Settings-API**: `GET /einstellungen` (≡ `/firma`) mit den öffentlichen
+  Praxis-/Rechnungsfeldern (keine Secrets), `PUT /einstellungen` (≡ `/firma`)
+  mit Whitelist — Fußtext, LANR/BSNR, Fachrichtung, Präfix, öffentliche URL, Jitsi etc.
   Axon kann IBAN-/Fußtext-Fehler jetzt per API bereinigen
 - **Entwurfs-PDF komplett**: `GET /rechnung/:id/pdf` rendert jetzt auch
   Entwürfe — volles Layout (Bankblock, Fußtext, ENTWURF-Wasserzeichen,

@@ -1,7 +1,7 @@
 {
   "name": "drpawawi",
   "private": true,
-  "version": "1.28.2",
+  "version": "1.29.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -67,6 +67,7 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "embla-carousel-react": "^8.6.0",
+    "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.10.1",
     "hono": "^4.8.3",
     "imapflow": "^1.6.4",

@@ -12,12 +12,17 @@ export function blobHerunterladen(dateiname: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-/** PDF aus der tRPC-Antwort (Base64) herunterladen. */
-export function pdfHerunterladen(antwort: { dateiname: string; base64: string }) {
+/** Binärdatei aus einer Base64-Antwort mit passendem MIME-Typ herunterladen. */
+export function dateiHerunterladen(antwort: { dateiname: string; base64: string }, mime: string) {
   const bin = atob(antwort.base64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  blobHerunterladen(antwort.dateiname, new Blob([bytes], { type: "application/pdf" }));
+  blobHerunterladen(antwort.dateiname, new Blob([bytes], { type: mime }));
+}
+
+/** PDF aus der tRPC-Antwort (Base64) herunterladen. */
+export function pdfHerunterladen(antwort: { dateiname: string; base64: string }) {
+  dateiHerunterladen(antwort, "application/pdf");
 }
 
 /** Textdatei (XML o.ä.) herunterladen — ohne BOM, damit Validatoren nicht murren. */

@@ -6,6 +6,7 @@
 // Jede Schreib-Aktion wird in agent_log auditiert (sichtbar in Einstellungen).
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { TRPCError } from "@trpc/server";
 import { createHash, randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gte, isNull, like, lte } from "drizzle-orm";
 import { getDb } from "./queries/connection";
@@ -1167,6 +1168,42 @@ const therapieplanEntwurfHandler = async (c: Context) => {
 // bei manchen Clients den Authorization-Header fallen, Feldbericht Axon).
 app.post("/therapieplan-entwurf", therapieplanEntwurfHandler);
 app.post("/therapieplan", therapieplanEntwurfHandler);
+
+// ── Export: PDF (Tageskarten für Patienten) + XLSX (Rohdaten) (1.29.0) ────
+function planExportFehler(c: Context, e: unknown) {
+  let status: 400 | 404 | 409 | 412 | 500 = 500;
+  if (e instanceof TRPCError) {
+    if (e.code === "BAD_REQUEST") status = 400;
+    else if (e.code === "NOT_FOUND") status = 404;
+    else if (e.code === "CONFLICT") status = 409;
+    else if (e.code === "PRECONDITION_FAILED") status = 412;
+  }
+  return c.json({ fehler: e instanceof Error ? e.message : String(e) }, status);
+}
+
+app.get("/therapieplan/:id/pdf", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.plaene.pdf({ id });
+    await audit("plan_pdf_export", { id });
+    return c.json({ ok: true, ...r, mime: "application/pdf" });
+  } catch (e) {
+    return planExportFehler(c, e);
+  }
+});
+
+app.get("/therapieplan/:id/xlsx", async (c) => {
+  const id = Number(c.req.param("id"));
+  try {
+    const caller = await rechnungCaller();
+    const r = await caller.plaene.xlsx({ id });
+    await audit("plan_xlsx_export", { id });
+    return c.json({ ok: true, ...r, mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  } catch (e) {
+    return planExportFehler(c, e);
+  }
+});
 
 // ── Termine (Kalender = Plan-Einträge mit Datum/Zeit) ──────────────────────
 app.get("/termine", async (c) => {

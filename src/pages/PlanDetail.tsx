@@ -4,7 +4,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../api/router";
 import { trpc } from "@/providers/trpc";
 import { datum } from "@/lib/format";
-import { blobHerunterladen } from "@/lib/downloads";
+import { blobHerunterladen, dateiHerunterladen } from "@/lib/downloads";
 import { ENTRY_STATUS, type EntryStatus } from "@contracts/constants";
 import { cn } from "@/lib/utils";
 import {
@@ -381,6 +381,26 @@ export default function PlanDetail() {
     }
   };
 
+  const planDateiExportieren = async (format: "pdf" | "xlsx") => {
+    setExportFehler("");
+    setExportLaeuft(true);
+    try {
+      const r = format === "pdf"
+        ? await utils.plaene.pdf.fetch({ id: planId })
+        : await utils.plaene.xlsx.fetch({ id: planId });
+      dateiHerunterladen(
+        r,
+        format === "pdf"
+          ? "application/pdf"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+    } catch (e) {
+      setExportFehler(e instanceof Error ? e.message : "Export fehlgeschlagen.");
+    } finally {
+      setExportLaeuft(false);
+    }
+  };
+
   const zeigeErfolg = (text: string) => {
     setMeldung(text);
     setTimeout(() => setMeldung(""), 5000);
@@ -484,6 +504,22 @@ export default function PlanDetail() {
               {exportLaeuft ? "Exportiere …" : "Dr.ReWaWi-Export (CSV)"}
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => planDateiExportieren("pdf")}
+            disabled={exportLaeuft}
+            title="Tageskarten mit Status für die Patientenakte oder zur Weitergabe"
+          >
+            <Download className="mr-1.5 h-4 w-4" /> PDF (Patient)
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => planDateiExportieren("xlsx")}
+            disabled={exportLaeuft}
+            title="Rohdaten aller Einträge plus Plan-Metadaten"
+          >
+            <Download className="mr-1.5 h-4 w-4" /> Excel (Rohdaten)
+          </Button>
           <Button variant="outline" onClick={() => setSerienOffen(true)}>
             <CalendarPlus className="mr-1.5 h-4 w-4" /> Serien-Termine
           </Button>
